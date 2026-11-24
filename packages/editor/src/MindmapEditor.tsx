@@ -11,14 +11,17 @@ import {
 import { DomTextMeasurer } from "./canvas/DomMeasurer.js";
 import { HybridCanvas } from "./canvas/HybridCanvas.js";
 import { Minimap } from "./canvas/Minimap.js";
+import { AiModal } from "./chrome/AiModal.js";
 import { CommandK } from "./chrome/CommandK.js";
 import { ContextMenu } from "./chrome/ContextMenu.js";
+import { ExportModal } from "./chrome/ExportModal.js";
 import { FormatPanel } from "./chrome/FormatPanel.js";
 import { SheetBar } from "./chrome/SheetBar.js";
 import { TemplateModal } from "./chrome/TemplateModal.js";
 import { TopToolbar } from "./chrome/TopToolbar.js";
 import { MindmapStoreContext, useMindmapStore } from "./context.js";
 import { OutlinerView } from "./outline/OutlinerView.js";
+import { PitchOverlay } from "./pitch/PitchOverlay.js";
 
 export interface MindmapEditorProps {
   initialDoc?: MindmapDocument;
@@ -35,6 +38,8 @@ const MindmapEditorInner: React.FC = () => {
 
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [cmdkOpen, setCmdkOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ topicId: string; x: number; y: number } | null>(
     null,
   );
@@ -61,7 +66,11 @@ const MindmapEditorInner: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-50 font-sans">
-      <TopToolbar onOpenTemplates={() => setTemplatesOpen(true)} />
+      <TopToolbar
+        onOpenTemplates={() => setTemplatesOpen(true)}
+        onOpenAi={() => setAiOpen(true)}
+        onOpenExport={() => setExportOpen(true)}
+      />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {viewMode === "canvas" ? (
@@ -82,7 +91,15 @@ const MindmapEditorInner: React.FC = () => {
 
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       <TemplateModal open={templatesOpen} onOpenChange={setTemplatesOpen} />
-      <CommandK open={cmdkOpen} onOpenChange={setCmdkOpen} layout={layout} />
+      <ExportModal open={exportOpen} onOpenChange={setExportOpen} layout={layout} />
+      <AiModal open={aiOpen} onOpenChange={setAiOpen} />
+      <CommandK
+        open={cmdkOpen}
+        onOpenChange={setCmdkOpen}
+        layout={layout}
+        onOpenAi={() => setAiOpen(true)}
+      />
+      <PitchOverlay />
     </div>
   );
 };
