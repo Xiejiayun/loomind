@@ -42,9 +42,9 @@ const STICKER_EMOJI: Record<string, string> = {
   sparkles: "✨",
 };
 
-function renderRichText(doc: RichTextDoc): React.ReactNode {
+function renderRichText(doc: RichTextDoc, nowrap: boolean): React.ReactNode {
   return doc.content.map((p, pi) => (
-    <div key={pi} className="whitespace-pre-wrap break-words">
+    <div key={pi} className={nowrap ? "whitespace-nowrap" : "whitespace-pre-wrap break-words"}>
       {p.content && p.content.length > 0
         ? p.content.map((node, ni) => {
             let el: React.ReactNode = node.text;
@@ -84,15 +84,15 @@ export interface TopicCardProps {
   initialEditChar?: string;
   lodLow: boolean;
   asset?: InlineAsset;
-  onSelect: (e: React.MouseEvent) => void;
-  onStartEdit: () => void;
-  onCommitEdit: (doc: RichTextDoc) => void;
+  onSelect: (topicId: string, e: React.MouseEvent) => void;
+  onStartEdit: (topicId: string) => void;
+  onCommitEdit: (topicId: string, doc: RichTextDoc) => void;
   onCancelEdit: () => void;
-  onToggleCollapse: () => void;
-  onToggleTask: () => void;
-  onStartDrag: (e: React.PointerEvent) => void;
-  onStartResizeWidth: (e: React.PointerEvent) => void;
-  onContextMenu: (e: React.MouseEvent) => void;
+  onToggleCollapse: (topicId: string) => void;
+  onToggleTask: (topicId: string) => void;
+  onStartDrag: (topicId: string, e: React.PointerEvent) => void;
+  onStartResizeWidth: (topicId: string, e: React.PointerEvent) => void;
+  onContextMenu: (topicId: string, e: React.MouseEvent) => void;
 }
 
 export const TopicCard: React.FC<TopicCardProps> = React.memo(
@@ -165,15 +165,15 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
         data-topic-id={topic.id}
         className="group relative select-none"
         style={{ width: layoutNode.box.width, height: layoutNode.box.height }}
-        onClick={onSelect}
+        onClick={(e) => onSelect(topic.id, e)}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          onStartEdit();
+          onStartEdit(topic.id);
         }}
         onPointerDown={(e) => {
-          if (e.button === 0 && !editing) onStartDrag(e);
+          if (e.button === 0 && !editing) onStartDrag(topic.id, e);
         }}
-        onContextMenu={onContextMenu}
+        onContextMenu={(e) => onContextMenu(topic.id, e)}
       >
         {/* Callout Bubble above contentBox */}
         {topic.callout && layoutNode.calloutBox && !lodLow && (
@@ -193,12 +193,12 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
 
         {/* Main Topic Card */}
         <div
-          className={`relative flex flex-col justify-center transition-shadow ${
+          className={`relative box-border flex flex-col justify-center ${
             selected ? "ring-2 ring-blue-500 ring-offset-2" : "hover:ring-1 hover:ring-blue-300/70"
           }`}
           style={{
             ...cardStyle,
-            padding: layoutNode.depth === 0 ? "12px 22px" : layoutNode.depth === 1 ? "8px 14px" : "4px 8px",
+            padding: `${layoutNode.paddingY}px ${layoutNode.paddingX}px`,
           }}
         >
           {/* Top Image */}
@@ -249,7 +249,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 }`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onToggleTask();
+                  onToggleTask(topic.id);
                 }}
                 title="切换任务状态"
               >
@@ -294,11 +294,14 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                   fontSize={layoutNode.fontSize}
                   fontWeight={layoutNode.fontWeight}
                   textColor={textCss}
-                  onCommit={onCommitEdit}
+                  onCommit={(d) => onCommitEdit(topic.id, d)}
                   onCancel={onCancelEdit}
                 />
               ) : (
-                renderRichText(topic.title)
+                renderRichText(
+                  topic.title,
+                  !topic.customWidth && !richTextToPlainText(topic.title).includes("\n") && richTextToPlainText(topic.title).length <= 24,
+                )
               )}
             </div>
 
@@ -359,7 +362,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
               className="absolute -right-1 top-1 bottom-1 w-2 cursor-ew-resize rounded hover:bg-blue-400/50"
               onPointerDown={(e) => {
                 e.stopPropagation();
-                onStartResizeWidth(e);
+                onStartResizeWidth(topic.id, e);
               }}
               title="拖动调整宽度"
             />
@@ -371,7 +374,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleCollapse();
+                onToggleCollapse(topic.id);
               }}
               className={`absolute top-1/2 z-20 flex h-5 min-w-[20px] -translate-y-1/2 items-center justify-center rounded-full px-1 text-[10px] font-semibold shadow-sm transition-opacity ${
                 layoutNode.side === "left" ? "-left-3" : "-right-3"

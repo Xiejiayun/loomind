@@ -37,6 +37,8 @@ export interface LayoutNode {
   textColor: string;
   fontSize: number;
   fontWeight: 400 | 500 | 600 | 700;
+  paddingX: number;
+  paddingY: number;
   cornerRadius: number;
   shape: Exclude<TopicShape, "auto">;
   underlineMode: boolean;

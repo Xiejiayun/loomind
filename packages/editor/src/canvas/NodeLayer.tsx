@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import { motion } from "motion/react";
 import type {
   CameraState,
   InlineAsset,
@@ -18,7 +17,6 @@ interface NodeLayerProps {
   selectedIds: Set<string>;
   editingTopicId: string | null;
   initialEditChar?: string;
-  isInteracting: boolean;
   onSelectTopic: (topicId: string, e: React.MouseEvent) => void;
   onStartEdit: (topicId: string) => void;
   onCommitEdit: (topicId: string, doc: RichTextDoc) => void;
@@ -40,7 +38,6 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
     selectedIds,
     editingTopicId,
     initialEditChar,
-    isInteracting,
     onSelectTopic,
     onStartEdit,
     onCommitEdit,
@@ -51,9 +48,9 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
     onStartResizeWidth,
     onContextMenu,
   }) => {
-    // RBush viewport culling (+400px world buffer)
+    // RBush viewport culling (+600px world buffer so panning stays smooth without frequent re-culling)
     const visibleTopicIds = useMemo(() => {
-      const buffer = 400 / Math.max(0.15, camera.scale);
+      const buffer = 600 / Math.max(0.15, camera.scale);
       const minX = -camera.x / camera.scale - buffer;
       const minY = -camera.y / camera.scale - buffer;
       const maxX = (viewportSize.width - camera.x) / camera.scale + buffer;
@@ -80,17 +77,13 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
           const isSelected = selectedIds.has(id);
 
           return (
-            <motion.div
+            <div
               key={id}
-              className="pointer-events-auto absolute"
-              initial={false}
-              animate={{ x: layoutNode.box.x, y: layoutNode.box.y }}
-              transition={
-                isInteracting
-                  ? { duration: 0 }
-                  : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
-              }
-              style={{ zIndex: isEditing ? 40 : isSelected ? 20 : 10 }}
+              className="mindmap-node-motion pointer-events-auto absolute"
+              style={{
+                transform: `translate3d(${layoutNode.box.x}px, ${layoutNode.box.y}px, 0)`,
+                zIndex: isEditing ? 40 : isSelected ? 20 : 10,
+              }}
             >
               <TopicCard
                 topic={topic}
@@ -100,17 +93,17 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
                 initialEditChar={isEditing ? initialEditChar : undefined}
                 lodLow={lodLow}
                 asset={topic.image ? assets[topic.image.resourceId] : undefined}
-                onSelect={(e) => onSelectTopic(id, e)}
-                onStartEdit={() => onStartEdit(id)}
-                onCommitEdit={(doc) => onCommitEdit(id, doc)}
+                onSelect={onSelectTopic}
+                onStartEdit={onStartEdit}
+                onCommitEdit={onCommitEdit}
                 onCancelEdit={onCancelEdit}
-                onToggleCollapse={() => onToggleCollapse(id)}
-                onToggleTask={() => onToggleTask(id)}
-                onStartDrag={(e) => onStartDrag(id, e)}
-                onStartResizeWidth={(e) => onStartResizeWidth(id, e)}
-                onContextMenu={(e) => onContextMenu(id, e)}
+                onToggleCollapse={onToggleCollapse}
+                onToggleTask={onToggleTask}
+                onStartDrag={onStartDrag}
+                onStartResizeWidth={onStartResizeWidth}
+                onContextMenu={onContextMenu}
               />
-            </motion.div>
+            </div>
           );
         })}
       </div>

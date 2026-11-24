@@ -4,11 +4,18 @@ export class DomTextMeasurer implements TextMeasurer {
   private ctx: CanvasRenderingContext2D | null = null;
   private fontFamily: string;
 
-  constructor(fontFamily = 'Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif') {
-    this.fontFamily = fontFamily;
+  constructor(fontFamily?: string) {
     if (typeof document !== "undefined") {
+      const computed = window.getComputedStyle(document.body).fontFamily;
+      this.fontFamily =
+        fontFamily ??
+        (computed && computed.length > 0
+          ? computed
+          : 'ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif');
       const canvas = document.createElement("canvas");
       this.ctx = canvas.getContext("2d");
+    } else {
+      this.fontFamily = fontFamily ?? "sans-serif";
     }
   }
 
@@ -32,8 +39,8 @@ export class DomTextMeasurer implements TextMeasurer {
     }
 
     const measureStr = (s: string) => {
-      if (this.ctx) return this.ctx.measureText(s).width;
-      return s.length * opts.fontSize * 0.72;
+      if (this.ctx) return this.ctx.measureText(s).width * 1.04;
+      return s.length * opts.fontSize * 0.78;
     };
 
     for (const raw of rawLines) {
@@ -62,6 +69,6 @@ export class DomTextMeasurer implements TextMeasurer {
     const width = Math.min(maxW, Math.max(24, ...finalLines.map(measureStr)));
     const lineHeight = Math.round(opts.fontSize * 1.42);
     const height = Math.max(lineHeight, finalLines.length * lineHeight);
-    return { width: Math.ceil(width) + 2, height: Math.ceil(height), lines: finalLines };
+    return { width: Math.ceil(width) + 4, height: Math.ceil(height), lines: finalLines };
   }
 }

@@ -257,6 +257,8 @@ export class LayoutEngine {
         textColor: topic.style?.textColor ?? defaultText,
         fontSize: topic.style?.fontSize ?? token.fontSize,
         fontWeight: topic.style?.fontWeight ?? token.fontWeight,
+        paddingX: token.paddingX,
+        paddingY: token.paddingY,
         cornerRadius: topic.style?.cornerRadius ?? token.cornerRadius,
         shape,
         underlineMode,
