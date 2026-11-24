@@ -1,8 +1,21 @@
 import React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { getPalette, hex8ToCss, TEMPLATES } from "@mindmap/core";
+import { getPalette, hex8ToCss, TEMPLATES, type MindmapStructure } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { StructureIcon } from "./structure-icons.js";
+
+const STRUCTURE_CN: Record<MindmapStructure, string> = {
+  mindmap: "思维导图",
+  logic: "逻辑图",
+  org: "组织结构",
+  brace: "括号图",
+  indented: "缩进目录",
+  timeline: "时间轴",
+  fishbone: "鱼骨图",
+  treeTable: "树型表格",
+  matrix: "矩阵图",
+};
 
 interface TemplateModalProps {
   open: boolean;
@@ -16,20 +29,20 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({ open, onOpenChange
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[720px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-          <div className="mb-4 flex items-center justify-between">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[760px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="mb-5 flex items-center justify-between">
             <div>
               <Dialog.Title className="text-base font-bold text-slate-900">新建思维导图模板</Dialog.Title>
-              <Dialog.Description className="text-xs text-slate-500">
-                选择一套结构与配色模板立即开始创作
+              <Dialog.Description className="mt-0.5 text-xs text-slate-500">
+                精选 8 套结构与配色组合，点击即可一键生成专业导图
               </Dialog.Description>
             </div>
-            <Dialog.Close className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <Dialog.Close className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
             {TEMPLATES.map((tpl) => {
               const pal = getPalette(tpl.paletteId);
               return (
@@ -40,27 +53,34 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({ open, onOpenChange
                     replaceDocument(tpl.create());
                     onOpenChange(false);
                   }}
-                  className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 text-left transition hover:border-blue-500 hover:shadow-md"
+                  className="group flex flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white text-left shadow-2xs transition hover:-translate-y-0.5 hover:border-blue-500 hover:shadow-md"
                 >
                   <div
-                    className="flex h-24 w-full items-center justify-center p-3"
+                    className="relative flex h-28 w-full items-center justify-center border-b border-slate-200/60 p-3"
                     style={{ backgroundColor: hex8ToCss(pal.canvasBg) }}
                   >
-                    <div
-                      className="rounded-full px-3 py-1 text-[11px] font-bold shadow-xs"
+                    <StructureIcon
+                      structure={tpl.structure}
+                      rootColor={hex8ToCss(pal.rootFill)}
+                      accentColor={hex8ToCss(pal.branches[0])}
+                      secondaryColor={hex8ToCss(pal.branches[1] ?? pal.branches[0])}
+                      className="h-14 w-24 transition-transform duration-200 group-hover:scale-105"
+                    />
+                    <span
+                      className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-2xs"
                       style={{
-                        backgroundColor: hex8ToCss(pal.rootFill),
-                        color: hex8ToCss(pal.rootText),
+                        backgroundColor: pal.isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.88)",
+                        color: pal.isDark ? "#F8FAFC" : "#334155",
                       }}
                     >
-                      {tpl.structure}
-                    </div>
+                      {STRUCTURE_CN[tpl.structure]}
+                    </span>
                   </div>
-                  <div className="flex flex-1 flex-col bg-white p-2.5">
+                  <div className="flex flex-1 flex-col bg-white p-3">
                     <div className="text-xs font-semibold text-slate-800 group-hover:text-blue-600">
                       {tpl.name}
                     </div>
-                    <div className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">
+                    <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500">
                       {tpl.description}
                     </div>
                   </div>

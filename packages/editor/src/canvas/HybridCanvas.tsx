@@ -101,20 +101,28 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
     return () => ro.disconnect();
   }, []);
 
-  // Auto-center camera on first render of a sheet
+  // Auto-center & auto-fit camera when switching sheet or structure
+  const layoutKey = `${sheet.id}:${sheet.structure}`;
   useEffect(() => {
-    if (centeredSheetRef.current === sheet.id) return;
+    if (centeredSheetRef.current === layoutKey) return;
     if (viewportSize.width > 0 && viewportSize.height > 0) {
-      centeredSheetRef.current = sheet.id;
+      centeredSheetRef.current = layoutKey;
+      const pad = 100;
+      const scaleX = (viewportSize.width - pad) / Math.max(240, layout.bounds.width);
+      const scaleY = (viewportSize.height - pad) / Math.max(200, layout.bounds.height);
+      const scale = Math.max(0.45, Math.min(1, Math.min(scaleX, scaleY)));
       const cx = layout.bounds.x + layout.bounds.width / 2;
       const cy = layout.bounds.y + layout.bounds.height / 2;
-      setCamera({
-        x: viewportSize.width / 2 - cx,
-        y: viewportSize.height / 2 - cy,
-        scale: 1,
-      });
+      const next = {
+        x: viewportSize.width / 2 - cx * scale,
+        y: viewportSize.height / 2 - cy * scale,
+        scale,
+      };
+      cameraRef.current = next;
+      applyTransformDom(next);
+      setCamera(next);
     }
-  }, [sheet.id, viewportSize, layout.bounds, setCamera]);
+  }, [layoutKey, viewportSize, layout.bounds, setCamera, applyTransformDom]);
 
   const screenToWorld = useCallback(
     (clientX: number, clientY: number) => {
