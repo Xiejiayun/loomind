@@ -10,12 +10,15 @@ import {
 } from "@mindmap/core";
 import { DomTextMeasurer } from "./canvas/DomMeasurer.js";
 import { HybridCanvas } from "./canvas/HybridCanvas.js";
+import { Minimap } from "./canvas/Minimap.js";
+import { CommandK } from "./chrome/CommandK.js";
 import { ContextMenu } from "./chrome/ContextMenu.js";
 import { FormatPanel } from "./chrome/FormatPanel.js";
 import { SheetBar } from "./chrome/SheetBar.js";
 import { TemplateModal } from "./chrome/TemplateModal.js";
 import { TopToolbar } from "./chrome/TopToolbar.js";
 import { MindmapStoreContext, useMindmapStore } from "./context.js";
+import { OutlinerView } from "./outline/OutlinerView.js";
 
 export interface MindmapEditorProps {
   initialDoc?: MindmapDocument;
@@ -31,6 +34,7 @@ const MindmapEditorInner: React.FC = () => {
   const setZenMode = useMindmapStore((s) => s.setZenMode);
 
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [cmdkOpen, setCmdkOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ topicId: string; x: number; y: number } | null>(
     null,
   );
@@ -61,14 +65,15 @@ const MindmapEditorInner: React.FC = () => {
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {viewMode === "canvas" ? (
-          <HybridCanvas
-            layout={layout}
-            onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
-          />
+          <>
+            <HybridCanvas
+              layout={layout}
+              onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
+            />
+            <Minimap layout={layout} />
+          </>
         ) : (
-          <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
-            大纲视图将在 M2 里程碑上线
-          </div>
+          <OutlinerView />
         )}
         <FormatPanel />
       </div>
@@ -77,6 +82,7 @@ const MindmapEditorInner: React.FC = () => {
 
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       <TemplateModal open={templatesOpen} onOpenChange={setTemplatesOpen} />
+      <CommandK open={cmdkOpen} onOpenChange={setCmdkOpen} layout={layout} />
     </div>
   );
 };

@@ -10,6 +10,7 @@ import {
   type TopicShape,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { MARKER_CATALOG, STICKER_CATALOG } from "./markers-catalog.js";
 
 const STRUCTURES: Array<{ id: MindmapStructure; label: string }> = [
   { id: "mindmap", label: "思维导图" },
@@ -410,11 +411,11 @@ export const FormatPanel: React.FC = () => {
           </Section>
         </Tabs.Content>
 
-        {/* TAB 3: Markers & Stickers */}
+        {/* TAB 3: Markers, Stickers & Rich Content */}
         <Tabs.Content value="markers" className="flex-1 space-y-4 overflow-y-auto p-3">
-          <Section title="矢量标记 (Markers)">
-            <div className="grid grid-cols-6 gap-1.5">
-              {MARKERS.map((m) => (
+          <Section title={`矢量标记 (${MARKER_CATALOG.length})`}>
+            <div className="grid grid-cols-7 gap-1.5">
+              {MARKER_CATALOG.map((m) => (
                 <button
                   key={m.id}
                   type="button"
@@ -426,8 +427,9 @@ export const FormatPanel: React.FC = () => {
                       marker: m.id,
                     })
                   }
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-xs transition hover:scale-110"
+                  className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold shadow-xs transition hover:scale-110"
                   style={{ backgroundColor: m.bg, color: m.fg }}
+                  title={`${m.group}: ${m.id}`}
                 >
                   {m.label}
                 </button>
@@ -436,8 +438,8 @@ export const FormatPanel: React.FC = () => {
           </Section>
 
           <Section title="贴纸 (Stickers)">
-            <div className="grid grid-cols-4 gap-2">
-              {STICKERS.map((st) => (
+            <div className="grid grid-cols-4 gap-1.5">
+              {STICKER_CATALOG.map((st) => (
                 <button
                   key={st.id}
                   type="button"
@@ -449,11 +451,12 @@ export const FormatPanel: React.FC = () => {
                       stickerId: primaryTopic?.stickerId === st.id ? undefined : st.id,
                     })
                   }
-                  className={`flex h-10 items-center justify-center rounded-lg border text-xl transition hover:scale-105 ${
+                  className={`flex h-9 items-center justify-center rounded-lg border text-lg transition hover:scale-105 ${
                     primaryTopic?.stickerId === st.id
                       ? "border-blue-500 bg-blue-50"
                       : "border-slate-200 hover:bg-slate-50"
                   }`}
+                  title={st.label}
                 >
                   {st.emoji}
                 </button>
@@ -491,6 +494,57 @@ export const FormatPanel: React.FC = () => {
                 移除
               </button>
             </div>
+          </Section>
+
+          <Section title="数学公式 (LaTeX)">
+            <input
+              type="text"
+              placeholder="例如: E = mc^2"
+              value={primaryTopic?.equation?.latex ?? ""}
+              onChange={(e) =>
+                dispatch({
+                  type: "topic/setEquation",
+                  sheetId: sheet.id,
+                  topicId: primaryId,
+                  latex: e.target.value,
+                })
+              }
+              className="w-full rounded border border-slate-200 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-blue-500"
+            />
+          </Section>
+
+          <Section title="标签 (逗号分隔)">
+            <input
+              type="text"
+              placeholder="例如: 核心, Q3, 高优"
+              value={(primaryTopic?.labels ?? []).join(", ")}
+              onChange={(e) =>
+                dispatch({
+                  type: "topic/setLabels",
+                  sheetId: sheet.id,
+                  topicId: primaryId,
+                  labels: e.target.value.split(/[,，]/),
+                })
+              }
+              className="w-full rounded border border-slate-200 px-2 py-1.5 text-[11px] outline-none focus:border-blue-500"
+            />
+          </Section>
+
+          <Section title="备注 (Markdown)">
+            <textarea
+              rows={3}
+              placeholder="输入节点详细备注..."
+              value={primaryTopic?.note?.text ?? ""}
+              onChange={(e) =>
+                dispatch({
+                  type: "topic/setNote",
+                  sheetId: sheet.id,
+                  topicId: primaryId,
+                  text: e.target.value,
+                })
+              }
+              className="w-full rounded border border-slate-200 p-2 text-[11px] outline-none focus:border-blue-500"
+            />
           </Section>
         </Tabs.Content>
       </Tabs.Root>

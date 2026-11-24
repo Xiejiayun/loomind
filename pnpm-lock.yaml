@@ -76,6 +76,15 @@ importers:
 
   packages/editor:
     dependencies:
+      '@dnd-kit/core':
+        specifier: ^6.3.1
+        version: 6.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@dnd-kit/sortable':
+        specifier: ^10.0.0
+        version: 10.0.0(@dnd-kit/core@6.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
+      '@dnd-kit/utilities':
+        specifier: ^3.2.2
+        version: 3.2.2(react@19.3.1)
       '@mindmap/core':
         specifier: workspace:*
         version: link:../core
@@ -112,6 +121,12 @@ importers:
       '@use-gesture/react':
         specifier: ^10.3.1
         version: 10.3.1(react@19.3.1)
+      cmdk:
+        specifier: ^1.0.4
+        version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      katex:
+        specifier: ^0.16.21
+        version: 0.16.47
       lucide-react:
         specifier: ^0.475.0
         version: 0.475.0(react@19.3.1)
@@ -128,6 +143,9 @@ importers:
         specifier: ^5.0.3
         version: 5.1.0(@types/react@19.3.0)(immer@10.2.0)(react@19.3.1)(use-sync-external-store@1.7.0(react@19.3.1))
     devDependencies:
+      '@types/katex':
+        specifier: ^0.16.7
+        version: 0.16.8
       '@types/react':
         specifier: ^19.0.0
         version: 19.3.0
@@ -219,6 +237,28 @@ packages:
   '@babel/types@7.29.14':
     resolution: {integrity: sha512-UjI/dKmwJwT9pOszJitq2G6EObZPnsZUfdCr92z2TlF3EZK9J3EdfOKUrCzHl6wFthbzwhzl1Soc/UIwxRiq6w==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@babel/types/-/types-7.29.14.tgz}
     engines: {node: '>=6.9.0'}
+
+  '@dnd-kit/accessibility@3.1.1':
+    resolution: {integrity: sha1-O0ICvWuzcKBzD2c0hneFkZvqxq8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@dnd-kit/accessibility/-/accessibility-3.1.1.tgz}
+    peerDependencies:
+      react: '>=16.8.0'
+
+  '@dnd-kit/core@6.3.1':
+    resolution: {integrity: sha1-TDZAamLHuqxJlyb4mZNfk/Dm0AM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@dnd-kit/core/-/core-6.3.1.tgz}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
+
+  '@dnd-kit/sortable@10.0.0':
+    resolution: {integrity: sha1-H5OCuQ2DXNXGXZKCT6na+3jEw+g=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@dnd-kit/sortable/-/sortable-10.0.0.tgz}
+    peerDependencies:
+      '@dnd-kit/core': ^6.3.0
+      react: '>=16.8.0'
+
+  '@dnd-kit/utilities@3.2.2':
+    resolution: {integrity: sha1-WjK2rzVtxfdNYbN9b3EppAQM7Xs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@dnd-kit/utilities/-/utilities-3.2.2.tgz}
+    peerDependencies:
+      react: '>=16.8.0'
 
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha1-gPy+NhMOWLdnBRHoiLjoiiWe12w=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@esbuild/aix-ppc64/-/aix-ppc64-0.25.12.tgz}
@@ -1282,6 +1322,9 @@ packages:
   '@types/estree@1.0.10':
     resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/estree/-/estree-1.0.10.tgz}
 
+  '@types/katex@0.16.8':
+    resolution: {integrity: sha1-gL8+CBTQmoRkEqCw8UCUa3nDbD4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/katex/-/katex-0.16.8.tgz}
+
   '@types/linkify-it@5.0.0':
     resolution: {integrity: sha1-IUEwAZcxBs2hw6m5Hu3UzNVGnXY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/linkify-it/-/linkify-it-5.0.0.tgz}
 
@@ -1383,6 +1426,16 @@ packages:
   check-error@2.1.3:
     resolution: {integrity: sha1-JCc2ERe3DMqNyJaA6tMrFXAZyvU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/check-error/-/check-error-2.1.3.tgz}
     engines: {node: '>= 16'}
+
+  cmdk@1.1.1:
+    resolution: {integrity: sha1-uFJCcmmcyqN6rwfzaFCzdr89WOU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cmdk/-/cmdk-1.1.1.tgz}
+    peerDependencies:
+      react: ^18 || ^19 || ^19.0.0-rc
+      react-dom: ^18 || ^19 || ^19.0.0-rc
+
+  commander@8.3.0:
+    resolution: {integrity: sha1-SDfqGy2me5xhamevuw+v7lZ7ymY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/commander/-/commander-8.3.0.tgz}
+    engines: {node: '>= 12'}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha1-S1YPZJ/E6RjdCrdc9JYei8iC2Co=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/convert-source-map/-/convert-source-map-2.0.0.tgz}
@@ -1524,6 +1577,10 @@ packages:
   json5@2.2.3:
     resolution: {integrity: sha1-eM1vGhm9wStz21rQxh79ZsHikoM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/json5/-/json5-2.2.3.tgz}
     engines: {node: '>=6'}
+    hasBin: true
+
+  katex@0.16.47:
+    resolution: {integrity: sha1-ChOkLC3rT3TmHxYtRAuRZaVIAw8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/katex/-/katex-0.16.47.tgz}
     hasBin: true
 
   lightningcss-android-arm64@1.33.0:
@@ -2169,6 +2226,31 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.14
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@dnd-kit/accessibility@3.1.1(react@19.3.1)':
+    dependencies:
+      react: 19.3.1
+      tslib: 2.9.1
+
+  '@dnd-kit/core@6.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+    dependencies:
+      '@dnd-kit/accessibility': 3.1.1(react@19.3.1)
+      '@dnd-kit/utilities': 3.2.2(react@19.3.1)
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+      tslib: 2.9.1
+
+  '@dnd-kit/sortable@10.0.0(@dnd-kit/core@6.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)':
+    dependencies:
+      '@dnd-kit/core': 6.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@dnd-kit/utilities': 3.2.2(react@19.3.1)
+      react: 19.3.1
+      tslib: 2.9.1
+
+  '@dnd-kit/utilities@3.2.2(react@19.3.1)':
+    dependencies:
+      react: 19.3.1
+      tslib: 2.9.1
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
@@ -3017,6 +3099,8 @@ snapshots:
 
   '@types/estree@1.0.10': {}
 
+  '@types/katex@0.16.8': {}
+
   '@types/linkify-it@5.0.0': {}
 
   '@types/markdown-it@14.2.0':
@@ -3130,6 +3214,20 @@ snapshots:
       pathval: 2.0.1
 
   check-error@2.1.3: {}
+
+  cmdk@1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+    dependencies:
+      '@radix-ui/react-compose-refs': 1.1.5(@types/react@19.3.0)(react@19.3.1)
+      '@radix-ui/react-dialog': 1.3.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@radix-ui/react-id': 1.1.4(@types/react@19.3.0)(react@19.3.1)
+      '@radix-ui/react-primitive': 2.2.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+    transitivePeerDependencies:
+      - '@types/react'
+      - '@types/react-dom'
+
+  commander@8.3.0: {}
 
   convert-source-map@2.0.0: {}
 
@@ -3269,6 +3367,10 @@ snapshots:
   jsesc@3.1.0: {}
 
   json5@2.2.3: {}
+
+  katex@0.16.47:
+    dependencies:
+      commander: 8.3.0
 
   lightningcss-android-arm64@1.33.0:
     optional: true
