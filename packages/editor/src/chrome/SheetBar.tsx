@@ -9,6 +9,7 @@ interface SheetBarProps {
 
 export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
   const doc = useMindmapStore((s) => s.doc);
+  const viewMode = useMindmapStore((s) => s.viewMode);
   const camera = useMindmapStore((s) => s.camera);
   const setCamera = useMindmapStore((s) => s.setCamera);
   const zenMode = useMindmapStore((s) => s.zenMode);
@@ -107,47 +108,51 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
         </button>
       </div>
 
-      {/* Right: Zoom & Minimap */}
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => setCamera({ scale: Math.max(0.15, camera.scale - 0.15) })}
-          className="rounded p-1 hover:bg-slate-200"
-        >
-          <Minus className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setCamera({ scale: 1 })}
-          className="w-11 text-center font-mono text-[11px] hover:underline"
-          title="重置 100%"
-        >
-          {Math.round(camera.scale * 100)}%
-        </button>
-        <button
-          type="button"
-          onClick={() => setCamera({ scale: Math.min(3, camera.scale + 0.15) })}
-          className="rounded p-1 hover:bg-slate-200"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={handleFitView}
-          className="rounded p-1 hover:bg-slate-200"
-          title="适应画布"
-        >
-          <Maximize className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setMinimapOpen(!minimapOpen)}
-          className={`rounded p-1 ${minimapOpen ? "bg-blue-100 text-blue-600" : "hover:bg-slate-200"}`}
-          title="小地图"
-        >
-          <Map className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      {/* Right: Zoom & Minimap (Canvas mode only) */}
+      {viewMode === "canvas" ? (
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCamera({ scale: Math.max(0.15, camera.scale - 0.15) })}
+            className="rounded p-1 hover:bg-slate-200"
+          >
+            <Minus className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCamera({ scale: 1 })}
+            className="w-11 text-center font-mono text-[11px] hover:underline"
+            title="重置 100%"
+          >
+            {Math.round(camera.scale * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={() => setCamera({ scale: Math.min(3, camera.scale + 0.15) })}
+            className="rounded p-1 hover:bg-slate-200"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={handleFitView}
+            className="rounded p-1 hover:bg-slate-200"
+            title="适应画布"
+          >
+            <Maximize className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMinimapOpen(!minimapOpen)}
+            className={`rounded p-1 ${minimapOpen ? "bg-blue-100 text-blue-600" : "hover:bg-slate-200"}`}
+            title="小地图"
+          >
+            <Map className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : (
+        <div className="text-[11px] text-slate-400">大纲写作模式</div>
+      )}
     </footer>
   );
 };

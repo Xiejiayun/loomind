@@ -35,12 +35,21 @@ export function compilePitchDeck(doc: MindmapDocument, sheetId?: string): PitchS
   const slides: PitchSlide[] = [];
 
   // 1. Cover slide
+  const rootTitle = richTextToPlainText(root.title);
   slides.push({
     id: `slide-cover-${sheet.id}`,
     layout: "cover",
-    title: richTextToPlainText(root.title),
-    subtitle: root.subtitle ?? `${sheet.title} · 共 ${root.children.length} 个核心章节`,
-    bullets: [],
+    title: rootTitle,
+    subtitle:
+      root.subtitle ??
+      (sheet.title !== rootTitle
+        ? `${sheet.title} · 共 ${root.children.length} 个核心章节`
+        : `共 ${root.children.length} 个核心章节`),
+    bullets: root.children.slice(0, 6).map((c) => ({
+      id: c.id,
+      text: richTextToPlainText(c.title),
+      subItems: [],
+    })),
     note: root.note?.text,
     accentIndex: 0,
   });

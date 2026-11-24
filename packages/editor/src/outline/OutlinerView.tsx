@@ -83,11 +83,22 @@ export const OutlinerView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white px-6 py-6">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-2 text-xs text-slate-400">
-          <span>全屏大纲视图 · Tab 缩进 · Shift+Tab 升级 · Alt+↑/↓ 排序 · 拖拽重排</span>
-          <span>{rows.length} 个主题</span>
+    <div className="flex-1 overflow-y-auto bg-slate-50/50 px-6 py-8">
+      <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200/80 bg-white px-8 py-7 shadow-xs">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-semibold text-slate-700">全屏大纲</span>
+            <span className="text-slate-300">·</span>
+            <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">Tab</kbd>
+            <span>缩进</span>
+            <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">Shift+Tab</kbd>
+            <span>升级</span>
+            <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">Alt+↑↓</kbd>
+            <span>排序</span>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+            共 {rows.length} 个主题
+          </span>
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -231,12 +242,22 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
         }
       }}
       tabIndex={0}
-      className={`group flex items-center gap-1.5 rounded-lg py-1.5 pr-2 text-sm outline-none ${
-        selected ? "bg-blue-50/80 ring-1 ring-blue-300" : "hover:bg-slate-50"
+      className={`group relative flex items-center gap-2 rounded-lg py-2 pr-2 text-sm outline-none transition-colors ${
+        selected ? "bg-blue-50/85 ring-1 ring-blue-300" : "hover:bg-slate-50"
       }`}
     >
+      {/* Vertical tree-indent guide lines */}
+      {row.depth > 0 &&
+        Array.from({ length: row.depth }).map((_, idx) => (
+          <span
+            key={idx}
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-slate-200/75"
+            style={{ left: idx * 24 + 14 }}
+          />
+        ))}
+
       {!isRoot ? (
-        <span {...attributes} {...listeners} className="cursor-grab text-slate-300 hover:text-slate-500">
+        <span {...attributes} {...listeners} className="cursor-grab text-slate-300 opacity-50 transition hover:text-slate-600 group-hover:opacity-100">
           <GripVertical className="h-3.5 w-3.5" />
         </span>
       ) : (
@@ -244,7 +265,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
       )}
 
       {row.topic.children.length > 0 ? (
-        <button type="button" onClick={onToggleCollapse} className="text-slate-400 hover:text-slate-700">
+        <button type="button" onClick={onToggleCollapse} className="rounded p-0.5 text-slate-500 hover:bg-slate-200/70 hover:text-slate-800">
           {row.topic.collapsed ? (
             <ChevronRight className="h-4 w-4" />
           ) : (
@@ -253,7 +274,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
         </button>
       ) : (
         <span className="flex h-4 w-4 items-center justify-center">
-          <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
         </span>
       )}
 

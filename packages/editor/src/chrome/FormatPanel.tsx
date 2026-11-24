@@ -1,6 +1,6 @@
 import React from "react";
 import * as Tabs from "@radix-ui/react-tabs";
-import { ClipboardCopy, ClipboardPaste, Eraser, Pencil } from "lucide-react";
+import { ClipboardCopy, ClipboardPaste, Eraser, Palette, Pencil } from "lucide-react";
 import {
   collectAllTopics,
   hex8ToCss,
@@ -11,6 +11,7 @@ import {
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 import { MARKER_CATALOG, STICKER_CATALOG } from "./markers-catalog.js";
+import { StructureIcon } from "./structure-icons.js";
 
 const STRUCTURES: Array<{ id: MindmapStructure; label: string }> = [
   { id: "mindmap", label: "思维导图" },
@@ -79,13 +80,14 @@ const STICKERS = [
 export const FormatPanel: React.FC = () => {
   const open = useMindmapStore((s) => s.formatPanelOpen);
   const zenMode = useMindmapStore((s) => s.zenMode);
+  const viewMode = useMindmapStore((s) => s.viewMode);
   const doc = useMindmapStore((s) => s.doc);
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
   const styleClipboard = useMindmapStore((s) => s.styleClipboard);
   const setStyleClipboard = useMindmapStore((s) => s.setStyleClipboard);
   const dispatch = useMindmapStore((s) => s.dispatch);
 
-  if (!open || zenMode) return null;
+  if (!open || zenMode || viewMode === "outline") return null;
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
   const theme = { ...doc.theme, ...sheet.theme };
@@ -285,22 +287,32 @@ export const FormatPanel: React.FC = () => {
         <Tabs.Content value="canvas" className="flex-1 space-y-4 overflow-y-auto p-3">
           <Section title="画布结构">
             <div className="grid grid-cols-3 gap-1.5">
-              {STRUCTURES.map((st) => (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() =>
-                    dispatch({ type: "sheet/setLayout", sheetId: sheet.id, structure: st.id })
-                  }
-                  className={`flex flex-col items-center rounded-lg border p-2 text-[11px] transition ${
-                    sheet.structure === st.id
-                      ? "border-blue-500 bg-blue-50 font-semibold text-blue-700"
-                      : "border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <span>{st.label}</span>
-                </button>
-              ))}
+              {STRUCTURES.map((st) => {
+                const active = sheet.structure === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() =>
+                      dispatch({ type: "sheet/setLayout", sheetId: sheet.id, structure: st.id })
+                    }
+                    className={`flex flex-col items-center gap-1 rounded-xl border px-1.5 py-2 text-[11px] transition ${
+                      active
+                        ? "border-blue-500 bg-blue-50/90 font-semibold text-blue-700 shadow-xs"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <StructureIcon
+                      structure={st.id}
+                      rootColor={active ? "#1D4ED8" : "#334155"}
+                      accentColor={active ? "#3B82F6" : "#64748B"}
+                      secondaryColor={active ? "#10B981" : "#94A3B8"}
+                      className="h-6 w-10"
+                    />
+                    <span>{st.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </Section>
 
@@ -384,28 +396,50 @@ export const FormatPanel: React.FC = () => {
           </Section>
 
           <Section title="风格开关">
-            <div className="space-y-2">
+            <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
               <label className="flex cursor-pointer items-center justify-between">
-                <span>彩虹分支配色</span>
-                <input
-                  type="checkbox"
-                  checked={theme.rainbowBranches}
-                  onChange={(e) =>
-                    dispatch({ type: "theme/set", patch: { rainbowBranches: e.target.checked } })
+                <span className="flex items-center gap-2 font-medium text-slate-700">
+                  <Palette className="h-3.5 w-3.5 text-slate-500" /> 彩虹分支配色
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={theme.rainbowBranches}
+                  onClick={() =>
+                    dispatch({ type: "theme/set", patch: { rainbowBranches: !theme.rainbowBranches } })
                   }
-                />
+                  className={`relative h-5 w-9 rounded-full transition-colors ${
+                    theme.rainbowBranches ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-xs transition-transform ${
+                      theme.rainbowBranches ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </label>
               <label className="flex cursor-pointer items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Pencil className="h-3.5 w-3.5" /> 手绘草图风格
+                <span className="flex items-center gap-2 font-medium text-slate-700">
+                  <Pencil className="h-3.5 w-3.5 text-slate-500" /> 手绘草图风格
                 </span>
-                <input
-                  type="checkbox"
-                  checked={theme.handdrawn}
-                  onChange={(e) =>
-                    dispatch({ type: "theme/set", patch: { handdrawn: e.target.checked } })
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={theme.handdrawn}
+                  onClick={() =>
+                    dispatch({ type: "theme/set", patch: { handdrawn: !theme.handdrawn } })
                   }
-                />
+                  className={`relative h-5 w-9 rounded-full transition-colors ${
+                    theme.handdrawn ? "bg-blue-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-xs transition-transform ${
+                      theme.handdrawn ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </label>
             </div>
           </Section>

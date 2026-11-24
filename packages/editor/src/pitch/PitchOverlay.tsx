@@ -60,6 +60,8 @@ export const PitchOverlay: React.FC = () => {
   const slide = slides[Math.min(slideIdx, slides.length - 1)];
   const accentCss = hex8ToCss(palette.branches[slide.accentIndex % palette.branches.length]);
 
+  const progressPct = ((slideIdx + 1) / Math.max(1, slides.length)) * 100;
+
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col overflow-hidden"
@@ -68,9 +70,17 @@ export const PitchOverlay: React.FC = () => {
         color: hex8ToCss(palette.textPrimary),
       }}
     >
+      {/* Top Progress Bar */}
+      <div className="h-1 w-full bg-black/5">
+        <div
+          className="h-full transition-all duration-300"
+          style={{ width: `${progressPct}%`, backgroundColor: accentCss }}
+        />
+      </div>
+
       {/* Top HUD */}
-      <div className="flex items-center justify-between px-6 py-3 text-xs opacity-80">
-        <div className="font-mono">
+      <div className="flex items-center justify-between px-8 py-4 text-xs">
+        <div className="rounded-full bg-black/5 px-3 py-1 font-mono font-semibold opacity-80">
           {slideIdx + 1} / {slides.length}
         </div>
         <div className="flex items-center gap-2">
@@ -111,14 +121,34 @@ export const PitchOverlay: React.FC = () => {
             className="w-full max-w-5xl"
           >
             {slide.layout === "cover" && (
-              <div className="text-center">
+              <div className="mx-auto max-w-3xl text-center">
                 <div
                   className="mx-auto mb-6 h-1.5 w-20 rounded-full"
                   style={{ backgroundColor: accentCss }}
                 />
                 <h1 className="text-5xl font-extrabold tracking-tight">{slide.title}</h1>
                 {slide.subtitle && (
-                  <p className="mt-5 text-xl opacity-70">{slide.subtitle}</p>
+                  <p className="mt-4 text-lg opacity-65">{slide.subtitle}</p>
+                )}
+                {slide.bullets.length > 0 && (
+                  <div className="mt-10 flex flex-wrap items-center justify-center gap-2.5">
+                    {slide.bullets.map((b, i) => {
+                      const c = hex8ToCss(palette.branches[i % palette.branches.length]);
+                      return (
+                        <span
+                          key={b.id}
+                          className="flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium shadow-2xs"
+                          style={{
+                            backgroundColor: hex8ToCss(palette.cardBg),
+                            borderColor: c,
+                          }}
+                        >
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+                          {b.text}
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}

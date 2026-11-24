@@ -47,9 +47,30 @@ export const matrixStructurePlugin: StructureLayoutPlugin = {
       Math.max(...cells.filter((_, idx) => idx % cols === ci).map((c) => c.width), cardMinW),
     );
     const totalGridW = colWidths.reduce((a, b) => a + b, 0) + (cols - 1) * gap;
-    const startX = parentNode.box.x + parentNode.box.width / 2 - totalGridW / 2;
+    const rootCenterX = parentNode.box.x + parentNode.box.width / 2;
+    const startX = rootCenterX - totalGridW / 2;
     let cursorY = parentNode.box.y + parentNode.box.height + 36;
     let bounds = parentNode.box;
+
+    // Clean vertical connector + top horizontal rail linking root to matrix grid
+    const stemTop = parentNode.contentBox.y + parentNode.contentBox.height;
+    const railY = cursorY - 16;
+    const railLeft = startX + colWidths[0] / 2;
+    const railRight = startX + totalGridW - colWidths[cols - 1] / 2;
+    const connectorPath =
+      `M ${r(rootCenterX)} ${r(stemTop)} V ${r(railY)} ` +
+      (cols > 1 ? `M ${r(railLeft)} ${r(railY)} H ${r(railRight)}` : "");
+    ctx.edges.push({
+      id: `matrix-stem:${parent.id}`,
+      fromId: parent.id,
+      toId: parent.children[0].id,
+      kind: "elbow",
+      svgPath: connectorPath,
+      color: parentNode.accentColor,
+      strokeWidth: 1.6,
+      handdrawn: false,
+      seed: fnv1aSeed(`matrix-stem:${parent.id}`),
+    });
 
     for (let row = 0; row < Math.ceil(cells.length / cols); row++) {
       const rowCells = cells.slice(row * cols, (row + 1) * cols);
