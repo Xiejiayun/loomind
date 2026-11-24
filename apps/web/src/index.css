@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+.mindmap-tiptap .ProseMirror {
+  outline: none;
+  min-width: 24px;
+}
+
+.mindmap-tiptap .ProseMirror p {
+  margin: 0;
+}

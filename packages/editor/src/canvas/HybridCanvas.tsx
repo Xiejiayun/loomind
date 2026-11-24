@@ -1,0 +1,759 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useGesture } from "@use-gesture/react";
+import { ArrowLeft, BoxSelect, Palette, Sparkles, SquareDashedBottom } from "lucide-react";
+import {
+  collectAllTopics,
+  createRichText,
+  createTopic,
+  findTopicLocation,
+  generateId,
+  getPalette,
+  hex8ToCss,
+  type LayoutBox,
+  type MindmapLayoutResult,
+  type RichTextDoc,
+} from "@mindmap/core";
+import { useMindmapStore } from "../context.js";
+import { NodeLayer } from "./NodeLayer.js";
+import { SvgLayer } from "./SvgLayer.js";
+
+interface DragState {
+  topicId: string;
+  startClientX: number;
+  startClientY: number;
+  curClientX: number;
+  curClientY: number;
+  altKey: boolean;
+  active: boolean;
+  dropTargetId: string | null;
+  dropMode: "child" | "before" | "after" | "floating";
+}
+
+interface MarqueeState {
+  startX: number;
+  startY: number;
+  curX: number;
+  curY: number;
+}
+
+interface HybridCanvasProps {
+  layout: MindmapLayoutResult;
+  onOpenContextMenu?: (topicId: string, pos: { x: number; y: number }) => void;
+}
+
+export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContextMenu }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 1200, height: 800 });
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [initialEditChar, setInitialEditChar] = useState<string | undefined>(undefined);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [marquee, setMarquee] = useState<MarqueeState | null>(null);
+  const centeredSheetRef = useRef<string | null>(null);
+
+  const doc = useMindmapStore((s) => s.doc);
+  const camera = useMindmapStore((s) => s.camera);
+  const setCamera = useMindmapStore((s) => s.setCamera);
+  const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
+  const selectedRelationshipId = useMindmapStore((s) => s.selectedRelationshipId);
+  const selectedBoundaryId = useMindmapStore((s) => s.selectedBoundaryId);
+  const editingTopicId = useMindmapStore((s) => s.editingTopicId);
+  const drillRootId = useMindmapStore((s) => s.drillRootId);
+  const dispatch = useMindmapStore((s) => s.dispatch);
+  const undo = useMindmapStore((s) => s.undo);
+  const redo = useMindmapStore((s) => s.redo);
+  const selectTopics = useMindmapStore((s) => s.selectTopics);
+  const selectRelationship = useMindmapStore((s) => s.selectRelationship);
+  const selectBoundary = useMindmapStore((s) => s.selectBoundary);
+  const setEditingTopicId = useMindmapStore((s) => s.setEditingTopicId);
+  const setDrillRootId = useMindmapStore((s) => s.setDrillRootId);
+
+  const sheet = useMemo(
+    () => doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0],
+    [doc],
+  );
+  const topicMap = useMemo(() => collectAllTopics(sheet), [sheet]);
+  const selectedSet = useMemo(() => new Set(selectedTopicIds), [selectedTopicIds]);
+  const deletedSet = useMemo(() => new Set(doc.deletedIds), [doc.deletedIds]);
+  const theme = { ...doc.theme, ...sheet.theme };
+  const palette = getPalette(theme.paletteId);
+
+  // Measure viewport container
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) setViewportSize({ width: rect.width, height: rect.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Auto-center camera on first render of a sheet
+  useEffect(() => {
+    if (centeredSheetRef.current === sheet.id) return;
+    if (viewportSize.width > 0 && viewportSize.height > 0) {
+      centeredSheetRef.current = sheet.id;
+      const cx = layout.bounds.x + layout.bounds.width / 2;
+      const cy = layout.bounds.y + layout.bounds.height / 2;
+      setCamera({
+        x: viewportSize.width / 2 - cx,
+        y: viewportSize.height / 2 - cy,
+        scale: 1,
+      });
+    }
+  }, [sheet.id, viewportSize, layout.bounds, setCamera]);
+
+  const screenToWorld = useCallback(
+    (clientX: number, clientY: number) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      const sx = clientX - (rect?.left ?? 0);
+      const sy = clientY - (rect?.top ?? 0);
+      return {
+        x: (sx - camera.x) / camera.scale,
+        y: (sy - camera.y) / camera.scale,
+      };
+    },
+    [camera],
+  );
+
+  // Pan & Wheel Zoom via @use-gesture/react
+  useGesture(
+    {
+      onDrag: ({ delta: [dx, dy], event, first, last }) => {
+        if ((event.target as HTMLElement)?.closest("[data-topic-id]")) return;
+        if (first) setIsInteracting(true);
+        if (last) setIsInteracting(false);
+        const me = event as PointerEvent;
+        if (me.shiftKey) return;
+        setCamera({ x: camera.x + dx, y: camera.y + dy });
+      },
+      onWheel: ({ event, delta: [, dy], ctrlKey }) => {
+        event.preventDefault();
+        setIsInteracting(true);
+        window.clearTimeout((containerRef.current as unknown as { _wt?: number })._wt);
+        (containerRef.current as unknown as { _wt?: number })._wt = window.setTimeout(
+          () => setIsInteracting(false),
+          120,
+        );
+
+        if (ctrlKey || Math.abs(dy) > 0) {
+          const factor = Math.exp(-dy * 0.0015);
+          const nextScale = Math.max(0.15, Math.min(3, camera.scale * factor));
+          const rect = containerRef.current?.getBoundingClientRect();
+          const mx = event.clientX - (rect?.left ?? 0);
+          const my = event.clientY - (rect?.top ?? 0);
+          const wx = (mx - camera.x) / camera.scale;
+          const wy = (my - camera.y) / camera.scale;
+          setCamera({
+            scale: nextScale,
+            x: mx - wx * nextScale,
+            y: my - wy * nextScale,
+          });
+        }
+      },
+    },
+    {
+      target: containerRef,
+      eventOptions: { passive: false },
+      drag: { filterTaps: true },
+    },
+  );
+
+  // Node drag-to-reparent / detach / Alt-drag manualOffset
+  const handleStartDragTopic = useCallback(
+    (topicId: string, e: React.PointerEvent) => {
+      if (topicId === sheet.rootTopic.id) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const altKey = e.altKey;
+      const initTopic = topicMap.get(topicId);
+      const initOffset = initTopic?.manualOffset ?? { dx: 0, dy: 0 };
+
+      const state: DragState = {
+        topicId,
+        startClientX: startX,
+        startClientY: startY,
+        curClientX: startX,
+        curClientY: startY,
+        altKey,
+        active: false,
+        dropTargetId: null,
+        dropMode: "floating",
+      };
+
+      const onMove = (ev: PointerEvent) => {
+        const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+        if (!state.active && dist < 8) return;
+        if (!state.active) {
+          state.active = true;
+          setIsInteracting(true);
+        }
+        state.curClientX = ev.clientX;
+        state.curClientY = ev.clientY;
+
+        if (altKey) {
+          const dx = (ev.clientX - startX) / camera.scale;
+          const dy = (ev.clientY - startY) / camera.scale;
+          dispatch(
+            {
+              type: "topic/setManualOffset",
+              sheetId: sheet.id,
+              topicId,
+              offset: { dx: initOffset.dx + dx, dy: initOffset.dy + dy },
+            },
+            { coalesceKey: `drag-offset:${topicId}` },
+          );
+          return;
+        }
+
+        const world = screenToWorld(ev.clientX, ev.clientY);
+        const hits = layout.spatialIndex
+          .search({ minX: world.x - 10, minY: world.y - 10, maxX: world.x + 10, maxY: world.y + 10 })
+          .filter((h) => h.topicId !== topicId);
+
+        if (hits.length > 0) {
+          const targetId = hits[0].topicId;
+          const targetNode = layout.nodes.get(targetId)!;
+          const relY = (world.y - targetNode.contentBox.y) / Math.max(1, targetNode.contentBox.height);
+          state.dropTargetId = targetId;
+          state.dropMode =
+            targetId === sheet.rootTopic.id
+              ? "child"
+              : relY < 0.25
+                ? "before"
+                : relY > 0.75
+                  ? "after"
+                  : "child";
+        } else {
+          state.dropTargetId = null;
+          state.dropMode = "floating";
+        }
+        setDragState({ ...state });
+      };
+
+      const onUp = (ev: PointerEvent) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        if (state.active) {
+          setIsInteracting(false);
+          if (!altKey) {
+            if (state.dropTargetId) {
+              if (state.dropMode === "child") {
+                dispatch({
+                  type: "topic/reparent",
+                  sheetId: sheet.id,
+                  topicId,
+                  newParentId: state.dropTargetId,
+                });
+              } else {
+                const targetLoc = findTopicLocation(sheet, state.dropTargetId);
+                if (targetLoc?.parent) {
+                  const idx = state.dropMode === "before" ? targetLoc.index : targetLoc.index + 1;
+                  dispatch({
+                    type: "topic/reparent",
+                    sheetId: sheet.id,
+                    topicId,
+                    newParentId: targetLoc.parent.id,
+                    index: idx,
+                  });
+                }
+              }
+            } else {
+              const world = screenToWorld(ev.clientX, ev.clientY);
+              dispatch({
+                type: "topic/detachToFloating",
+                sheetId: sheet.id,
+                topicId,
+                pos: world,
+              });
+            }
+          }
+        }
+        setDragState(null);
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [sheet, topicMap, camera.scale, dispatch, layout, screenToWorld],
+  );
+
+  // Right-edge custom width drag
+  const handleStartResizeWidth = useCallback(
+    (topicId: string, e: React.PointerEvent) => {
+      const node = layout.nodes.get(topicId);
+      if (!node) return;
+      const startX = e.clientX;
+      const startW = node.contentBox.width;
+      setIsInteracting(true);
+
+      const onMove = (ev: PointerEvent) => {
+        const nextW = Math.max(80, Math.min(640, startW + (ev.clientX - startX) / camera.scale));
+        dispatch(
+          { type: "topic/setCustomWidth", sheetId: sheet.id, topicId, width: nextW },
+          { coalesceKey: `resize:${topicId}` },
+        );
+      };
+      const onUp = () => {
+        setIsInteracting(false);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [layout.nodes, camera.scale, dispatch, sheet.id],
+  );
+
+  // Relationship control handle drag
+  const handleStartDragControl = useCallback(
+    (relId: string, handle: "c1" | "c2", e: React.PointerEvent<SVGCircleElement>) => {
+      const rel = sheet.relationships.find((r) => r.id === relId);
+      const layoutRel = layout.relationships.find((r) => r.id === relId);
+      if (!rel || !layoutRel) return;
+      setIsInteracting(true);
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const baseOff =
+        handle === "c1"
+          ? rel.control1Offset ?? {
+              dx: layoutRel.c1.x - (layoutRel.p0.x + (layoutRel.p3.x - layoutRel.p0.x) * 0.33),
+              dy: layoutRel.c1.y - (layoutRel.p0.y + (layoutRel.p3.y - layoutRel.p0.y) * 0.33),
+            }
+          : rel.control2Offset ?? {
+              dx: layoutRel.c2.x - (layoutRel.p0.x + (layoutRel.p3.x - layoutRel.p0.x) * 0.67),
+              dy: layoutRel.c2.y - (layoutRel.p0.y + (layoutRel.p3.y - layoutRel.p0.y) * 0.67),
+            };
+
+      const onMove = (ev: PointerEvent) => {
+        const dx = baseOff.dx + (ev.clientX - startX) / camera.scale;
+        const dy = baseOff.dy + (ev.clientY - startY) / camera.scale;
+        dispatch(
+          {
+            type: "relationship/upsert",
+            sheetId: sheet.id,
+            relationship: {
+              ...rel,
+              ...(handle === "c1" ? { control1Offset: { dx, dy } } : { control2Offset: { dx, dy } }),
+            },
+          },
+          { coalesceKey: `rel-ctrl:${relId}:${handle}` },
+        );
+      };
+      const onUp = () => {
+        setIsInteracting(false);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [sheet.id, sheet.relationships, layout.relationships, camera.scale, dispatch],
+  );
+
+  // Shift+Drag Marquee selection
+  const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("[data-topic-id]")) return;
+    if (e.shiftKey && e.button === 0) {
+      const rect = containerRef.current!.getBoundingClientRect();
+      const startX = e.clientX - rect.left;
+      const startY = e.clientY - rect.top;
+      const m: MarqueeState = { startX, startY, curX: startX, curY: startY };
+      setMarquee(m);
+
+      const onMove = (ev: PointerEvent) => {
+        m.curX = ev.clientX - rect.left;
+        m.curY = ev.clientY - rect.top;
+        setMarquee({ ...m });
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        const minX = (Math.min(m.startX, m.curX) - camera.x) / camera.scale;
+        const minY = (Math.min(m.startY, m.curY) - camera.y) / camera.scale;
+        const maxX = (Math.max(m.startX, m.curX) - camera.x) / camera.scale;
+        const maxY = (Math.max(m.startY, m.curY) - camera.y) / camera.scale;
+        const hits = layout.spatialIndex.search({ minX, minY, maxX, maxY }).map((h) => h.topicId);
+        selectTopics(hits);
+        setMarquee(null);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    }
+  };
+
+  // Global keyboard matrix (with strict IME guard)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (editingTopicId) return;
+      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (activeTag === "INPUT" || activeTag === "TEXTAREA") return;
+
+      const primaryId = selectedTopicIds[0];
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+
+      if (e.key === "F6" && primaryId) {
+        e.preventDefault();
+        setDrillRootId(drillRootId === primaryId ? null : primaryId === sheet.rootTopic.id ? null : primaryId);
+        return;
+      }
+
+      if (e.key === "Tab" && primaryId) {
+        e.preventDefault();
+        const newId = generateId("t", deletedSet);
+        dispatch({ type: "topic/addChild", sheetId: sheet.id, parentId: primaryId, newId });
+        selectTopics([newId]);
+        requestAnimationFrame(() => {
+          setInitialEditChar(undefined);
+          setEditingTopicId(newId);
+        });
+        return;
+      }
+
+      if (e.key === "Enter" && primaryId && primaryId !== sheet.rootTopic.id) {
+        e.preventDefault();
+        const newId = generateId("t", deletedSet);
+        if (e.metaKey || e.ctrlKey) {
+          dispatch({ type: "topic/addParent", sheetId: sheet.id, targetId: primaryId, newId });
+        } else {
+          dispatch({
+            type: "topic/addSibling",
+            sheetId: sheet.id,
+            targetId: primaryId,
+            position: "after",
+            newId,
+          });
+        }
+        selectTopics([newId]);
+        requestAnimationFrame(() => {
+          setInitialEditChar(undefined);
+          setEditingTopicId(newId);
+        });
+        return;
+      }
+
+      if (e.key === "F2" && primaryId) {
+        e.preventDefault();
+        setInitialEditChar(undefined);
+        setEditingTopicId(primaryId);
+        return;
+      }
+
+      if (e.key === " " && primaryId) {
+        e.preventDefault();
+        dispatch({ type: "topic/toggleCollapse", sheetId: sheet.id, topicId: primaryId });
+        return;
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedRelationshipId) {
+          e.preventDefault();
+          dispatch({ type: "relationship/remove", sheetId: sheet.id, relationshipId: selectedRelationshipId });
+          selectRelationship(null);
+        } else if (selectedBoundaryId) {
+          e.preventDefault();
+          dispatch({ type: "boundary/remove", sheetId: sheet.id, boundaryId: selectedBoundaryId });
+          selectBoundary(null);
+        } else if (selectedTopicIds.length > 0) {
+          e.preventDefault();
+          const deletable = selectedTopicIds.filter((id) => id !== sheet.rootTopic.id);
+          if (deletable.length > 0) {
+            dispatch({ type: "topic/delete", sheetId: sheet.id, topicIds: deletable });
+            selectTopics([sheet.rootTopic.id]);
+          }
+        }
+        return;
+      }
+
+      // Direct printable character typing -> start TipTap immediately
+      if (
+        primaryId &&
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        setInitialEditChar(e.key);
+        setEditingTopicId(primaryId);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    editingTopicId,
+    selectedTopicIds,
+    selectedRelationshipId,
+    selectedBoundaryId,
+    drillRootId,
+    sheet.id,
+    sheet.rootTopic.id,
+    deletedSet,
+    dispatch,
+    undo,
+    redo,
+    selectTopics,
+    selectRelationship,
+    selectBoundary,
+    setEditingTopicId,
+    setDrillRootId,
+  ]);
+
+  const handleSelectTopic = useCallback(
+    (topicId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (e.metaKey || e.ctrlKey || e.shiftKey) {
+        const next = selectedSet.has(topicId)
+          ? selectedTopicIds.filter((id) => id !== topicId)
+          : [...selectedTopicIds, topicId];
+        selectTopics(next);
+      } else {
+        selectTopics([topicId]);
+      }
+    },
+    [selectedSet, selectedTopicIds, selectTopics],
+  );
+
+  const handleCommitEdit = useCallback(
+    (topicId: string, title: RichTextDoc) => {
+      dispatch({ type: "topic/setTitle", sheetId: sheet.id, topicId, title }, { coalesceKey: `edit:${topicId}` });
+      setEditingTopicId(null);
+      setInitialEditChar(undefined);
+    },
+    [dispatch, sheet.id, setEditingTopicId],
+  );
+
+  const handleDoubleClickBlank = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("[data-topic-id]")) return;
+    const world = screenToWorld(e.clientX, e.clientY);
+    const newId = generateId("flt", deletedSet);
+    dispatch({ type: "topic/addFloating", sheetId: sheet.id, newId, pos: world });
+    selectTopics([newId]);
+    requestAnimationFrame(() => {
+      setInitialEditChar(undefined);
+      setEditingTopicId(newId);
+    });
+  };
+
+  // Multi-selection actions
+  const addBoundaryForSelection = () => {
+    const first = selectedTopicIds[0];
+    if (!first) return;
+    dispatch({
+      type: "boundary/upsert",
+      sheetId: sheet.id,
+      boundary: {
+        id: generateId("bnd", deletedSet),
+        target: { kind: "subtree", topicId: first },
+        shape: "rounded",
+        title: "分组外框",
+      },
+    });
+  };
+
+  const addSummaryForSelection = () => {
+    const first = selectedTopicIds[0];
+    if (!first) return;
+    const loc = findTopicLocation(sheet, first);
+    if (!loc || !loc.parent) return;
+    const indices = selectedTopicIds
+      .map((id) => loc.parent!.children.findIndex((c) => c.id === id))
+      .filter((i) => i >= 0);
+    const startIndex = Math.min(...indices);
+    const endIndex = Math.max(...indices);
+    dispatch({
+      type: "summary/upsert",
+      sheetId: sheet.id,
+      summary: {
+        id: generateId("sum", deletedSet),
+        parentId: loc.parent.id,
+        startIndex,
+        endIndex,
+        brace: "curly",
+        topic: createTopic(generateId("sumt", deletedSet), "概要总结"),
+      },
+    });
+  };
+
+  const dropTargetBox: LayoutBox | null =
+    dragState?.active && dragState.dropTargetId
+      ? layout.nodes.get(dragState.dropTargetId)?.contentBox ?? null
+      : null;
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative h-full w-full flex-1 overflow-hidden touch-none"
+      style={{
+        backgroundColor: hex8ToCss(palette.canvasBg),
+        backgroundImage: palette.isDark
+          ? "radial-gradient(rgba(148,163,184,0.14) 1px, transparent 1px)"
+          : "radial-gradient(rgba(15,23,42,0.08) 1px, transparent 1px)",
+        backgroundSize: `${Math.max(12, 24 * camera.scale)}px ${Math.max(12, 24 * camera.scale)}px`,
+        backgroundPosition: `${camera.x}px ${camera.y}px`,
+      }}
+      onPointerDown={handleCanvasPointerDown}
+      onClick={() => {
+        selectTopics([]);
+        setEditingTopicId(null);
+      }}
+      onDoubleClick={handleDoubleClickBlank}
+    >
+      {/* Layer 1: GPU-accelerated world container */}
+      <div
+        className="absolute left-0 top-0 will-change-transform"
+        style={{
+          transform: `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.scale})`,
+          transformOrigin: "0 0",
+        }}
+      >
+        <SvgLayer
+          layout={layout}
+          selectedRelationshipId={selectedRelationshipId}
+          selectedBoundaryId={selectedBoundaryId}
+          onSelectRelationship={selectRelationship}
+          onSelectBoundary={selectBoundary}
+          onStartDragControl={handleStartDragControl}
+        />
+
+        <NodeLayer
+          layout={layout}
+          topicMap={topicMap}
+          assets={doc.assets}
+          camera={camera}
+          viewportSize={viewportSize}
+          selectedIds={selectedSet}
+          editingTopicId={editingTopicId}
+          initialEditChar={initialEditChar}
+          isInteracting={isInteracting}
+          onSelectTopic={handleSelectTopic}
+          onStartEdit={(id) => {
+            setInitialEditChar(undefined);
+            setEditingTopicId(id);
+          }}
+          onCommitEdit={handleCommitEdit}
+          onCancelEdit={() => {
+            setEditingTopicId(null);
+            setInitialEditChar(undefined);
+          }}
+          onToggleCollapse={(id) => dispatch({ type: "topic/toggleCollapse", sheetId: sheet.id, topicId: id })}
+          onToggleTask={(id) => dispatch({ type: "topic/toggleTask", sheetId: sheet.id, topicId: id })}
+          onStartDrag={handleStartDragTopic}
+          onStartResizeWidth={handleStartResizeWidth}
+          onContextMenu={(id, e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectTopics([id]);
+            onOpenContextMenu?.(id, { x: e.clientX, y: e.clientY });
+          }}
+        />
+
+        {/* Drop Target Ghost Indicator */}
+        {dropTargetBox && dragState && (
+          <div
+            className="pointer-events-none absolute rounded-lg border-2 border-dashed border-blue-500 bg-blue-500/10"
+            style={
+              dragState.dropMode === "child"
+                ? {
+                    left: dropTargetBox.x - 4,
+                    top: dropTargetBox.y - 4,
+                    width: dropTargetBox.width + 8,
+                    height: dropTargetBox.height + 8,
+                  }
+                : {
+                    left: dropTargetBox.x,
+                    top:
+                      dragState.dropMode === "before"
+                        ? dropTargetBox.y - 6
+                        : dropTargetBox.y + dropTargetBox.height + 2,
+                    width: dropTargetBox.width,
+                    height: 4,
+                    backgroundColor: "#3B82F6",
+                    border: "none",
+                  }
+            }
+          />
+        )}
+      </div>
+
+      {/* Layer 2: Screen-Space Overlays */}
+      {marquee && (
+        <div
+          className="pointer-events-none absolute rounded border border-blue-500 bg-blue-500/10"
+          style={{
+            left: Math.min(marquee.startX, marquee.curX),
+            top: Math.min(marquee.startY, marquee.curY),
+            width: Math.abs(marquee.curX - marquee.startX),
+            height: Math.abs(marquee.curY - marquee.startY),
+          }}
+        />
+      )}
+
+      {/* Drill Down Breadcrumb (F6) */}
+      {drillRootId && (
+        <div className="absolute left-4 top-3 z-30 flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-md backdrop-blur">
+          <button
+            type="button"
+            onClick={() => setDrillRootId(null)}
+            className="flex items-center gap-1 text-blue-600 hover:underline"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            返回完整导图
+          </button>
+          <span className="text-slate-400">/</span>
+          <span>当前下钻分支</span>
+        </div>
+      )}
+
+      {/* Multi-selection Floating Action Bar */}
+      {selectedTopicIds.length > 1 && (
+        <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur">
+          <span className="px-1 text-slate-400">已选 {selectedTopicIds.length} 项</span>
+          <button
+            type="button"
+            onClick={addBoundaryForSelection}
+            className="flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-slate-100"
+          >
+            <SquareDashedBottom className="h-3.5 w-3.5" /> 加外框
+          </button>
+          <button
+            type="button"
+            onClick={addSummaryForSelection}
+            className="flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-slate-100"
+          >
+            <BoxSelect className="h-3.5 w-3.5" /> 加概要
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              dispatch({
+                type: "topic/setStyle",
+                sheetId: sheet.id,
+                topicIds: selectedTopicIds,
+                style: { fillColor: "#EFF6FFFF", strokeColor: "#3B82F6FF", strokeWidth: 1.5 },
+              })
+            }
+            className="flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-slate-100"
+          >
+            <Palette className="h-3.5 w-3.5" /> 统一改色
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-violet-700 hover:bg-violet-100"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> AI 共创
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
