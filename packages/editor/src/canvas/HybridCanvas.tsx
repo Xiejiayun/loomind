@@ -383,6 +383,42 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
     }
   };
 
+  // Clipboard image paste (Ctrl+V) onto selected topic
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (editingTopicId) return;
+      const targetId = selectedTopicIds[0];
+      if (!targetId || !e.clipboardData) return;
+      const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+      if (!file) return;
+      e.preventDefault();
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result ?? "");
+        const base64 = dataUrl.split(",")[1];
+        if (!base64) return;
+        const resourceId = generateId("img", deletedSet);
+        dispatch({
+          type: "topic/setImage",
+          sheetId: sheet.id,
+          topicId: targetId,
+          image: { resourceId, width: 180, height: 120, pos: "top" },
+          asset: {
+            resourceId,
+            mimeType: (file.type as "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml") || "image/png",
+            width: 180,
+            height: 120,
+            sha256: resourceId,
+            dataBase64: base64,
+          },
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [editingTopicId, selectedTopicIds, deletedSet, dispatch, sheet.id]);
+
   // Global keyboard matrix (with strict IME guard)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

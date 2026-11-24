@@ -9,6 +9,8 @@ import {
   type MindmapTopic,
   type RichTextDoc,
 } from "@mindmap/core";
+import { MARKER_BY_ID, STICKER_BY_ID } from "../chrome/markers-catalog.js";
+import { EquationView } from "./EquationView.js";
 import { TopicEditor } from "./TopicEditor.js";
 
 const MARKER_MAP: Record<string, { label: string; bg: string; fg: string }> = {
@@ -257,7 +259,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
 
             {!lodLow &&
               topic.markers?.map((m) => {
-                const info = MARKER_MAP[m];
+                const info = MARKER_BY_ID.get(m);
                 if (!info) return null;
                 return (
                   <span
@@ -270,8 +272,10 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 );
               })}
 
-            {!lodLow && topic.stickerId && STICKER_EMOJI[topic.stickerId] && (
-              <span className="shrink-0 text-lg leading-none">{STICKER_EMOJI[topic.stickerId]}</span>
+            {!lodLow && topic.stickerId && STICKER_BY_ID.has(topic.stickerId) && (
+              <span className="shrink-0 text-lg leading-none">
+                {STICKER_BY_ID.get(topic.stickerId)!.emoji}
+              </span>
             )}
 
             {/* Title or TipTap Editor */}
@@ -345,6 +349,9 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
               {topic.subtitle}
             </div>
           )}
+
+          {/* KaTeX Equation (lazy loaded) */}
+          {!lodLow && topic.equation?.latex && <EquationView latex={topic.equation.latex} />}
 
           {/* Right-edge Width Resize Handle */}
           {selected && !editing && (

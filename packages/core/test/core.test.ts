@@ -101,8 +101,18 @@ describe("@mindmap/core model & store", () => {
   });
 });
 
-describe("@mindmap/core layout engine (M1 structures)", () => {
-  const structures: MindmapStructure[] = ["mindmap", "logic", "org", "brace", "indented"];
+describe("@mindmap/core layout engine (all 9 structures & mixed branches)", () => {
+  const structures: MindmapStructure[] = [
+    "mindmap",
+    "logic",
+    "org",
+    "brace",
+    "indented",
+    "timeline",
+    "fishbone",
+    "treeTable",
+    "matrix",
+  ];
 
   it.each(structures)("computes deterministic layout for %s structure", (structure) => {
     const doc = getTemplate("blank-organic").create();
@@ -120,6 +130,16 @@ describe("@mindmap/core layout engine (M1 structures)", () => {
       expect(n1.handdrawnSeed).toBe(n2.handdrawnSeed);
       expect(n1.handdrawnSeed).toBe(fnv1aSeed(id));
     }
+  });
+
+  it("supports mixed per-branch structure override without dropping nodes", () => {
+    const doc = getTemplate("blank-organic").create();
+    doc.sheets[0].structure = "mindmap";
+    doc.sheets[0].rootTopic.children[0].structure = "org";
+    doc.sheets[0].rootTopic.children[1].structure = "brace";
+    const res = computeSheetLayout(doc);
+    expect(res.nodes.size).toBe(11);
+    expect(res.edges.some((e) => e.kind === "brace")).toBe(true);
   });
 
   it("keeps callout box non-overlapping above contentBox", () => {

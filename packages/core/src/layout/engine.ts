@@ -15,11 +15,15 @@ import { CALLOUT_GAP, measureTopicBox } from "./box-anatomy.js";
 import { HeadlessTextMeasurer, type TextMeasurer } from "./measurer.js";
 import { routeRelationships } from "./routing.js";
 import { braceStructurePlugin } from "./structures/brace.js";
+import { fishboneStructurePlugin } from "./structures/fishbone.js";
 import { unionBox } from "./structures/flextree-util.js";
 import { indentedStructurePlugin } from "./structures/indented.js";
 import { logicStructurePlugin } from "./structures/logic.js";
+import { matrixStructurePlugin } from "./structures/matrix.js";
 import { mindmapStructurePlugin } from "./structures/mindmap.js";
 import { orgStructurePlugin } from "./structures/org.js";
+import { timelineStructurePlugin } from "./structures/timeline.js";
+import { treeTableStructurePlugin } from "./structures/tree-table.js";
 import { buildBoundaryPath, buildCurlyBracePath, fnv1aSeed } from "./svg-paths.js";
 import type {
   LayoutBoundary,
@@ -41,6 +45,10 @@ const STRUCTURE_REGISTRY = new Map<MindmapStructure, StructureLayoutPlugin>([
   ["org", orgStructurePlugin],
   ["brace", braceStructurePlugin],
   ["indented", indentedStructurePlugin],
+  ["timeline", timelineStructurePlugin],
+  ["fishbone", fishboneStructurePlugin],
+  ["treeTable", treeTableStructurePlugin],
+  ["matrix", matrixStructurePlugin],
 ]);
 
 export function registerStructurePlugin(plugin: StructureLayoutPlugin): void {
