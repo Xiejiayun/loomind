@@ -6,6 +6,7 @@ export * from "./model/invariants.js";
 export * from "./store/commands.js";
 export * from "./store/reducer.js";
 export * from "./store/sync-adapter.js";
+export * from "./store/loro-adapter.js";
 export * from "./store/store.js";
 
 export * from "./theme/tokens.js";

@@ -72,6 +72,9 @@ importers:
       immer:
         specifier: ^10.1.1
         version: 10.2.0
+      loro-crdt:
+        specifier: ^1.4.4
+        version: 1.18.0
       rbush:
         specifier: ^4.0.1
         version: 4.0.1
@@ -1832,6 +1835,9 @@ packages:
 
   linkifyjs@4.4.0:
     resolution: {integrity: sha512-InTexvtbai+2c+dEVGcc6O6P2DMVIiwD9a/i4zFroazOIYLOS6FSVmAJ7kFeumnCMx6/gQqNAkbUvgMubV4+MA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/linkifyjs/-/linkifyjs-4.4.0.tgz}
+
+  loro-crdt@1.18.0:
+    resolution: {integrity: sha512-e/96j7B6MUMVc+AilrY6c/Q4+0uNGhBIqhRosadqeEM1d9+IMpxYKy2mL22NIj6ILuZfP0fF5cYTkipxgbddHg==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/loro-crdt/-/loro-crdt-1.18.0.tgz}
 
   loupe@3.2.1:
     resolution: {integrity: sha1-AJXPVtxbepp8CP9bGoeW7IrRfnY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/loupe/-/loupe-3.2.1.tgz}
@@ -3828,6 +3834,8 @@ snapshots:
       uc.micro: 2.1.0
 
   linkifyjs@4.4.0: {}
+
+  loro-crdt@1.18.0: {}
 
   loupe@3.2.1: {}
 
