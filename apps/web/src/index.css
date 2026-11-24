@@ -1,6 +1,15 @@
 @import "tailwindcss";
 @source "../../../packages/editor/src";
 
+.mindmap-node-motion {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.is-interacting .mindmap-node-motion {
+  transition: none !important;
+}
+
 .mindmap-tiptap .ProseMirror {
   outline: none;
   min-width: 24px;

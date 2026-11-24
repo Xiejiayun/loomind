@@ -81,10 +81,12 @@ export function measureTopicBox(
     bodyHeight += 28;
   }
 
+  const strokeW = topic.style?.strokeWidth ?? token.strokeWidth;
+  const borderExtra = Math.ceil(strokeW * 2);
   const contentWidth = topic.customWidth
-    ? Math.max(topic.customWidth, bodyWidth + padX * 2)
-    : Math.max(56, bodyWidth + padX * 2);
-  const contentHeight = Math.max(28, bodyHeight + padY * 2);
+    ? Math.max(topic.customWidth, bodyWidth + padX * 2 + borderExtra + 8)
+    : Math.max(64, bodyWidth + padX * 2 + borderExtra + 10);
+  const contentHeight = Math.max(30, bodyHeight + padY * 2 + borderExtra + 2);
 
   let calloutWidth = 0;
   let calloutHeight = 0;

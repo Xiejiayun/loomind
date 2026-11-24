@@ -43,8 +43,8 @@ interface HybridCanvasProps {
 
 export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContextMenu }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1200, height: 800 });
-  const [isInteracting, setIsInteracting] = useState(false);
   const [initialEditChar, setInitialEditChar] = useState<string | undefined>(undefined);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
@@ -52,7 +52,19 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
 
   const doc = useMindmapStore((s) => s.doc);
   const camera = useMindmapStore((s) => s.camera);
+  const cameraRef = useRef(camera);
+  cameraRef.current = camera;
   const setCamera = useMindmapStore((s) => s.setCamera);
+
+  const setInteractingDom = useCallback((active: boolean) => {
+    containerRef.current?.classList.toggle("is-interacting", active);
+  }, []);
+
+  const applyTransformDom = useCallback((c: { x: number; y: number; scale: number }) => {
+    if (worldRef.current) {
+      worldRef.current.style.transform = `translate3d(${c.x}px, ${c.y}px, 0) scale(${c.scale})`;
+    }
+  }, []);
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
   const selectedRelationshipId = useMindmapStore((s) => s.selectedRelationshipId);
   const selectedBoundaryId = useMindmapStore((s) => s.selectedBoundaryId);
@@ -117,40 +129,51 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
     [camera],
   );
 
-  // Pan & Wheel Zoom via @use-gesture/react
+  // Zero-rerender 120fps Pan & Wheel Zoom via direct GPU DOM transform
   useGesture(
     {
       onDrag: ({ delta: [dx, dy], event, first, last }) => {
         if ((event.target as HTMLElement)?.closest("[data-topic-id]")) return;
-        if (first) setIsInteracting(true);
-        if (last) setIsInteracting(false);
         const me = event as PointerEvent;
         if (me.shiftKey) return;
-        setCamera({ x: camera.x + dx, y: camera.y + dy });
-      },
-      onWheel: ({ event, delta: [, dy], ctrlKey }) => {
-        event.preventDefault();
-        setIsInteracting(true);
-        window.clearTimeout((containerRef.current as unknown as { _wt?: number })._wt);
-        (containerRef.current as unknown as { _wt?: number })._wt = window.setTimeout(
-          () => setIsInteracting(false),
-          120,
-        );
-
-        if (ctrlKey || Math.abs(dy) > 0) {
-          const factor = Math.exp(-dy * 0.0015);
-          const nextScale = Math.max(0.15, Math.min(3, camera.scale * factor));
-          const rect = containerRef.current?.getBoundingClientRect();
-          const mx = event.clientX - (rect?.left ?? 0);
-          const my = event.clientY - (rect?.top ?? 0);
-          const wx = (mx - camera.x) / camera.scale;
-          const wy = (my - camera.y) / camera.scale;
-          setCamera({
-            scale: nextScale,
-            x: mx - wx * nextScale,
-            y: my - wy * nextScale,
-          });
+        if (first) setInteractingDom(true);
+        const next = {
+          x: cameraRef.current.x + dx,
+          y: cameraRef.current.y + dy,
+          scale: cameraRef.current.scale,
+        };
+        cameraRef.current = next;
+        applyTransformDom(next);
+        if (last) {
+          setInteractingDom(false);
+          setCamera(next);
         }
+      },
+      onWheel: ({ event, delta: [, dy] }) => {
+        event.preventDefault();
+        setInteractingDom(true);
+        const factor = Math.exp(-dy * 0.0014);
+        const prev = cameraRef.current;
+        const nextScale = Math.max(0.15, Math.min(3, prev.scale * factor));
+        const rect = containerRef.current?.getBoundingClientRect();
+        const mx = event.clientX - (rect?.left ?? 0);
+        const my = event.clientY - (rect?.top ?? 0);
+        const wx = (mx - prev.x) / prev.scale;
+        const wy = (my - prev.y) / prev.scale;
+        const next = {
+          scale: nextScale,
+          x: mx - wx * nextScale,
+          y: my - wy * nextScale,
+        };
+        cameraRef.current = next;
+        applyTransformDom(next);
+
+        const el = containerRef.current as unknown as { _wt?: number };
+        window.clearTimeout(el._wt);
+        el._wt = window.setTimeout(() => {
+          setInteractingDom(false);
+          setCamera(cameraRef.current);
+        }, 120);
       },
     },
     {
@@ -187,7 +210,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         if (!state.active && dist < 8) return;
         if (!state.active) {
           state.active = true;
-          setIsInteracting(true);
+          setInteractingDom(true);
         }
         state.curClientX = ev.clientX;
         state.curClientY = ev.clientY;
@@ -236,7 +259,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         if (state.active) {
-          setIsInteracting(false);
+          setInteractingDom(false);
           if (!altKey) {
             if (state.dropTargetId) {
               if (state.dropMode === "child") {
@@ -286,7 +309,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
       if (!node) return;
       const startX = e.clientX;
       const startW = node.contentBox.width;
-      setIsInteracting(true);
+      setInteractingDom(true);
 
       const onMove = (ev: PointerEvent) => {
         const nextW = Math.max(80, Math.min(640, startW + (ev.clientX - startX) / camera.scale));
@@ -296,7 +319,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         );
       };
       const onUp = () => {
-        setIsInteracting(false);
+        setInteractingDom(false);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
       };
@@ -312,7 +335,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
       const rel = sheet.relationships.find((r) => r.id === relId);
       const layoutRel = layout.relationships.find((r) => r.id === relId);
       if (!rel || !layoutRel) return;
-      setIsInteracting(true);
+      setInteractingDom(true);
       const startX = e.clientX;
       const startY = e.clientY;
       const baseOff =
@@ -342,14 +365,14 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         );
       };
       const onUp = () => {
-        setIsInteracting(false);
+        setInteractingDom(false);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [sheet.id, sheet.relationships, layout.relationships, camera.scale, dispatch],
+    [sheet.id, sheet.relationships, layout.relationships, camera.scale, dispatch, setInteractingDom],
   );
 
   // Shift+Drag Marquee selection
@@ -625,6 +648,39 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
       ? layout.nodes.get(dragState.dropTargetId)?.contentBox ?? null
       : null;
 
+  const handleStartEditTopic = useCallback(
+    (id: string) => {
+      setInitialEditChar(undefined);
+      setEditingTopicId(id);
+    },
+    [setEditingTopicId],
+  );
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingTopicId(null);
+    setInitialEditChar(undefined);
+  }, [setEditingTopicId]);
+
+  const handleToggleCollapse = useCallback(
+    (id: string) => dispatch({ type: "topic/toggleCollapse", sheetId: sheet.id, topicId: id }),
+    [dispatch, sheet.id],
+  );
+
+  const handleToggleTask = useCallback(
+    (id: string) => dispatch({ type: "topic/toggleTask", sheetId: sheet.id, topicId: id }),
+    [dispatch, sheet.id],
+  );
+
+  const handleContextMenuTopic = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      selectTopics([id]);
+      onOpenContextMenu?.(id, { x: e.clientX, y: e.clientY });
+    },
+    [selectTopics, onOpenContextMenu],
+  );
+
   return (
     <div
       ref={containerRef}
@@ -634,8 +690,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         backgroundImage: palette.isDark
           ? "radial-gradient(rgba(148,163,184,0.14) 1px, transparent 1px)"
           : "radial-gradient(rgba(15,23,42,0.08) 1px, transparent 1px)",
-        backgroundSize: `${Math.max(12, 24 * camera.scale)}px ${Math.max(12, 24 * camera.scale)}px`,
-        backgroundPosition: `${camera.x}px ${camera.y}px`,
+        backgroundSize: "24px 24px",
       }}
       onPointerDown={handleCanvasPointerDown}
       onClick={() => {
@@ -646,6 +701,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
     >
       {/* Layer 1: GPU-accelerated world container */}
       <div
+        ref={worldRef}
         className="absolute left-0 top-0 will-change-transform"
         style={{
           transform: `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.scale})`,
@@ -670,27 +726,15 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
           selectedIds={selectedSet}
           editingTopicId={editingTopicId}
           initialEditChar={initialEditChar}
-          isInteracting={isInteracting}
           onSelectTopic={handleSelectTopic}
-          onStartEdit={(id) => {
-            setInitialEditChar(undefined);
-            setEditingTopicId(id);
-          }}
+          onStartEdit={handleStartEditTopic}
           onCommitEdit={handleCommitEdit}
-          onCancelEdit={() => {
-            setEditingTopicId(null);
-            setInitialEditChar(undefined);
-          }}
-          onToggleCollapse={(id) => dispatch({ type: "topic/toggleCollapse", sheetId: sheet.id, topicId: id })}
-          onToggleTask={(id) => dispatch({ type: "topic/toggleTask", sheetId: sheet.id, topicId: id })}
+          onCancelEdit={handleCancelEdit}
+          onToggleCollapse={handleToggleCollapse}
+          onToggleTask={handleToggleTask}
           onStartDrag={handleStartDragTopic}
           onStartResizeWidth={handleStartResizeWidth}
-          onContextMenu={(id, e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            selectTopics([id]);
-            onOpenContextMenu?.(id, { x: e.clientX, y: e.clientY });
-          }}
+          onContextMenu={handleContextMenuTopic}
         />
 
         {/* Drop Target Ghost Indicator */}
