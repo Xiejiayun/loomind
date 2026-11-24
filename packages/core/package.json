@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "d3-flextree": "^2.1.2",
+    "fflate": "^0.8.2",
     "immer": "^10.1.1",
     "rbush": "^4.0.1",
     "roughjs": "^4.6.6",
