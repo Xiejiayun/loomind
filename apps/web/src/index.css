@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../../../packages/editor/src";
 
 .mindmap-tiptap .ProseMirror {
   outline: none;
