@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   createRichText,
   getTemplate,
-  LoroSyncAdapter,
   richTextToPlainText,
   validateDocumentInvariants,
 } from "../src/index.js";
+import { LoroSyncAdapter } from "../src/store/loro-adapter.js";
 
 describe("LoroSyncAdapter (M4 CRDT collaborative sync)", () => {
   it("synchronizes concurrent tree edits & reparents across two peers without cycles", () => {
