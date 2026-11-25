@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useGesture } from "@use-gesture/react";
 import { ArrowLeft, BoxSelect, Palette, Sparkles, SquareDashedBottom } from "lucide-react";
 import {
@@ -47,10 +47,12 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
   const containerRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const [cameraReady, setCameraReady] = useState(false);
   const [initialEditChar, setInitialEditChar] = useState<string | undefined>(undefined);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const centeredSheetRef = useRef<string | null>(null);
+  const userMovedCameraRef = useRef(false);
 
   const doc = useMindmapStore((s) => s.doc);
   const camera = useMindmapStore((s) => s.camera);
@@ -91,39 +93,63 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
   const theme = { ...doc.theme, ...sheet.theme };
   const palette = getPalette(theme.paletteId);
 
-  // Measure viewport container
+  const computeFitCamera = useCallback(
+    (vw: number, vh: number) => {
+      const pad = 72;
+      const scaleX = (vw - pad) / Math.max(160, layout.bounds.width);
+      const scaleY = (vh - pad) / Math.max(120, layout.bounds.height);
+      const scale = Math.max(0.35, Math.min(1.6, Math.min(scaleX, scaleY)));
+      const cx = layout.bounds.x + layout.bounds.width / 2;
+      const cy = layout.bounds.y + layout.bounds.height / 2;
+      return {
+        x: vw / 2 - cx * scale,
+        y: vh / 2 - cy * scale,
+        scale,
+      };
+    },
+    [layout.bounds],
+  );
+
+  // Measure viewport container & keep auto-fitted on resize if user hasn't manually panned/zoomed
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
-      if (rect) setViewportSize({ width: rect.width, height: rect.height });
+      if (!rect || rect.width <= 0 || rect.height <= 0) return;
+      setViewportSize({ width: rect.width, height: rect.height });
+      if (!userMovedCameraRef.current) {
+        const next = computeFitCamera(rect.width, rect.height);
+        cameraRef.current = next;
+        applyTransformDom(next);
+        setCamera(next);
+      }
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [computeFitCamera, applyTransformDom, setCamera]);
 
-  // Auto-center & fill viewport when real container size is measured or sheet/structure/spacing changes
+  // Synchronous pre-paint auto-fit on initial mount or sheet/structure/spacing change (zero jump!)
   const layoutKey = `${sheet.id}:${sheet.structure}:${sheet.spacing}`;
-  useEffect(() => {
-    if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
-    if (centeredSheetRef.current === layoutKey) return;
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    if (centeredSheetRef.current === layoutKey && cameraReady) return;
     centeredSheetRef.current = layoutKey;
-    const pad = 72;
-    const scaleX = (viewportSize.width - pad) / Math.max(160, layout.bounds.width);
-    const scaleY = (viewportSize.height - pad) / Math.max(120, layout.bounds.height);
-    const scale = Math.max(0.35, Math.min(1.6, Math.min(scaleX, scaleY)));
-    const cx = layout.bounds.x + layout.bounds.width / 2;
-    const cy = layout.bounds.y + layout.bounds.height / 2;
-    const next = {
-      x: viewportSize.width / 2 - cx * scale,
-      y: viewportSize.height / 2 - cy * scale,
-      scale,
-    };
+    userMovedCameraRef.current = false;
+    setViewportSize((prev) =>
+      prev.width === rect.width && prev.height === rect.height
+        ? prev
+        : { width: rect.width, height: rect.height },
+    );
+    const next = computeFitCamera(rect.width, rect.height);
     cameraRef.current = next;
     applyTransformDom(next);
     setCamera(next);
-  }, [layoutKey, viewportSize, layout.bounds, setCamera, applyTransformDom]);
+    if (!cameraReady) setCameraReady(true);
+  }, [layoutKey, cameraReady, computeFitCamera, setCamera, applyTransformDom]);
 
   const screenToWorld = useCallback(
     (clientX: number, clientY: number) => {
@@ -145,7 +171,10 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         if ((event.target as HTMLElement)?.closest("[data-topic-id]")) return;
         const me = event as PointerEvent;
         if (me.shiftKey) return;
-        if (first) setInteractingDom(true);
+        if (first) {
+          userMovedCameraRef.current = true;
+          setInteractingDom(true);
+        }
         const next = {
           x: cameraRef.current.x + dx,
           y: cameraRef.current.y + dy,
@@ -160,6 +189,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
       },
       onWheel: ({ event, delta: [, dy] }) => {
         event.preventDefault();
+        userMovedCameraRef.current = true;
         setInteractingDom(true);
         const factor = Math.exp(-dy * 0.0014);
         const prev = cameraRef.current;
@@ -750,6 +780,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         style={{
           transform: `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.scale})`,
           transformOrigin: "0 0",
+          visibility: cameraReady ? "visible" : "hidden",
         }}
       >
         <SvgLayer
