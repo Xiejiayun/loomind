@@ -1,9 +1,26 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mindmap-studio",
-  "compatibility_date": "2026-11-25",
+  "name": "loomind",
+  "main": "./worker/auth.ts",
+  "account_id": "9198bde6a94accd267e7ead951ed037e",
+  "compatibility_date": "2026-11-24",
+  "workers_dev": true,
+  "vars": {
+    "AUTH_ORIGIN": "https://loomind.jeremyxie.com",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAGSMsKL2gyj9cijh"
+  },
+  "secrets": {
+    "required": ["GOOGLE_CLIENT_ID", "TURNSTILE_SECRET", "SESSION_SECRET"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "loomind", "database_id": "20f4062e-5a50-46f1-b74b-c48acc0e1ad4", "migrations_dir": "migrations" }
+  ],
+  "routes": [
+    { "pattern": "loomind.jeremyxie.com", "custom_domain": true }
+  ],
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   }
 }

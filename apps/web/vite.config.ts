@@ -14,6 +14,8 @@ export default defineConfig({
     target: "esnext",
   },
   server: {
-    port: 5173,
+    port: Number(process.env.LOOMIND_DEV_PORT ?? 5173),
+    strictPort: true,
+    proxy: { "/api": "http://127.0.0.1:8787" },
   },
 });

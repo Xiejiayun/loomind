@@ -4,24 +4,34 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "deploy": "pnpm build && npx wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "dev": "pnpm run --parallel \"/^dev:(web|auth)$/\"",
+    "dev:web": "vite",
+    "dev:auth": "wrangler dev --local --ip 127.0.0.1 --port 8787 --no-infer-origin-from-routes --assets ./public",
+    "build": "pnpm run typecheck && vite build",
+    "preview": "wrangler dev --local --port 5173 --no-infer-origin-from-routes",
+    "deploy": "pnpm run build && wrangler deploy",
+    "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "types:worker": "wrangler types --include-runtime=false --strict-vars=false worker/env.d.ts"
   },
   "dependencies": {
+    "@marsidev/react-turnstile": "^1.6.3",
     "@mindmap/core": "workspace:*",
     "@mindmap/editor": "workspace:*",
+    "@react-oauth/google": "^0.13.5",
+    "jose": "^6.2.17",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20261118.1",
     "@tailwindcss/vite": "^4.0.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "fake-indexeddb": "^6.2.8",
     "tailwindcss": "^4.0.6",
-    "vite": "^6.1.0"
+    "vite": "^6.1.0",
+    "wrangler": "4.164.0"
   }
 }

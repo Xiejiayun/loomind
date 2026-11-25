@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>新建导图 — Loomind</title>
+  <script src="./theme.js"></script>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./app.css">
+  <script src="./app.js" defer></script>
+</head>
+<body class="app-page create-page">
+  <div class="app-shell">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="工作区导航">
+      <div class="sidebar-brand-row"><a class="brand" href="./workspace.html" aria-label="Loomind 工作区"><span class="brand-icon">&gt;_</span>loomind<span class="brand-version">/ beta</span></a><button class="sidebar-collapse" type="button" data-sidebar-collapse aria-label="收起导航" title="收起导航">⇤</button></div>
+      <div class="space-select"><span class="space-avatar">L</span><span class="space-copy"><strong>个人工作区</strong><small>PERSONAL SPACE</small></span></div>
+      <a class="new-map-button" href="./create.html"><span class="new-map-plus" aria-hidden="true">＋</span><span class="new-map-label">新建导图</span><kbd>N</kbd></a>
+      <nav class="sidebar-nav" aria-label="主菜单"><p class="sidebar-group-label">WORKSPACE</p>
+        <a class="side-link" href="./workspace.html"><span class="side-index">01</span><span class="side-label">概览</span></a>
+        <a class="side-link" href="./library.html"><span class="side-index">02</span><span class="side-label">全部导图</span><span class="side-count" data-map-count>6</span></a>
+        <a class="side-link" href="./create.html" data-nav-create="ai"><span class="side-index">03</span><span class="side-label">AI 共创</span></a>
+        <a class="side-link" href="./create.html?mode=outline" data-nav-create="outline"><span class="side-index">04</span><span class="side-label">大纲导入</span></a>
+      </nav>
+      <div class="sidebar-recent"><p class="sidebar-recent-heading"><span>RECENT MAPS</span><span>↗</span></p><a class="recent-link" href="./editor.html?map=product"><span class="recent-diamond">◇</span><span>产品规划</span></a><a class="recent-link" href="./editor.html?map=okr"><span class="recent-diamond">◇</span><span>季度 OKR</span></a><a class="recent-link" href="./editor.html?map=reading"><span class="recent-diamond">◇</span><span>深度读书笔记</span></a></div>
+      <div class="sidebar-bottom"><p class="prototype-tag"><i class="status-light"></i> UI PROTOTYPE</p><a class="sidebar-profile" href="./login.html" aria-label="返回登录原型"><span class="profile-avatar">U</span><span class="profile-copy">我的账号<small>个人空间</small></span></a></div>
+    </aside>
+    <button class="sidebar-scrim" type="button" data-sidebar-close aria-label="关闭导航"></button>
+    <div class="app-content">
+      <header class="app-topbar"><button class="mobile-menu" type="button" data-sidebar-open aria-label="打开导航" aria-controls="app-sidebar" aria-expanded="false">☰</button><div class="breadcrumbs"><a href="./workspace.html">工作区</a><span>/</span><strong>新建导图</strong></div><div class="topbar-actions"><a class="topbar-search" href="./library.html#search" aria-label="搜索导图">⌕ <span>搜索导图</span><kbd>Ctrl K</kbd></a><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换主题">◐</button></div></header>
+      <main class="app-main create-main">
+        <div class="app-inner">
+          <header class="create-header"><p class="app-section-label">CREATE / NEW MINDMAP</p><h1>从想法到导图。</h1><p class="page-subtitle">先把内容和结构整理清楚，再进入熟悉的编辑器继续完善。</p></header>
+          <nav class="create-tabs" aria-label="创建方式"><a class="create-tab" href="./create.html" data-create-tab="ai">01 / AI 共创</a><a class="create-tab" href="./create.html?mode=outline" data-create-tab="outline">02 / 导入大纲</a></nav>
+
+          <section data-create-panel="ai" aria-label="AI 共创">
+            <div class="flow-steps"><strong>01 描述目标</strong><span>→</span><span>02 确认结构</span><span>→</span><span>03 进入编辑器</span></div>
+            <div class="create-grid">
+              <section class="chat-panel" aria-label="AI 对话演示">
+                <div class="panel-header"><strong>新对话 / 结构起稿</strong><span>PROTOTYPE / SAMPLE REPLIES</span></div>
+                <div class="chat-messages" data-chat-messages aria-live="polite">
+                  <div class="chat-message assistant"><span class="speaker">LOOMIND / AI</span><p>你想梳理什么？先告诉我目标，我会把关键内容整理成清晰的一级结构。你可以继续补充，再进入编辑器调整每个节点。</p></div>
+                  <div class="chat-message user"><span class="speaker" data-ai-prompt-label>YOU / EXAMPLE</span><p data-ai-prompt>帮我梳理一个新产品从用户调研到发布的计划。</p></div>
+                  <div class="chat-message assistant"><span class="speaker">LOOMIND / STRUCTURE DRAFT</span><p>建议先分成「目标与背景」「关键模块」「执行步骤」「衡量指标」四个分支。右侧可以预览结构和选择布局，再把草案放进编辑器。</p></div>
+                </div>
+                <form class="chat-compose" data-chat-compose><label class="sr-only" for="chat-input">继续补充想法</label><textarea id="chat-input" required maxlength="1000" placeholder="补充目标、受众、重点或限制条件…"></textarea><div class="chat-compose-footer"><span>演示对话 · 内容仅保留在此页面</span><button class="button button-outline" type="submit">发送 <span aria-hidden="true">↗</span></button></div></form>
+              </section>
+              <aside class="draft-panel" aria-labelledby="draft-title">
+                <span class="app-section-label">LIVE STRUCTURE / DRAFT</span><h2 id="draft-title">建议结构</h2><p>先确认骨架。生成后每个节点都能在编辑器里继续修改。</p>
+                <div class="draft-tree"><strong data-draft-root>新产品发布计划</strong><ul><li>目标与背景</li><li>关键模块</li><li>执行步骤</li><li>衡量指标</li></ul></div>
+                <div class="draft-select"><label for="ai-template">导图布局</label><select id="ai-template" data-ai-template><option value="blank-organic">自由导图</option><option value="quarterly-okr">逻辑树</option><option value="annual-roadmap">时间轴</option><option value="root-cause-fishbone">鱼骨图</option></select></div>
+                <button class="button button-primary" type="button" data-generate-ai>生成导图预览 <span aria-hidden="true">↗</span></button>
+                <p class="prototype-explainer">演示流程，不连接 AI 模型或云端存储。</p>
+              </aside>
+            </div>
+          </section>
+
+          <section data-create-panel="outline" aria-label="大纲导入" hidden>
+            <div class="flow-steps"><strong>01 粘贴大纲</strong><span>→</span><span>02 确认层级与模板</span><span>→</span><span>03 进入编辑器</span></div>
+            <div class="create-grid">
+              <section class="outline-panel" aria-labelledby="outline-title">
+                <span class="app-section-label">SOURCE / OUTLINE</span><h2 id="outline-title">粘贴你的大纲</h2><p>支持 Markdown 标题、列表和缩进。右侧会实时显示识别出的完整层级。</p>
+                <label class="sr-only" for="outline-input">导图大纲</label><textarea class="outline-input" id="outline-input" data-outline-input spellcheck="false"># 产品发布计划
+- 用户研究
+  - 目标用户
+  - 核心痛点
+- 产品设计
+  - 关键功能
+  - 交互流程
+- 研发与测试
+- 上线与推广</textarea>
+                <div class="outline-help"><span>建议使用 # 标题和 - 列表</span><span data-outline-count>0 个节点</span></div>
+              </section>
+              <aside class="outline-preview-panel" aria-labelledby="outline-preview-title">
+                <span class="app-section-label">PARSED / STRUCTURE</span><h2 id="outline-preview-title">结构预览</h2><p>检查根主题与各级节点，再选一个模板进入编辑器。</p>
+                <div class="outline-preview-tree" data-outline-preview aria-live="polite"><strong>产品发布计划</strong><ul><li>用户研究</li><li>产品设计</li><li>研发与测试</li><li>上线与推广</li></ul></div>
+                <p class="prototype-explainer">完整层级会随导图保留；创建后可切换到大纲视图核对。</p>
+              </aside>
+            </div>
+            <section class="template-section" aria-labelledby="template-title"><h2 id="template-title">选择结构模板</h2><p>为内容选择展开方式；模板不会替换节点文字。</p>
+              <div class="template-grid" role="radiogroup" aria-label="结构模板">
+                <label class="template-option"><input type="radio" name="outline-template" value="blank-organic" checked><span class="template-card"><b>自由导图</b><small>适合发散思考与知识整理</small></span></label>
+                <label class="template-option"><input type="radio" name="outline-template" value="quarterly-okr"><span class="template-card"><b>逻辑树</b><small>适合目标拆解与行动计划</small></span></label>
+                <label class="template-option"><input type="radio" name="outline-template" value="annual-roadmap"><span class="template-card"><b>时间轴</b><small>适合里程碑与进度规划</small></span></label>
+                <label class="template-option"><input type="radio" name="outline-template" value="root-cause-fishbone"><span class="template-card"><b>鱼骨图</b><small>适合问题分析与复盘</small></span></label>
+              </div>
+              <div class="template-actions"><span>模板决定布局；大纲中的文字与层级会保留。</span><button class="button button-primary" type="button" data-generate-outline>放进模板，进入编辑器 <span aria-hidden="true">↗</span></button></div>
+            </section>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

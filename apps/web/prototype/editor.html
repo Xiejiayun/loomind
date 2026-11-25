@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>导图编辑器 — Loomind</title>
+  <script src="./theme.js"></script>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./app.css">
+  <script src="./app.js" defer></script>
+</head>
+<body class="app-page editor-page">
+  <div class="app-shell">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="工作区导航">
+      <div class="sidebar-brand-row"><a class="brand" href="./workspace.html" aria-label="Loomind 工作区"><span class="brand-icon">&gt;_</span>loomind<span class="brand-version">/ beta</span></a><button class="sidebar-collapse" type="button" data-sidebar-collapse aria-label="收起导航" title="收起导航">⇤</button></div>
+      <div class="space-select"><span class="space-avatar">L</span><span class="space-copy"><strong>个人工作区</strong><small>PERSONAL SPACE</small></span></div>
+      <a class="new-map-button" href="./create.html"><span class="new-map-plus" aria-hidden="true">＋</span><span class="new-map-label">新建导图</span><kbd>N</kbd></a>
+      <nav class="sidebar-nav" aria-label="主菜单"><p class="sidebar-group-label">WORKSPACE</p>
+        <a class="side-link" href="./workspace.html"><span class="side-index">01</span><span class="side-label">概览</span></a>
+        <a class="side-link" href="./library.html"><span class="side-index">02</span><span class="side-label">全部导图</span><span class="side-count" data-map-count>6</span></a>
+        <a class="side-link" href="./create.html"><span class="side-index">03</span><span class="side-label">AI 共创</span></a>
+        <a class="side-link" href="./create.html?mode=outline"><span class="side-index">04</span><span class="side-label">大纲导入</span></a>
+      </nav>
+      <div class="sidebar-recent"><p class="sidebar-recent-heading"><span>RECENT MAPS</span><span>↗</span></p><a class="recent-link" href="./editor.html?map=product"><span class="recent-diamond">◇</span><span>产品规划</span></a><a class="recent-link" href="./editor.html?map=okr"><span class="recent-diamond">◇</span><span>季度 OKR</span></a><a class="recent-link" href="./editor.html?map=reading"><span class="recent-diamond">◇</span><span>深度读书笔记</span></a></div>
+      <div class="sidebar-bottom"><p class="prototype-tag"><i class="status-light"></i> UI PROTOTYPE</p><a class="sidebar-profile" href="./login.html" aria-label="返回登录原型"><span class="profile-avatar">U</span><span class="profile-copy">我的账号<small>个人空间</small></span></a></div>
+    </aside>
+    <button class="sidebar-scrim" type="button" data-sidebar-close aria-label="关闭导航"></button>
+    <div class="app-content">
+      <header class="app-topbar"><button class="mobile-menu" type="button" data-sidebar-open aria-label="打开导航" aria-controls="app-sidebar" aria-expanded="false">☰</button><div class="breadcrumbs"><a href="./workspace.html">工作区</a><span>/</span><a href="./library.html">全部导图</a><span>/</span><strong data-map-title>产品规划</strong></div><div class="topbar-actions"><a class="topbar-search" href="./library.html#search" aria-label="搜索导图">⌕ <span>搜索导图</span><kbd>Ctrl K</kbd></a><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换主题">◐</button></div></header>
+      <main class="app-editor-main" aria-labelledby="editor-heading">
+        <div class="editor-toolbar"><div><span class="eyebrow">MAP / PREVIEW · <span data-template-name>自由导图</span></span><div class="editor-heading-row"><h1 id="editor-heading" data-map-title>产品规划</h1></div></div><div class="editor-utility"><div class="editor-view-switch" role="group" aria-label="预览方式"><button type="button" data-editor-view="canvas" aria-pressed="true">导图</button><button type="button" data-editor-view="outline" aria-pressed="false">大纲</button></div><a class="editor-action" href="./create.html">AI 共创 ↗</a><span class="saved-pill"><i class="status-light"></i> UI PREVIEW</span></div></div>
+        <div class="editor-canvas" data-editor-panel="canvas"><div class="canvas-grid"></div><div class="workspace-map"><svg class="canvas-lines" viewBox="0 0 1000 500" preserveAspectRatio="none" aria-hidden="true"><path d="M425 250 C330 250 320 150 215 150 M425 250 C330 250 320 350 215 350 M575 250 C670 250 680 150 785 150 M575 250 C670 250 680 350 785 350" /></svg><div class="canvas-node canvas-center"><small>ROOT / 00</small><span data-map-title>产品规划</span></div><div class="canvas-node canvas-left canvas-top" data-branch-index="0"><small>01</small><span data-map-branch="0">用户需求</span></div><div class="canvas-node canvas-left canvas-bottom" data-branch-index="1"><small>02</small><span data-map-branch="1">核心功能</span></div><div class="canvas-node canvas-right canvas-top" data-branch-index="2"><small>03</small><span data-map-branch="2">设计方向</span></div><div class="canvas-node canvas-right canvas-bottom" data-branch-index="3"><small>04</small><span data-map-branch="3">下一步行动</span></div></div><p class="canvas-note" data-canvas-note>切换到大纲查看完整层级</p></div>
+        <section class="editor-outline" data-editor-panel="outline" aria-label="完整导图大纲" hidden><div class="editor-outline-inner"><p class="app-section-label">OUTLINE / FULL STRUCTURE</p><h2 data-map-title>产品规划</h2><p class="page-subtitle" data-outline-summary></p><div class="editor-outline-tree" data-editor-outline-tree></div></div></section>
+        <div class="editor-bottom"><span data-editor-mode-label>◇ 画布 01</span><span data-editor-bottom-detail>CANVAS / PROTOTYPE PREVIEW</span></div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

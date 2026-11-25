@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>工作区 — Loomind</title>
+  <script src="./theme.js"></script>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./app.css">
+  <script src="./app.js" defer></script>
+</head>
+<body class="app-page dashboard-page">
+  <div class="app-shell">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="工作区导航">
+      <div class="sidebar-brand-row">
+        <a class="brand" href="./workspace.html" aria-label="Loomind 工作区"><span class="brand-icon">&gt;_</span>loomind<span class="brand-version">/ beta</span></a>
+        <button class="sidebar-collapse" type="button" data-sidebar-collapse aria-label="收起导航" title="收起导航">⇤</button>
+      </div>
+      <div class="space-select"><span class="space-avatar">L</span><span class="space-copy"><strong>个人工作区</strong><small>PERSONAL SPACE</small></span></div>
+      <a class="new-map-button" href="./create.html"><span class="new-map-plus" aria-hidden="true">＋</span><span class="new-map-label">新建导图</span><kbd>N</kbd></a>
+      <nav class="sidebar-nav" aria-label="主菜单">
+        <p class="sidebar-group-label">WORKSPACE</p>
+        <a class="side-link" href="./workspace.html" aria-current="page"><span class="side-index">01</span><span class="side-label">概览</span></a>
+        <a class="side-link" href="./library.html"><span class="side-index">02</span><span class="side-label">全部导图</span><span class="side-count" data-map-count>6</span></a>
+        <a class="side-link" href="./create.html"><span class="side-index">03</span><span class="side-label">AI 共创</span></a>
+        <a class="side-link" href="./create.html?mode=outline"><span class="side-index">04</span><span class="side-label">大纲导入</span></a>
+      </nav>
+      <div class="sidebar-recent">
+        <p class="sidebar-recent-heading"><span>RECENT MAPS</span><span>↗</span></p>
+        <a class="recent-link" href="./editor.html?map=product"><span class="recent-diamond">◇</span><span>产品规划</span></a>
+        <a class="recent-link" href="./editor.html?map=okr"><span class="recent-diamond">◇</span><span>季度 OKR</span></a>
+        <a class="recent-link" href="./editor.html?map=reading"><span class="recent-diamond">◇</span><span>深度读书笔记</span></a>
+      </div>
+      <div class="sidebar-bottom">
+        <p class="prototype-tag"><i class="status-light"></i> UI PROTOTYPE</p>
+        <a class="sidebar-profile" href="./login.html" aria-label="返回登录原型"><span class="profile-avatar">U</span><span class="profile-copy">我的账号<small>个人空间</small></span></a>
+      </div>
+    </aside>
+    <button class="sidebar-scrim" type="button" data-sidebar-close aria-label="关闭导航"></button>
+    <div class="app-content">
+      <header class="app-topbar">
+        <button class="mobile-menu" type="button" data-sidebar-open aria-label="打开导航" aria-controls="app-sidebar" aria-expanded="false">☰</button>
+        <div class="breadcrumbs"><span>工作区</span><span>/</span><strong>概览</strong></div>
+        <div class="topbar-actions"><a class="topbar-search" href="./library.html#search" aria-label="搜索导图">⌕ <span>搜索导图</span><kbd>Ctrl K</kbd></a><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换主题">◐</button></div>
+      </header>
+      <main class="app-main dashboard-main">
+        <div class="app-inner">
+          <section class="dashboard-heading" aria-labelledby="dashboard-title">
+            <p class="app-section-label"><i class="status-light"></i> YOUR WORKSPACE / READY</p>
+            <h1 id="dashboard-title">今天想梳理什么？</h1>
+            <p class="page-subtitle">从一个问题或目标开始。Loomind 会先与你确认结构，再把它变成可以继续编辑的导图。</p>
+          </section>
+          <div class="dashboard-grid">
+            <section class="start-panel" aria-labelledby="ai-start-title">
+              <div class="start-panel-heading"><span class="panel-kicker">01 / AI FIRST</span><span class="panel-badge">DEFAULT PATH</span></div>
+              <h2 id="ai-start-title">和 AI 一起构建</h2>
+              <p>描述你想要梳理的内容。可以从一句模糊的想法开始，再在对话中逐步明确。</p>
+              <form class="ai-start-form" data-start-ai>
+                <label class="sr-only" for="workspace-prompt">描述你想创建的导图</label>
+                <textarea id="workspace-prompt" name="prompt" required maxlength="1000" placeholder="例如：帮我梳理一个新产品从用户调研到发布的完整计划…"></textarea>
+                <div class="ai-start-footer"><span>输入目标、问题或主题即可开始</span><button class="button button-primary" type="submit">开始对话 <span aria-hidden="true">↗</span></button></div>
+              </form>
+              <div class="suggestion-row"><span>试试这些：</span><button class="prompt-chip" type="button" data-prompt-fill="帮我梳理一个新产品从用户调研到发布的完整计划">产品发布计划</button><button class="prompt-chip" type="button" data-prompt-fill="帮我拆解今年的个人学习目标和每个月的行动">年度学习目标</button><button class="prompt-chip" type="button" data-prompt-fill="帮我分析团队协作中信息不同步的原因和改进方案">问题根因分析</button></div>
+            </section>
+            <section class="quick-panel" aria-labelledby="outline-quick-title">
+              <div class="quick-panel-heading"><span class="panel-kicker">02 / BRING YOUR OUTLINE</span><span class="panel-badge">ALTERNATIVE</span></div>
+              <h3 id="outline-quick-title">已经有大纲？</h3>
+              <p>粘贴 Markdown、列表或缩进文本。先检查层级，再选择结构模板，把现有内容放进导图。</p>
+              <div class="quick-steps"><span><b>01</b> 粘贴已有大纲</span><span><b>02</b> 确认层级结构</span><span><b>03</b> 选择导图模板</span></div>
+              <a class="button button-outline" href="./create.html?mode=outline">导入大纲 <span aria-hidden="true">↗</span></a>
+            </section>
+          </div>
+          <section class="recent-section" aria-labelledby="recent-title">
+            <div class="section-row"><div><p class="app-section-label">CONTINUE THINKING</p><h2 id="recent-title">最近的导图</h2></div><a class="subtle-link" href="./library.html">查看全部导图 →</a></div>
+            <div class="map-grid" data-map-grid data-limit="3"></div>
+            <noscript>启用 JavaScript 后可查看导图预览。</noscript>
+          </section>
+          <footer class="dashboard-footer"><span>LOOMIND / PERSONAL WORKSPACE</span><span>AI FIRST · OUTLINE READY · MANY MAPS</span></footer>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "loomind-local-tests",
+  "compatibility_date": "2026-11-24",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "temporary-test-drafts", "database_id": "00000000-0000-4000-8000-000000000001" }
+  ]
+}

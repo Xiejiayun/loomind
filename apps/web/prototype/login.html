@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 — Loomind</title>
+  <script src="./theme.js"></script>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="login-page">
+  <header class="site-header shell">
+    <a class="brand" href="./index.html" aria-label="返回 Loomind 首页"><span class="brand-icon">&gt;_</span>loomind<span class="brand-version">/ beta</span></a>
+    <nav aria-label="页面导航"><button class="theme-toggle" type="button" data-theme-toggle aria-label="切换主题">◐</button><a class="nav-link" href="./index.html">← 返回介绍页</a></nav>
+  </header>
+  <main class="login-layout">
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="login-card-icon">&gt;_</div>
+      <p class="eyebrow">WELCOME BACK</p>
+      <h2 id="login-title">登录 Loomind</h2>
+      <p>进入你的思维工作台，从上次的想法继续。</p>
+      <div class="login-steps"><span>01 / 人机验证</span><span>02 / Google 登录</span></div>
+      <div class="turnstile-placeholder" role="group" aria-label="人机验证原型示意"><span class="check-box" aria-hidden="true"></span><span>验证你是真人</span><span class="cloudflare-mark">CLOUDFLARE<br><small>Turnstile</small></span></div>
+      <a class="button button-primary google-button" href="./workspace.html" aria-label="原型演示：模拟 Google 登录并进入工作台"><span class="google-mark" aria-hidden="true">G</span>使用 Google 登录 <span class="demo-tag">↗</span></a>
+      <p class="prototype-note">这是页面原型。点击按钮仅预览登录后的页面，不会发起真实 Google 登录或人机验证。</p>
+      <div class="login-card-footer">暂时不登录？<a href="./workspace.html">预览工作台 →</a></div>
+    </section>
+  </main>
+</body>
+</html>

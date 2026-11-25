@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS account_drafts (
+  owner TEXT NOT NULL PRIMARY KEY,
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  document TEXT NOT NULL
+) WITHOUT ROWID;

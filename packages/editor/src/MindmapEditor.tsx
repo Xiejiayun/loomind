@@ -29,9 +29,10 @@ export interface MindmapEditorProps {
   initialDoc?: MindmapDocument;
   adapter?: SyncAdapter;
   onDocumentChange?: (doc: MindmapDocument) => void;
+  accountControl?: React.ReactNode;
 }
 
-const MindmapEditorInner: React.FC = () => {
+const MindmapEditorInner: React.FC<Pick<MindmapEditorProps, "accountControl">> = ({ accountControl }) => {
   const doc = useMindmapStore((s) => s.doc);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
   const viewMode = useMindmapStore((s) => s.viewMode);
@@ -80,6 +81,7 @@ const MindmapEditorInner: React.FC = () => {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-50 font-sans">
       <TopToolbar
+        accountControl={accountControl}
         onOpenTemplates={() => setTemplatesOpen(true)}
         onOpenAi={() => setAiOpen(true)}
         onOpenExport={() => setExportOpen(true)}
@@ -123,6 +125,7 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
   initialDoc,
   adapter,
   onDocumentChange,
+  accountControl,
 }) => {
   const storeRef = useRef<StoreApi<MindmapStoreState> | null>(null);
   if (!storeRef.current) {
@@ -142,7 +145,7 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
 
   return (
     <MindmapStoreContext.Provider value={storeRef.current}>
-      <MindmapEditorInner />
+      <MindmapEditorInner accountControl={accountControl} />
     </MindmapStoreContext.Provider>
   );
 };

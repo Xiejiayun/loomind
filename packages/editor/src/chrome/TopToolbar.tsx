@@ -33,12 +33,14 @@ import {
 import { useMindmapStore } from "../context.js";
 
 interface TopToolbarProps {
+  accountControl?: React.ReactNode;
   onOpenTemplates: () => void;
   onOpenAi?: () => void;
   onOpenExport?: () => void;
 }
 
 export const TopToolbar: React.FC<TopToolbarProps> = ({
+  accountControl,
   onOpenTemplates,
   onOpenAi,
   onOpenExport,
@@ -215,7 +217,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
 
       {/* Left: Brand + View switcher + Undo/Redo + Templates */}
       <div className="flex items-center gap-2">
-        <div className="mr-0.5 hidden items-center gap-1.5 sm:flex" title="Mindmap Studio · 已本地自动保存">
+        {accountControl}
+        <div className="mr-0.5 hidden items-center gap-1.5 sm:flex" title="Loomind · 已本地自动保存">
           <svg viewBox="0 0 64 64" className="h-6 w-6 shrink-0" fill="none">
             <defs>
               <linearGradient id="ms-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
