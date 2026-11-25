@@ -46,7 +46,7 @@ interface HybridCanvasProps {
 export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContextMenu, onOpenAi }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
-  const [viewportSize, setViewportSize] = useState({ width: 1200, height: 800 });
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [initialEditChar, setInitialEditChar] = useState<string | undefined>(undefined);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
@@ -103,27 +103,26 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
     return () => ro.disconnect();
   }, []);
 
-  // Auto-center & auto-fit camera when switching sheet or structure
-  const layoutKey = `${sheet.id}:${sheet.structure}`;
+  // Auto-center & fill viewport when real container size is measured or sheet/structure/spacing changes
+  const layoutKey = `${sheet.id}:${sheet.structure}:${sheet.spacing}`;
   useEffect(() => {
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
     if (centeredSheetRef.current === layoutKey) return;
-    if (viewportSize.width > 0 && viewportSize.height > 0) {
-      centeredSheetRef.current = layoutKey;
-      const pad = 100;
-      const scaleX = (viewportSize.width - pad) / Math.max(240, layout.bounds.width);
-      const scaleY = (viewportSize.height - pad) / Math.max(200, layout.bounds.height);
-      const scale = Math.max(0.45, Math.min(1, Math.min(scaleX, scaleY)));
-      const cx = layout.bounds.x + layout.bounds.width / 2;
-      const cy = layout.bounds.y + layout.bounds.height / 2;
-      const next = {
-        x: viewportSize.width / 2 - cx * scale,
-        y: viewportSize.height / 2 - cy * scale,
-        scale,
-      };
-      cameraRef.current = next;
-      applyTransformDom(next);
-      setCamera(next);
-    }
+    centeredSheetRef.current = layoutKey;
+    const pad = 72;
+    const scaleX = (viewportSize.width - pad) / Math.max(160, layout.bounds.width);
+    const scaleY = (viewportSize.height - pad) / Math.max(120, layout.bounds.height);
+    const scale = Math.max(0.35, Math.min(1.6, Math.min(scaleX, scaleY)));
+    const cx = layout.bounds.x + layout.bounds.width / 2;
+    const cy = layout.bounds.y + layout.bounds.height / 2;
+    const next = {
+      x: viewportSize.width / 2 - cx * scale,
+      y: viewportSize.height / 2 - cy * scale,
+      scale,
+    };
+    cameraRef.current = next;
+    applyTransformDom(next);
+    setCamera(next);
   }, [layoutKey, viewportSize, layout.bounds, setCamera, applyTransformDom]);
 
   const screenToWorld = useCallback(
