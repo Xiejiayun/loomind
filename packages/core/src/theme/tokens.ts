@@ -42,11 +42,16 @@ export interface PaletteSpec {
 
 export function hexToRgba(hex8: string): { r: number; g: number; b: number; a: number } {
   const clean = hex8.replace("#", "");
-  const r = parseInt(clean.slice(0, 2), 16) || 0;
-  const g = parseInt(clean.slice(2, 4), 16) || 0;
-  const b = parseInt(clean.slice(4, 6), 16) || 0;
-  const a = clean.length >= 8 ? (parseInt(clean.slice(6, 8), 16) || 255) / 255 : 1;
-  return { r, g, b, a };
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const aRaw = clean.length >= 8 ? parseInt(clean.slice(6, 8), 16) : 255;
+  return {
+    r: Number.isNaN(r) ? 0 : r,
+    g: Number.isNaN(g) ? 0 : g,
+    b: Number.isNaN(b) ? 0 : b,
+    a: (Number.isNaN(aRaw) ? 255 : aRaw) / 255,
+  };
 }
 
 export function relativeLuminance(hex8: string): number {
