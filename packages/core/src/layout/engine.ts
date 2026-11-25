@@ -254,7 +254,8 @@ export class LayoutEngine {
       const effectiveBg = underlineMode
         ? palette.canvasBg
         : compositeHexOverBg(effectiveFill, palette.canvasBg);
-      const defaultText = isDarkFill(effectiveBg)
+      const isDarkBg = isDarkFill(effectiveBg);
+      const defaultText = isDarkBg
         ? "#FFFFFFFF"
         : palette.isDark
           ? "#0F172AFF"
@@ -296,6 +297,7 @@ export class LayoutEngine {
         cornerRadius: topic.style?.cornerRadius ?? shapeCornerRadius,
         shape,
         underlineMode,
+        isDarkBg,
         neonGlow: palette.neonGlow,
         handdrawnSeed: fnv1aSeed(topic.id),
         taskSummary: st.taskSummary,
