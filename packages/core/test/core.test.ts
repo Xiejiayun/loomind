@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCurlyBracePath,
+  buildRoughSvgPath,
   computeSheetLayout,
   createDocument,
   createRichText,
@@ -185,5 +187,74 @@ describe("@mindmap/core layout engine (all 9 structures & mixed branches)", () =
     const node = res.nodes.get("c1")!;
     expect(node.calloutBox).toBeDefined();
     expect(node.calloutBox!.y + node.calloutBox!.height).toBeLessThan(node.contentBox.y);
+  });
+
+  it("keeps handdrawn paths continuous with exact pinned endpoints and corners", () => {
+    const elbow = "M 14 40 V 280 H 28";
+    const roughElbow = buildRoughSvgPath(elbow, 12345);
+    // Must remain one continuous subpath (never split into disconnected M jumps at the corner)
+    expect(roughElbow.match(/\bM\b/g)?.length).toBe(1);
+    expect(roughElbow.startsWith("M 14 40 ")).toBe(true);
+    expect(roughElbow.includes("14 280")).toBe(true);
+    expect(roughElbow.endsWith("28 280")).toBe(true);
+    expect(roughElbow).not.toBe(elbow);
+
+    // Deterministic output for identical seed
+    expect(buildRoughSvgPath(elbow, 12345)).toBe(roughElbow);
+
+    // Seamless curve + underline stays one unbroken path pinned at both endpoints
+    const bezierUnderline = "M 0 0 C 40 0, 40 100, 80 100 H 180";
+    const roughBezier = buildRoughSvgPath(bezierUnderline, 999);
+    expect(roughBezier.match(/\bM\b/g)?.length).toBe(1);
+    expect(roughBezier.startsWith("M 0 0 ")).toBe(true);
+    expect(roughBezier.includes("80 100")).toBe(true);
+    expect(roughBezier.endsWith("180 100")).toBe(true);
+
+    // Curly brace meets cleanly at its center tip
+    const brace = buildCurlyBracePath(100, 0, 120, 1, 14);
+    const roughBrace = buildRoughSvgPath(brace, 42);
+    expect(roughBrace.match(/\bM\b/g)?.length).toBe(1);
+    expect(roughBrace.includes("107 60")).toBe(true);
+    expect(roughBrace.endsWith("93 120")).toBe(true);
+  });
+
+  it("chains non-overlapping trunks in indented, org, and elbow structures under handdrawn mode", () => {
+    // 1. Indented: every child vertical segment chains from previous child's junction (zero duplicate trunk)
+    const indDoc = getTemplate("blank-organic").create();
+    indDoc.theme.handdrawn = true;
+    indDoc.theme.skeletonId = "classic-cards";
+    indDoc.sheets[0].structure = "indented";
+    const indLayout = computeSheetLayout(indDoc);
+    const rootId = indDoc.sheets[0].rootTopic.id;
+    const rootEdges = indLayout.edges.filter((e) => e.fromId === rootId);
+    expect(rootEdges.length).toBe(indDoc.sheets[0].rootTopic.children.length);
+    const startYs = rootEdges.map((e) => Number(e.svgPath.match(/^M [\d.-]+ ([\d.-]+)/)?.[1]));
+    for (let i = 1; i < startYs.length; i++) {
+      expect(startYs[i]).toBeGreaterThan(startYs[i - 1]);
+    }
+    for (const edge of indLayout.edges) {
+      expect(edge.svgPath.match(/\bM\b/g)?.length).toBe(1);
+    }
+
+    // 2. Org: single shared stem per multi-child parent + continuous handdrawn rails
+    const orgDoc = getTemplate("blank-organic").create();
+    orgDoc.theme.handdrawn = true;
+    orgDoc.sheets[0].structure = "org";
+    const orgLayout = computeSheetLayout(orgDoc);
+    expect(orgLayout.edges.filter((e) => e.id === `org-stem:${orgDoc.sheets[0].rootTopic.id}`)).toHaveLength(1);
+    for (const edge of orgLayout.edges) {
+      expect(edge.svgPath.match(/\bM\b/g)?.length).toBe(1);
+    }
+
+    // 3. Technical-elbow mindmap: single shared stem per side + continuous handdrawn rails
+    const elbowDoc = getTemplate("blank-organic").create();
+    elbowDoc.theme.handdrawn = true;
+    elbowDoc.theme.skeletonId = "technical-elbow";
+    elbowDoc.sheets[0].structure = "logic";
+    const elbowLayout = computeSheetLayout(elbowDoc);
+    expect(elbowLayout.edges.some((e) => e.id.startsWith("elbow-stem:"))).toBe(true);
+    for (const edge of elbowLayout.edges) {
+      expect(edge.svgPath.match(/\bM\b/g)?.length).toBe(1);
+    }
   });
 });

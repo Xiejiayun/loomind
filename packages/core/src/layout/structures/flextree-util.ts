@@ -168,6 +168,17 @@ export function layoutHorizontalFlextree(
   let bounds = parentNode.box;
   const placedNodes = new Map<string, LayoutNode>();
   placedNodes.set(parent.id, parentNode);
+  const useSharedElbowBus = !opts?.skipEdges && ctx.skeleton.defaultEdgeKind === "elbow";
+  const elbowGroups = new Map<string, { pNode: LayoutNode; children: LayoutNode[] }>();
+
+  const recordElbow = (pNode: LayoutNode, cNode: LayoutNode) => {
+    let group = elbowGroups.get(pNode.id);
+    if (!group) {
+      group = { pNode, children: [] };
+      elbowGroups.set(pNode.id, group);
+    }
+    group.children.push(cNode);
+  };
 
   treeRoot.each((node) => {
     if (node === treeRoot) return;
@@ -190,9 +201,13 @@ export function layoutHorizontalFlextree(
       placedNodes.set(t.id, cNode);
       bounds = unionBox(bounds, subBox);
       if (!opts?.skipEdges) {
-        const p0 = anchorForSide(pNode, dir === 1 ? "right" : "left");
-        const p3 = anchorForSide(cNode, dir === 1 ? "left" : "right");
-        ctx.edges.push(createStandardEdge(pNode, cNode, p0, p3, ctx));
+        if (useSharedElbowBus) {
+          recordElbow(pNode, cNode);
+        } else {
+          const p0 = anchorForSide(pNode, dir === 1 ? "right" : "left");
+          const p3 = anchorForSide(cNode, dir === 1 ? "left" : "right");
+          ctx.edges.push(createStandardEdge(pNode, cNode, p0, p3, ctx));
+        }
       }
       return;
     }
@@ -203,11 +218,96 @@ export function layoutHorizontalFlextree(
     bounds = unionBox(bounds, cNode.box);
 
     if (!opts?.skipEdges) {
-      const p0 = anchorForSide(pNode, dir === 1 ? "right" : "left");
-      const p3 = anchorForSide(cNode, dir === 1 ? "left" : "right");
-      ctx.edges.push(createStandardEdge(pNode, cNode, p0, p3, ctx));
+      if (useSharedElbowBus) {
+        recordElbow(pNode, cNode);
+      } else {
+        const p0 = anchorForSide(pNode, dir === 1 ? "right" : "left");
+        const p3 = anchorForSide(cNode, dir === 1 ? "left" : "right");
+        ctx.edges.push(createStandardEdge(pNode, cNode, p0, p3, ctx));
+      }
     }
   });
+
+  if (useSharedElbowBus) {
+    const rr = (n: number) => Math.round(n * 10) / 10;
+    const handdrawn = ctx.theme.handdrawn;
+    for (const { pNode, children: kids } of elbowGroups.values()) {
+      const p0 = anchorForSide(pNode, dir === 1 ? "right" : "left");
+      if (kids.length === 1) {
+        const cNode = kids[0];
+        const p3 = anchorForSide(cNode, dir === 1 ? "left" : "right");
+        ctx.edges.push(createStandardEdge(pNode, cNode, p0, p3, ctx));
+        continue;
+      }
+
+      const items = kids.map((cNode) => ({
+        cNode,
+        p3: anchorForSide(cNode, dir === 1 ? "left" : "right"),
+      }));
+      const targetRailX =
+        dir === 1
+          ? Math.min(...items.map((it) => it.p3.x))
+          : Math.max(...items.map((it) => it.p3.x));
+      const xm = (p0.x + targetRailX) / 2;
+      const baseStroke = pNode.depth === 0 ? 2.4 : 1.6;
+
+      // Single horizontal stem from parent to shared vertical rail
+      const stemRaw = `M ${rr(p0.x)} ${rr(p0.y)} H ${rr(xm)}`;
+      const stemSeed = fnv1aSeed(`elbow-stem:${pNode.id}:${dir}`);
+      ctx.edges.push({
+        id: `elbow-stem:${pNode.id}:${dir}`,
+        fromId: pNode.id,
+        toId: kids[0].id,
+        kind: "elbow",
+        svgPath: handdrawn ? buildRoughSvgPath(stemRaw, stemSeed) : stemRaw,
+        color: pNode.depth === 0 && ctx.theme.rainbowBranches ? pNode.accentColor : kids[0].accentColor,
+        strokeWidth: baseStroke,
+        handdrawn,
+        seed: stemSeed,
+      });
+
+      const upper = items
+        .filter((it) => it.p3.y <= p0.y)
+        .sort((a, b) => b.p3.y - a.p3.y);
+      const lower = items
+        .filter((it) => it.p3.y > p0.y)
+        .sort((a, b) => a.p3.y - b.p3.y);
+
+      const emitVerticalSide = (list: typeof items) => {
+        let prevY = p0.y;
+        for (const { cNode, p3 } of list) {
+          let endX = p3.x;
+          if (cNode.underlineMode) {
+            endX =
+              cNode.side === "left"
+                ? cNode.contentBox.x
+                : cNode.contentBox.x + cNode.contentBox.width;
+            cNode.underlineDrawnByEdge = true;
+          }
+          const raw =
+            Math.abs(p3.y - prevY) < 0.2
+              ? `M ${rr(xm)} ${rr(prevY)} H ${rr(endX)}`
+              : `M ${rr(xm)} ${rr(prevY)} V ${rr(p3.y)} H ${rr(endX)}`;
+          const seed = fnv1aSeed(`${pNode.id}->${cNode.id}`);
+          ctx.edges.push({
+            id: `e:${pNode.id}->${cNode.id}`,
+            fromId: pNode.id,
+            toId: cNode.id,
+            kind: "elbow",
+            svgPath: handdrawn ? buildRoughSvgPath(raw, seed) : raw,
+            color: cNode.accentColor,
+            strokeWidth: cNode.underlineDrawnByEdge ? Math.max(1.2, cNode.strokeWidth) : baseStroke,
+            handdrawn,
+            seed,
+          });
+          prevY = p3.y;
+        }
+      };
+
+      emitVerticalSide(upper);
+      emitVerticalSide(lower);
+    }
+  }
 
   return bounds;
 }
