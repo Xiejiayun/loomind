@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextStyle from "@tiptap/extension-text-style";
@@ -54,6 +54,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
   onCancel,
 }) => {
   const committedRef = useRef(false);
+  const [hasSelection, setHasSelection] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -74,6 +75,9 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
       ? { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: initialChar }] }] }
       : initialDoc,
     autofocus: "end",
+    onSelectionUpdate: ({ editor: ed }) => {
+      setHasSelection(!ed.state.selection.empty);
+    },
   });
 
   useEffect(() => {
@@ -118,10 +122,10 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
         }
       }}
     >
-      {/* Floating Rich Text Format Bubble */}
-      {editor && (
+      {/* Floating Rich Text Format Bubble — only appears when text is selected */}
+      {editor && hasSelection && (
         <div
-          className="absolute -top-9 left-1/2 z-50 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-1.5 py-1 shadow-lg"
+          className="absolute -top-10 left-1/2 z-50 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-1.5 py-1 shadow-xl"
           onMouseDown={(e) => e.preventDefault()}
         >
           <button

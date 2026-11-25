@@ -121,7 +121,9 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     const [editingCallout, setEditingCallout] = useState(false);
     const [calloutDraft, setCalloutDraft] = useState("");
     const isTransparentFill = layoutNode.fillColor.toUpperCase().endsWith("00");
-    const darkBg = !layoutNode.underlineMode && !isTransparentFill && isDarkFill(layoutNode.fillColor);
+    const darkBg =
+      layoutNode.isDarkBg ??
+      (!layoutNode.underlineMode && !isTransparentFill && isDarkFill(layoutNode.fillColor));
     const fillCss = layoutNode.underlineMode || isTransparentFill ? "transparent" : hex8ToCss(layoutNode.fillColor);
     const strokeCss = hex8ToCss(layoutNode.strokeColor);
     const textCss = hex8ToCss(layoutNode.textColor);
@@ -276,7 +278,11 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
         {/* Main Topic Card */}
         <div
           className={`relative box-border flex flex-col justify-center ${
-            selected ? "ring-2 ring-blue-500 ring-offset-2" : "hover:ring-1 hover:ring-blue-300/70"
+            selected
+              ? layoutNode.underlineMode
+                ? "rounded-md ring-2 ring-blue-500/80 ring-offset-0"
+                : "ring-2 ring-blue-500 ring-offset-2"
+              : "hover:ring-1 hover:ring-blue-300/70"
           }`}
           style={{
             ...cardStyle,
