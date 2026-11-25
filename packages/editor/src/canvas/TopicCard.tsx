@@ -130,7 +130,9 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
       color: textCss,
       borderRadius: layoutNode.underlineMode ? 0 : layoutNode.cornerRadius,
       borderBottom: layoutNode.underlineMode
-        ? `${Math.max(1.2, layoutNode.strokeWidth)}px solid ${strokeCss}`
+        ? layoutNode.underlineDrawnByEdge
+          ? "none"
+          : `${Math.max(1.2, layoutNode.strokeWidth)}px solid ${strokeCss}`
         : layoutNode.strokeWidth > 0
           ? `${layoutNode.strokeWidth}px solid ${strokeCss}`
           : "none",

@@ -115,9 +115,11 @@ export function serializeToSvg(
     }
 
     if (node.underlineMode) {
-      lines.push(
-        `<line x1="${b.x}" y1="${b.y + b.height}" x2="${b.x + b.width}" y2="${b.y + b.height}" stroke="${strokeCss}" stroke-width="${Math.max(1.2, node.strokeWidth)}" />`,
-      );
+      if (!node.underlineDrawnByEdge) {
+        lines.push(
+          `<line x1="${b.x}" y1="${b.y + b.height - 1}" x2="${b.x + b.width}" y2="${b.y + b.height - 1}" stroke="${strokeCss}" stroke-width="${Math.max(1.2, node.strokeWidth)}" />`,
+        );
+      }
     } else {
       const rx = Math.min(node.cornerRadius, b.height / 2);
       const sw = node.strokeWidth > 0 ? ` stroke="${strokeCss}" stroke-width="${node.strokeWidth}"` : "";

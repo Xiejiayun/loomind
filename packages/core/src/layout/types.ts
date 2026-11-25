@@ -42,6 +42,7 @@ export interface LayoutNode {
   cornerRadius: number;
   shape: Exclude<TopicShape, "auto">;
   underlineMode: boolean;
+  underlineDrawnByEdge?: boolean;
   handdrawnSeed: number;
   taskSummary?: { done: number; total: number };
   hiddenCount: number;

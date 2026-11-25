@@ -22,11 +22,12 @@ export function anchorForSide(
   side: "left" | "right" | "top" | "bottom",
 ): Point {
   const b = node.contentBox;
+  const underlineY = Math.round((b.y + b.height - 1) * 10) / 10;
   if (side === "left") {
-    return { x: b.x, y: node.underlineMode ? b.y + b.height : b.y + b.height / 2 };
+    return { x: b.x, y: node.underlineMode ? underlineY : b.y + b.height / 2 };
   }
   if (side === "right") {
-    return { x: b.x + b.width, y: node.underlineMode ? b.y + b.height : b.y + b.height / 2 };
+    return { x: b.x + b.width, y: node.underlineMode ? underlineY : b.y + b.height / 2 };
   }
   if (side === "top") {
     return { x: b.x + b.width / 2, y: b.y };
@@ -53,14 +54,34 @@ export function createStandardEdge(
   let fillPath: string | undefined;
 
   if (kind === "tapered") {
-    const res = buildTaperedRibbonPath(p0, p3, 7.0, 1.8);
+    // Slightly tuck endpoints into pill cards so there is never a hairline seam
+    const dir = p3.x >= p0.x ? 1 : -1;
+    const adjP0 = { x: p0.x - dir * 1.5, y: p0.y };
+    const adjP3 = { x: p3.x + dir * 1.5, y: p3.y };
+    const res = buildTaperedRibbonPath(adjP0, adjP3, 7.0, 1.8);
     svgPath = handdrawn ? buildRoughSvgPath(res.svgPath, seed) : res.svgPath;
     fillPath = handdrawn ? undefined : res.fillPath;
   } else if (kind === "elbow") {
-    const raw = buildElbowPath(p0, p3, opts?.verticalFirst);
+    let raw = buildElbowPath(p0, p3, opts?.verticalFirst);
+    if (childNode.underlineMode && !opts?.verticalFirst) {
+      const farX =
+        childNode.side === "left"
+          ? childNode.contentBox.x
+          : childNode.contentBox.x + childNode.contentBox.width;
+      raw = `${raw} H ${Math.round(farX * 10) / 10}`;
+      childNode.underlineDrawnByEdge = true;
+    }
     svgPath = handdrawn ? buildRoughSvgPath(raw, seed) : raw;
   } else {
-    const { svgPath: raw } = buildBezierPath(p0, p3, !opts?.verticalFirst);
+    let { svgPath: raw } = buildBezierPath(p0, p3, !opts?.verticalFirst);
+    if (childNode.underlineMode && !opts?.verticalFirst) {
+      const farX =
+        childNode.side === "left"
+          ? childNode.contentBox.x
+          : childNode.contentBox.x + childNode.contentBox.width;
+      raw = `${raw} H ${Math.round(farX * 10) / 10}`;
+      childNode.underlineDrawnByEdge = true;
+    }
     svgPath = handdrawn ? buildRoughSvgPath(raw, seed) : raw;
   }
 
@@ -72,7 +93,12 @@ export function createStandardEdge(
     svgPath,
     fillPath,
     color: childNode.accentColor,
-    strokeWidth: parentNode.depth === 0 ? 2.6 : 1.6,
+    strokeWidth:
+      childNode.underlineDrawnByEdge
+        ? Math.max(1.2, childNode.strokeWidth)
+        : parentNode.depth === 0
+          ? 2.6
+          : 1.6,
     handdrawn,
     seed,
   };
