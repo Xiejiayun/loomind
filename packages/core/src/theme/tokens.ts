@@ -81,3 +81,14 @@ export function hex8ToCss(hex8: string): string {
 export function isDarkFill(hex8: string): boolean {
   return relativeLuminance(hex8) < 0.32;
 }
+
+/** Alpha-composites fgHex8 over bgHex8 and returns an opaque 8-digit hex color */
+export function compositeHexOverBg(fgHex8: string, bgHex8: string): string {
+  const fg = hexToRgba(fgHex8);
+  const bg = hexToRgba(bgHex8);
+  const r = Math.round(fg.r * fg.a + bg.r * (1 - fg.a));
+  const g = Math.round(fg.g * fg.a + bg.g * (1 - fg.a));
+  const b = Math.round(fg.b * fg.a + bg.b * (1 - fg.a));
+  const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0").toUpperCase();
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}FF`;
+}

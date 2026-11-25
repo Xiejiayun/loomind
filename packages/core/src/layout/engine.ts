@@ -10,7 +10,7 @@ import type {
 import { findTopicLocation } from "../store/reducer.js";
 import { getPalette } from "../theme/palettes.js";
 import { getSkeleton } from "../theme/skeletons.js";
-import { mixHexWithAlpha, type DepthStyleToken } from "../theme/tokens.js";
+import { compositeHexOverBg, isDarkFill, mixHexWithAlpha, type DepthStyleToken } from "../theme/tokens.js";
 import { CALLOUT_GAP, measureTopicBox } from "./box-anatomy.js";
 import { HeadlessTextMeasurer, type TextMeasurer } from "./measurer.js";
 import { routeRelationships } from "./routing.js";
@@ -24,7 +24,7 @@ import { mindmapStructurePlugin } from "./structures/mindmap.js";
 import { orgStructurePlugin } from "./structures/org.js";
 import { timelineStructurePlugin } from "./structures/timeline.js";
 import { treeTableStructurePlugin } from "./structures/tree-table.js";
-import { buildBoundaryPath, buildCurlyBracePath, fnv1aSeed } from "./svg-paths.js";
+import { buildBoundaryPath, buildCurlyBracePath, buildRoughSvgPath, fnv1aSeed } from "./svg-paths.js";
 import type {
   LayoutBoundary,
   LayoutBox,
@@ -250,7 +250,15 @@ export class LayoutEngine {
                 : 0
           : token.cornerRadius;
 
-      const defaultText = st.depth === 0 ? palette.rootText : palette.textPrimary;
+      const effectiveFill = topic.style?.fillColor ?? defaultFill;
+      const effectiveBg = underlineMode
+        ? palette.canvasBg
+        : compositeHexOverBg(effectiveFill, palette.canvasBg);
+      const defaultText = isDarkFill(effectiveBg)
+        ? "#FFFFFFFF"
+        : palette.isDark
+          ? "#0F172AFF"
+          : palette.textPrimary;
 
       const calloutOffset = m.calloutHeight > 0 ? m.calloutHeight + CALLOUT_GAP : 0;
       const contentBox: LayoutBox = {
@@ -372,13 +380,16 @@ export class LayoutEngine {
         const firstNode = nodes.get(slice[0].id);
         const isLeft = firstNode?.side === "left";
         const braceX = isLeft ? subBox.x - 16 : subBox.x + subBox.width + 16;
-        const bracePath = buildCurlyBracePath(
+        const rawBracePath = buildCurlyBracePath(
           braceX,
           subBox.y,
           subBox.y + subBox.height,
           isLeft ? -1 : 1,
           14,
         );
+        const bracePath = theme.handdrawn
+          ? buildRoughSvgPath(rawBracePath, fnv1aSeed(`sum:${s.id}`))
+          : rawBracePath;
         const sumM = measurements.get(s.topic.id)!;
         const sumX = isLeft ? braceX - 14 - sumM.width : braceX + 14;
         const sumY = subBox.y + (subBox.height - sumM.height) / 2;
@@ -458,7 +469,11 @@ export class LayoutEngine {
 
     const relationships = opts?.drillRootId
       ? []
-      : routeRelationships(sheet.relationships, nodes, spatialIndex, palette.textMuted);
+      : routeRelationships(sheet.relationships, nodes, spatialIndex, palette.textMuted).map((rel) =>
+          theme.handdrawn
+            ? { ...rel, svgPath: buildRoughSvgPath(rel.svgPath, fnv1aSeed(`rel:${rel.id}`)) }
+            : rel,
+        );
 
     return {
       sheetId: sheet.id,

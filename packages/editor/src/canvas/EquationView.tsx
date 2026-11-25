@@ -9,8 +9,8 @@ export const EquationView: React.FC<EquationViewProps> = React.memo(({ latex }) 
 
   useEffect(() => {
     let cancelled = false;
-    import("katex")
-      .then((katexMod) => {
+    Promise.all([import("katex"), import("katex/dist/katex.min.css")])
+      .then(([katexMod]) => {
         if (cancelled) return;
         const katex = katexMod.default ?? katexMod;
         const rendered = katex.renderToString(latex, {

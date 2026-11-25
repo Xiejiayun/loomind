@@ -135,7 +135,6 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     const cardStyle: React.CSSProperties = {
       width: cardW,
       minHeight: cardH,
-      marginTop: relContentTop,
       backgroundColor: isSvgShape ? "transparent" : fillCss,
       color: textCss,
       borderRadius: layoutNode.underlineMode || isSvgShape ? 0 : layoutNode.cornerRadius,
@@ -187,8 +186,12 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     return (
       <div
         data-topic-id={topic.id}
-        className="group relative select-none"
-        style={{ width: layoutNode.box.width, height: layoutNode.box.height }}
+        className="group relative box-border select-none"
+        style={{
+          width: layoutNode.box.width,
+          height: layoutNode.box.height,
+          paddingTop: relContentTop,
+        }}
         onClick={(e) => onSelect(topic.id, e)}
         onDoubleClick={(e) => {
           e.stopPropagation();
