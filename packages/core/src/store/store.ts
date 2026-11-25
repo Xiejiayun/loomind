@@ -63,7 +63,7 @@ export function createMindmapStore(
   const store = createStore<MindmapStoreState>((set, get) => ({
     doc: adapter.getDocument(),
     dirtyTopicIds: new Set<string>(),
-    selectedTopicIds: [adapter.getDocument().sheets[0].rootTopic.id],
+    selectedTopicIds: [],
     selectedRelationshipId: null,
     selectedBoundaryId: null,
     editingTopicId: null,
