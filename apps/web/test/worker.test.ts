@@ -55,6 +55,12 @@ beforeAll(async () => {
   }
   const cleanupMigration = await readFile(new URL("../migrations/0003_remove_account_drafts.sql", import.meta.url), "utf8");
   await platform.env.DB.prepare(cleanupMigration).run();
+  const collaborationMigration = await readFile(new URL("../migrations/0004_collaboration.sql", import.meta.url), "utf8");
+  for (const statement of collaborationMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
+  expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
+    .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
   const realFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -112,12 +118,150 @@ describe("Worker login (fixture Google JWKS and mock Siteverify)", () => {
   });
 });
 
+describe("collaboration API (signed sessions and local D1)", () => {
+  async function share(cookie: string, type: "workspace" | "mindmap", resourceId: string, role: "editor" | "viewer") {
+    const response = await request("shares", "POST", cookie, { type, resourceId, role });
+    expect(response.status).toBe(201);
+    return response.json() as Promise<{ id: string; token: string; expiresAt: string }>;
+  }
+
+  it("keeps ownership and revision while granting workspace editors and viewers distinct rights", async () => {
+    const alice = await login("space-owner");
+    const bob = await login("space-editor");
+    const carol = await login("space-viewer");
+    const outsider = await login("space-outsider");
+    expect((await request("workspaces", "POST", "", { name: "Denied" })).status).toBe(401);
+    expect((await request("workspaces", "POST", alice, { name: "Denied" }, { Origin: "https://other.test" })).status).toBe(403);
+    const created = await request("workspaces", "POST", alice, { name: "  产品团队  " });
+    expect(created.status).toBe(201);
+    const workspace = await created.json() as { id: string; name: string; role: string; createdAt: string };
+    expect(workspace).toMatchObject({ name: "产品团队", role: "owner" });
+    expect((await (await request("workspaces", "GET", alice)).json())).toEqual([workspace]);
+    expect((await (await request("workspaces", "GET", bob)).json())).toEqual([]);
+
+    const doc = getTemplate("blank-organic").create();
+    const first = "33333333-3333-4333-8333-333333333333";
+    const second = "44444444-4444-4444-8444-444444444444";
+    const aliceHeader = { [OWNER_HEADER]: "space-owner", "If-Match": '"0"' };
+    expect((await request("mindmaps/" + first, "PUT", alice, doc, aliceHeader)).status).toBe(200);
+    expect((await request("mindmaps/" + first, "PUT", alice, doc, { ...aliceHeader, "If-Match": '"1"' })).status).toBe(200);
+    expect((await request("workspaces/" + workspace.id + "/mindmaps", "POST", alice, { mindmapId: first })).status).toBe(200);
+    expect(await env.DB.prepare("SELECT revision, workspace_id AS workspaceId FROM mindmaps WHERE id = ?").bind(first).first())
+      .toMatchObject({ revision: 2, workspaceId: workspace.id });
+
+    const editorInvite = await share(alice, "workspace", workspace.id, "editor");
+    const viewerInvite = await share(alice, "workspace", workspace.id, "viewer");
+    expect((await request("invites/" + editorInvite.token + "/accept", "POST", bob)).status).toBe(200);
+    expect((await request("invites/" + viewerInvite.token + "/accept", "POST", carol)).status).toBe(200);
+    expect((await (await request("workspaces", "GET", bob)).json())).toMatchObject([{ id: workspace.id, role: "editor" }]);
+    expect((await (await request("workspaces", "GET", carol)).json())).toMatchObject([{ id: workspace.id, role: "viewer" }]);
+    const bobMaps = await (await request("mindmaps", "GET", bob, undefined, { [OWNER_HEADER]: "space-editor" })).json() as { id: string; access: string; workspaceId: string }[];
+    expect(bobMaps).toMatchObject([{ id: first, access: "editor", workspaceId: workspace.id }]);
+    const carolMaps = await (await request("mindmaps", "GET", carol, undefined, { [OWNER_HEADER]: "space-viewer" })).json() as { id: string; access: string }[];
+    expect(carolMaps).toMatchObject([{ id: first, access: "viewer" }]);
+    expect(await (await request("mindmaps/" + first, "GET", carol, undefined, { [OWNER_HEADER]: "space-viewer" })).json())
+      .toMatchObject({ revision: 2 });
+    expect((await request("mindmaps/" + first, "PUT", carol, doc, { [OWNER_HEADER]: "space-viewer", "If-Match": '"2"' })).status).toBe(403);
+    expect((await request("mindmaps/" + second, "PUT", carol, doc, {
+      [OWNER_HEADER]: "space-viewer", "If-Match": '"0"', "X-Loomind-Workspace": workspace.id,
+    })).status).toBe(403);
+    expect((await request("mindmaps/" + second, "PUT", outsider, doc, {
+      [OWNER_HEADER]: "space-outsider", "If-Match": '"0"', "X-Loomind-Workspace": workspace.id,
+    })).status).toBe(403);
+    expect((await request("workspaces/" + workspace.id + "/mindmaps", "POST", carol, { mindmapId: first })).status).toBe(403);
+    expect((await request("mindmaps/" + first, "DELETE", bob, undefined, { [OWNER_HEADER]: "space-editor" })).status).toBe(404);
+
+    const edited = { ...doc, sheets: [{ ...doc.sheets[0], title: "协作修改" }] };
+    expect(await (await request("mindmaps/" + first, "PUT", bob, edited, {
+      [OWNER_HEADER]: "space-editor", "If-Match": '"2"',
+    })).json()).toEqual({ revision: 3 });
+    expect((await request("mindmaps/" + first, "PUT", bob, doc, {
+      [OWNER_HEADER]: "space-editor", "If-Match": '"2"',
+    })).status).toBe(409);
+    const directEditor = await share(alice, "mindmap", first, "editor");
+    expect((await request("invites/" + directEditor.token + "/accept", "POST", carol)).status).toBe(200);
+    const promoted = await (await request("mindmaps", "GET", carol, undefined,
+      { [OWNER_HEADER]: "space-viewer" })).json() as { id: string; access: string }[];
+    expect(promoted.find((item) => item.id === first)?.access).toBe("editor");
+    expect((await request("mindmaps/" + first, "PUT", carol, edited, {
+      [OWNER_HEADER]: "space-viewer", "If-Match": '"3"',
+    })).status).toBe(200);
+    expect((await request("mindmaps/" + second, "PUT", bob, doc, {
+      [OWNER_HEADER]: "space-editor", "If-Match": '"0"', "X-Loomind-Workspace": workspace.id,
+    })).status).toBe(200);
+    expect((await request("workspaces/" + workspace.id + "/mindmaps", "POST", bob, { mindmapId: second })).status).toBe(200);
+    expect((await request("workspaces/" + workspace.id + "/mindmaps", "POST", alice, { mindmapId: second })).status).toBe(404);
+    const aliceMaps = await (await request("mindmaps", "GET", alice, undefined, { [OWNER_HEADER]: "space-owner" })).json() as { id: string; access: string }[];
+    expect(aliceMaps.find((item) => item.id === second)?.access).toBe("editor");
+    expect((await request("mindmaps/" + second, "DELETE", alice, undefined, { [OWNER_HEADER]: "space-owner" })).status).toBe(404);
+    expect((await request("mindmaps/" + second, "DELETE", bob, undefined, { [OWNER_HEADER]: "space-editor" })).status).toBe(200);
+    expect((await (await request("mindmaps", "GET", outsider, undefined, { [OWNER_HEADER]: "space-outsider" })).json())).toEqual([]);
+    expect(await (await request("mindmaps/" + first, "GET", outsider, undefined, { [OWNER_HEADER]: "space-outsider" })).json())
+      .toEqual({ revision: 0, document: null });
+  });
+
+  it("stores only invitation hashes, enforces revocation and expiry, and never downgrades a member", async () => {
+    const alice = await login("share-owner");
+    const bob = await login("share-member");
+    const carol = await login("share-pending");
+    const mapId = "55555555-5555-4555-8555-555555555555";
+    const doc = getTemplate("blank-organic").create();
+    expect((await request("mindmaps/" + mapId, "PUT", alice, doc, { [OWNER_HEADER]: "share-owner", "If-Match": '"0"' })).status).toBe(200);
+    const viewerInvite = await share(alice, "mindmap", mapId, "viewer");
+    const stored = await env.DB.prepare("SELECT token_hash AS tokenHash FROM share_invites WHERE id = ?")
+      .bind(viewerInvite.id).first<{ tokenHash: string }>();
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(viewerInvite.token)));
+    expect(stored?.tokenHash).toBe(Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""));
+    expect(stored?.tokenHash).not.toBe(viewerInvite.token);
+    expect(await (await request("invites/" + viewerInvite.token)).json())
+      .toMatchObject({ type: "mindmap", id: mapId, role: "viewer", expiresAt: viewerInvite.expiresAt });
+    const listed = await (await request("shares?type=mindmap&resourceId=" + mapId, "GET", alice)).json();
+    expect(listed).toMatchObject([{ id: viewerInvite.id, role: "viewer" }]);
+    expect(JSON.stringify(listed)).not.toContain(viewerInvite.token);
+    expect((await request("shares?type=mindmap&resourceId=" + mapId, "GET", bob)).status).toBe(404);
+    expect((await request("shares", "POST", bob, { type: "mindmap", resourceId: mapId, role: "editor" })).status).toBe(404);
+    expect((await request("shares", "POST", alice, { type: "mindmap", resourceId: mapId, role: "editor" },
+      { Origin: "https://other.test" })).status).toBe(403);
+    expect((await request("invites/" + viewerInvite.token + "/accept", "POST", bob,
+      undefined, { Origin: "https://other.test" })).status).toBe(403);
+    expect((await request("invites/" + viewerInvite.token + "/accept", "POST", bob)).status).toBe(200);
+    expect((await request("mindmaps/" + mapId, "PUT", bob, doc,
+      { [OWNER_HEADER]: "share-member", "If-Match": '"1"' })).status).toBe(403);
+    const editorInvite = await share(alice, "mindmap", mapId, "editor");
+    expect((await request("invites/" + editorInvite.token + "/accept", "POST", bob)).status).toBe(200);
+    expect((await request("invites/" + viewerInvite.token + "/accept", "POST", bob)).status).toBe(200);
+    const bobMaps = await (await request("mindmaps", "GET", bob, undefined, { [OWNER_HEADER]: "share-member" })).json() as { id: string; access: string }[];
+    expect(bobMaps.find((item) => item.id === mapId)?.access).toBe("editor");
+    expect((await request("mindmaps/" + mapId, "PUT", bob, doc,
+      { [OWNER_HEADER]: "share-member", "If-Match": '"1"' })).status).toBe(200);
+
+    const revoked = await share(alice, "mindmap", mapId, "viewer");
+    expect((await request("shares/" + revoked.id, "DELETE", bob)).status).toBe(404);
+    expect((await request("shares/" + revoked.id, "DELETE", alice, undefined,
+      { Origin: "https://other.test" })).status).toBe(403);
+    expect((await request("shares/" + revoked.id, "DELETE", alice)).status).toBe(200);
+    expect((await request("invites/" + revoked.token)).status).toBe(404);
+    expect((await request("invites/" + revoked.token + "/accept", "POST", carol)).status).toBe(404);
+    const expired = await share(alice, "mindmap", mapId, "viewer");
+    await env.DB.prepare("UPDATE share_invites SET expires_at = ? WHERE id = ?").bind(Date.now() - 1, expired.id).run();
+    expect((await request("invites/" + expired.token)).status).toBe(404);
+    expect((await request("invites/" + expired.token + "/accept", "POST", carol)).status).toBe(404);
+    expect((await request("mindmaps/" + mapId, "DELETE", alice, undefined,
+      { [OWNER_HEADER]: "share-owner", Origin: "https://other.test" })).status).toBe(403);
+    expect((await request("mindmaps/" + mapId, "DELETE", alice, undefined, { [OWNER_HEADER]: "share-owner" })).status).toBe(200);
+    expect((await (await request("mindmaps", "GET", bob, undefined, { [OWNER_HEADER]: "share-member" })).json())).toEqual([]);
+    expect(await env.DB.prepare("SELECT count(*) AS count FROM mindmap_members WHERE mindmap_id = ?").bind(mapId).first())
+      .toMatchObject({ count: 0 });
+  });
+});
+
 describe("mindmaps API (local workerd D1)", () => {
   it("migrates the former one-map account record without changing its revision", async () => {
     const legacy = await login("legacy");
     const owner = { [OWNER_HEADER]: "legacy" };
     const maps = await (await request("mindmaps", "GET", legacy, undefined, owner)).json() as { id: string }[];
     expect(maps).toHaveLength(1);
+    expect(maps[0]).toMatchObject({ workspaceId: null, access: "owner" });
     expect(await (await request(`mindmaps/${maps[0].id}`, "GET", legacy, undefined, owner)).json()).toMatchObject({ revision: 3 });
   });
   it("keeps multiple maps per account and preserves the winning revision on concurrent saves", async () => {

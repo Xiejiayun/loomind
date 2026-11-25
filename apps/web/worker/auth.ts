@@ -2,6 +2,8 @@ import { createRemoteJWKSet, errors, jwtVerify, SignJWT } from "jose";
 import { LOGIN_ACTION, type AuthUser, type LoginChallenge, type Session } from "../src/auth/shared.js";
 import { handleDraft } from "./drafts.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
+import { handleShare, handleInvite } from "./sharing.js";
+import { handleWorkspace } from "./workspaces.js";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const challengeCookie = "__Host-loomind-login";
@@ -91,6 +93,18 @@ async function handle(request: Request, env: Env) {
   if (path === "/api/mindmaps" || path.startsWith("/api/mindmaps/")) {
     const session = await readCookie(request, env, sessionCookie);
     return handleDraft(request, env, session?.sub, path === "/api/mindmaps" ? undefined : path.slice("/api/mindmaps/".length));
+  }
+  if (path === "/api/workspaces" || path.startsWith("/api/workspaces/")) {
+    const session = await readCookie(request, env, sessionCookie);
+    return handleWorkspace(request, env, session?.sub, path);
+  }
+  if (path === "/api/shares" || path.startsWith("/api/shares/")) {
+    const session = await readCookie(request, env, sessionCookie);
+    return handleShare(request, env, session?.sub, path);
+  }
+  if (path.startsWith("/api/invites/")) {
+    const session = request.method === "GET" ? null : await readCookie(request, env, sessionCookie);
+    return handleInvite(request, env, session?.sub, path);
   }
   if (!["/api/auth/session", "/api/auth/challenge", "/api/auth/google", "/api/auth/logout"].includes(path)) {
     return json({ error: "接口不存在。" }, 404);
