@@ -10,6 +10,36 @@
   transition: none !important;
 }
 
+.dark-panel .border-slate-200,
+.dark-panel .border-slate-100 {
+  border-color: rgb(30 41 59);
+}
+.dark-panel .bg-white,
+.dark-panel .bg-slate-50,
+.dark-panel .bg-slate-50\/70,
+.dark-panel .bg-slate-100 {
+  background-color: rgb(15 23 42 / 0.85);
+}
+.dark-panel .bg-blue-50,
+.dark-panel .bg-blue-50\/90 {
+  background-color: rgb(59 130 246 / 0.16);
+}
+.dark-panel .text-slate-800,
+.dark-panel .text-slate-700,
+.dark-panel .text-slate-600 {
+  color: rgb(226 232 240);
+}
+.dark-panel .text-slate-500 {
+  color: rgb(148 163 184);
+}
+.dark-panel .text-blue-700,
+.dark-panel .text-blue-600 {
+  color: rgb(147 197 253);
+}
+.dark-panel button:hover {
+  border-color: rgb(71 85 105);
+}
+
 .mindmap-tiptap .ProseMirror {
   outline: none;
   min-width: 24px;

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Map, Maximize, Minus, Plus, X } from "lucide-react";
-import { createSheet, generateId, type MindmapLayoutResult } from "@mindmap/core";
+import { createSheet, generateId, getPalette, type MindmapLayoutResult } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 
 interface SheetBarProps {
@@ -21,6 +21,9 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
   const [renameText, setRenameText] = useState("");
 
   if (zenMode) return null;
+
+  const activeSheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
+  const isDark = getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark && viewMode === "canvas";
 
   const handleAddSheet = () => {
     const id = generateId("sheet", new Set(doc.deletedIds));
@@ -44,7 +47,13 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
   };
 
   return (
-    <footer className="flex h-8 shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-2 text-xs text-slate-600">
+    <footer
+      className={`flex h-8 shrink-0 items-center justify-between border-t px-2 text-xs transition-colors ${
+        isDark
+          ? "border-slate-800 bg-slate-900/95 text-slate-300"
+          : "border-slate-200 bg-slate-50 text-slate-600"
+      }`}
+    >
       {/* Multi-sheet tabs */}
       <div className="flex items-center gap-1 overflow-x-auto">
         {doc.sheets.map((s) => {
@@ -59,8 +68,12 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
               }}
               className={`group flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 transition ${
                 active
-                  ? "bg-white font-semibold text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:bg-slate-200/60"
+                  ? isDark
+                    ? "bg-slate-800 font-semibold text-white shadow-xs"
+                    : "bg-white font-semibold text-slate-900 shadow-xs"
+                  : isDark
+                    ? "text-slate-400 hover:bg-slate-800/60"
+                    : "text-slate-500 hover:bg-slate-200/60"
               }`}
             >
               {renamingId === s.id ? (

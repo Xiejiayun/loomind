@@ -3,6 +3,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { ClipboardCopy, ClipboardPaste, Eraser, Palette, Pencil } from "lucide-react";
 import {
   collectAllTopics,
+  getPalette,
   hex8ToCss,
   PALETTE_LIST,
   SKELETON_LIST,
@@ -173,6 +174,7 @@ export const FormatPanel: React.FC = () => {
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
   const theme = { ...doc.theme, ...sheet.theme };
+  const isDark = getPalette(theme.paletteId).isDark;
   const topicMap = collectAllTopics(sheet);
   const primaryId = selectedTopicIds[0] ?? sheet.rootTopic.id;
   const primaryTopic = topicMap.get(primaryId);
@@ -187,24 +189,46 @@ export const FormatPanel: React.FC = () => {
           : Array.from(topicMap.keys());
 
   return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col border-l border-slate-200 bg-white text-xs text-slate-700">
+    <aside
+      className={`fixed right-0 top-11 bottom-8 z-40 flex w-[280px] shrink-0 flex-col border-l text-xs shadow-xl transition-colors md:static md:h-full md:shadow-none ${
+        isDark
+          ? "dark-panel border-slate-800 bg-slate-900/95 text-slate-200 backdrop-blur"
+          : "border-slate-200 bg-white text-slate-700"
+      }`}
+    >
       <Tabs.Root defaultValue="canvas" className="flex h-full flex-col">
-        <Tabs.List className="grid grid-cols-3 border-b border-slate-200 bg-slate-50 p-1">
+        <Tabs.List
+          className={`grid grid-cols-3 border-b p-1 ${
+            isDark ? "border-slate-800 bg-slate-950/60" : "border-slate-200 bg-slate-50"
+          }`}
+        >
           <Tabs.Trigger
             value="style"
-            className="rounded py-1.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+            className={`rounded py-1.5 font-medium ${
+              isDark
+                ? "text-slate-400 data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+                : "text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+            }`}
           >
             样式
           </Tabs.Trigger>
           <Tabs.Trigger
             value="canvas"
-            className="rounded py-1.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+            className={`rounded py-1.5 font-medium ${
+              isDark
+                ? "text-slate-400 data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+                : "text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+            }`}
           >
             画布
           </Tabs.Trigger>
           <Tabs.Trigger
             value="markers"
-            className="rounded py-1.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+            className={`rounded py-1.5 font-medium ${
+              isDark
+                ? "text-slate-400 data-[state=active]:bg-slate-800 data-[state=active]:text-white"
+                : "text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+            }`}
           >
             图标贴纸
           </Tabs.Trigger>

@@ -1,4 +1,3 @@
-import PptxGenJS from "pptxgenjs";
 import { getPalette, type MindmapDocument } from "@mindmap/core";
 import { compilePitchDeck, type PitchSlide } from "./compiler.js";
 
@@ -11,6 +10,7 @@ export async function exportPitchToPptx(
   filename = "mindmap-pitch.pptx",
   slidesOverride?: PitchSlide[],
 ): Promise<void> {
+  const { default: PptxGenJS } = await import("pptxgenjs");
   const slides = slidesOverride ?? compilePitchDeck(doc);
   const palette = getPalette(doc.theme.paletteId);
   const pptx = new PptxGenJS();

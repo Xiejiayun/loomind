@@ -1,5 +1,3 @@
-import { jsPDF } from "jspdf";
-import { svg2pdf } from "svg2pdf.js";
 import {
   serializeToSvg,
   type MindmapDocument,
@@ -67,6 +65,10 @@ export async function exportToVectorPdf(
   layout: MindmapLayoutResult,
   filename = "mindmap.pdf",
 ): Promise<void> {
+  const [{ jsPDF }, { svg2pdf }] = await Promise.all([
+    import("jspdf"),
+    import("svg2pdf.js"),
+  ]);
   const svgStr = serializeToSvg(doc, { layout, transparentBg: false });
   const parser = new DOMParser();
   const svgEl = parser.parseFromString(svgStr, "image/svg+xml").documentElement;
