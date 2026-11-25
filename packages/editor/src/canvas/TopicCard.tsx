@@ -4,6 +4,7 @@ import {
   buildCloudBoundaryPath,
   hex8ToCss,
   isDarkFill,
+  mixHexWithAlpha,
   richTextToPlainText,
   type InlineAsset,
   type LayoutNode,
@@ -167,11 +168,15 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
       boxShadow:
         isSvgShape
           ? undefined
-          : layoutNode.depth === 0
-            ? "0 8px 24px -6px rgba(15,23,42,0.22)"
-            : layoutNode.depth === 1 && !layoutNode.underlineMode && !isTransparentFill
-              ? "0 2px 8px -2px rgba(15,23,42,0.08)"
-              : undefined,
+          : layoutNode.neonGlow && !layoutNode.underlineMode && !isTransparentFill
+            ? layoutNode.depth === 0
+              ? `0 0 28px ${hex8ToCss(mixHexWithAlpha(layoutNode.accentColor, 0.55))}, 0 0 10px ${hex8ToCss(mixHexWithAlpha(layoutNode.accentColor, 0.45))}, inset 0 0 12px ${hex8ToCss(mixHexWithAlpha(layoutNode.accentColor, 0.25))}`
+              : `0 0 14px ${hex8ToCss(mixHexWithAlpha(layoutNode.accentColor, 0.38))}, inset 0 0 8px ${hex8ToCss(mixHexWithAlpha(layoutNode.accentColor, 0.16))}`
+            : layoutNode.depth === 0
+              ? "0 8px 24px -6px rgba(15,23,42,0.22)"
+              : layoutNode.depth === 1 && !layoutNode.underlineMode && !isTransparentFill
+                ? "0 2px 8px -2px rgba(15,23,42,0.08)"
+                : undefined,
     };
 
     const padExtraX =
