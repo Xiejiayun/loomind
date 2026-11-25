@@ -66,7 +66,7 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
         const tipY = above ? spineY - ribHeight : spineY + ribHeight;
 
         const nodeX = tipX - m.width / 2;
-        const nodeY = above ? tipY - m.height : tipY;
+        const nodeY = above ? tipY - m.height + 1 : tipY + 2;
 
         const cNode = ctx.makeLayoutNode(child, nodeX, nodeY, "left");
         ctx.nodes.set(child.id, cNode);
@@ -108,7 +108,9 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
             const ry = spineY + (tipY - spineY) * t;
 
             const gx = rx - 24 - gm.width;
-            const gy = ry - gm.height / 2;
+            // Preview whether grand uses underlineMode so we align its underline directly onto ry
+            const probeNode = ctx.makeLayoutNode(grand, gx, ry, "left");
+            const gy = probeNode.underlineMode ? ry - gm.height + 1 : ry - gm.height / 2;
 
             const subBox = ctx.placeSubtree(
               grand,
@@ -121,7 +123,13 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
             bounds = unionBox(bounds, subBox);
             ribLeftmostX = Math.min(ribLeftmostX, subBox.x);
 
-            const subPath = `M ${r(rx)} ${r(ry)} H ${r(gNode.contentBox.x + gNode.contentBox.width)}`;
+            // In underlineMode, draw ONE continuous horizontal sub-bone from slanted rib all the way under the text!
+            let subEndX = gNode.contentBox.x + gNode.contentBox.width;
+            if (gNode.underlineMode) {
+              subEndX = gNode.contentBox.x;
+              gNode.underlineDrawnByEdge = true;
+            }
+            const subPath = `M ${r(rx)} ${r(ry)} H ${r(subEndX)}`;
             const subSeed = fnv1aSeed(`fish-sub:${grand.id}`);
             ctx.edges.push({
               id: `e:${child.id}->${grand.id}`,
@@ -130,7 +138,7 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
               kind: "fishbone-rib",
               svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(subPath, subSeed, true) : subPath,
               color: cNode.accentColor,
-              strokeWidth: 1.5,
+              strokeWidth: gNode.underlineMode ? Math.max(1.2, gNode.strokeWidth) : 1.5,
               handdrawn: ctx.theme.handdrawn,
               seed: subSeed,
             });
