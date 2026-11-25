@@ -44,17 +44,26 @@ export const timelineStructurePlugin: StructureLayoutPlugin = {
         child.structure ?? "indented",
       );
       const cNode = ctx.nodes.get(child.id)!;
-      const stemX = cNode.contentBox.x + Math.min(20, cNode.contentBox.width / 2);
-      const targetY = above ? subBox.y + subBox.height : cNode.contentBox.y;
+      // Align stemX with indented.ts trunkX (cNode.x + 14) so upper stems run seamlessly
+      // from the spine all the way up into cNode with zero gap and zero card crossing!
+      const stemX =
+        child.children.length > 0 && !child.collapsed
+          ? cNode.contentBox.x + 14
+          : cNode.contentBox.x + Math.min(20, cNode.contentBox.width / 2);
+      const spineInset = 1.2;
+      const stemStartY = above ? spineY - spineInset : spineY + spineInset;
+      const targetY = above
+        ? cNode.contentBox.y + cNode.contentBox.height
+        : cNode.contentBox.y;
 
-      const stemPath = `M ${r(stemX)} ${r(spineY)} V ${r(targetY)}`;
+      const stemPath = `M ${r(stemX)} ${r(stemStartY)} V ${r(targetY)}`;
       const seed = fnv1aSeed(`tl-stem:${child.id}`);
       ctx.edges.push({
         id: `e:${parent.id}->${child.id}`,
         fromId: parent.id,
         toId: child.id,
         kind: "elbow",
-        svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(stemPath, seed) : stemPath,
+        svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(stemPath, seed, true) : stemPath,
         color: cNode.accentColor,
         strokeWidth: 2,
         handdrawn: ctx.theme.handdrawn,
@@ -93,7 +102,7 @@ export const timelineStructurePlugin: StructureLayoutPlugin = {
       fromId: parent.id,
       toId: parent.children[parent.children.length - 1].id,
       kind: "timeline-spine",
-      svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(spinePath, spineSeed) : spinePath,
+      svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(spinePath, spineSeed, true) : spinePath,
       color: parentNode.accentColor,
       strokeWidth: 3.5,
       handdrawn: ctx.theme.handdrawn,
