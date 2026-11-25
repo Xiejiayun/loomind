@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E1B4B" />
+      <stop offset="100%" stop-color="#090D1F" />
+    </linearGradient>
+    <linearGradient id="prism" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="55%" stop-color="#818CF8" />
+      <stop offset="100%" stop-color="#F0ABFC" />
+    </linearGradient>
+    <linearGradient id="ring" x1="14" y1="50" x2="50" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0.2" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)" />
+  <rect x="1" y="1" width="62" height="62" rx="15" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1.5" />
+  <!-- Tilted subtle orbital arc -->
+  <ellipse cx="32" cy="32" rx="22" ry="11" transform="rotate(-32 32 32)" stroke="url(#ring)" stroke-width="2.2" />
+  <!-- Luminous 4-point constellation spark prism -->
+  <path
+    d="M32 10 C35 23 41 29 54 32 C41 35 35 41 32 54 C29 41 23 35 10 32 C23 29 29 23 32 10 Z"
+    fill="url(#prism)"
+    fill-opacity="0.26"
+  />
+  <path
+    d="M32 12 C34.6 24 40 29.4 52 32 C40 34.6 34.6 40 32 52 C29.4 40 24 34.6 12 32 C24 29.4 29.4 24 32 12 Z"
+    stroke="url(#prism)"
+    stroke-width="2.8"
+    stroke-linejoin="round"
+  />
+  <circle cx="32" cy="32" r="5" fill="#FFFFFF" />
+  <circle cx="48" cy="18" r="3" fill="#F0ABFC" />
+  <circle cx="16" cy="46" r="2.6" fill="#34D399" />
+</svg>

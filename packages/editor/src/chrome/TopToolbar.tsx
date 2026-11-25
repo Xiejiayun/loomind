@@ -216,11 +216,35 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
       {/* Left: Brand + View switcher + Undo/Redo + Templates */}
       <div className="flex items-center gap-2">
         <div className="mr-0.5 hidden items-center gap-1.5 sm:flex" title="Mindmap Studio · 已本地自动保存">
-          <svg viewBox="0 0 32 32" className="h-5 w-5 shrink-0">
-            <rect width="32" height="32" rx="8" fill={isDark ? "#1E293B" : "#0F172A"} />
-            <path d="M13 16 C9 16 9 10 6 10 M13 16 C9 16 9 22 6 22" stroke="#38BDF8" strokeWidth="2.2" strokeLinecap="round" fill="none" />
-            <path d="M19 16 C23 16 23 10 26 10 M19 16 C23 16 23 22 26 22" stroke="#E879F9" strokeWidth="2.2" strokeLinecap="round" fill="none" />
-            <rect x="11" y="12" width="10" height="8" rx="4" fill="#FFFFFF" />
+          <svg viewBox="0 0 64 64" className="h-6 w-6 shrink-0" fill="none">
+            <defs>
+              <linearGradient id="ms-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#1E1B4B" />
+                <stop offset="100%" stopColor="#090D1F" />
+              </linearGradient>
+              <linearGradient id="ms-prism" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#38BDF8" />
+                <stop offset="55%" stopColor="#818CF8" />
+                <stop offset="100%" stopColor="#F0ABFC" />
+              </linearGradient>
+              <linearGradient id="ms-ring" x1="14" y1="50" x2="50" y2="14" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#34D399" stopOpacity="0.75" />
+                <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.25" />
+              </linearGradient>
+            </defs>
+            <rect width="64" height="64" rx="16" fill="url(#ms-bg)" />
+            <ellipse cx="32" cy="32" rx="22" ry="11" transform="rotate(-32 32 32)" stroke="url(#ms-ring)" strokeWidth="2.4" />
+            <path
+              d="M32 12 C34.6 24 40 29.4 52 32 C40 34.6 34.6 40 32 52 C29.4 40 24 34.6 12 32 C24 29.4 29.4 24 32 12 Z"
+              fill="url(#ms-prism)"
+              fillOpacity="0.26"
+              stroke="url(#ms-prism)"
+              strokeWidth="3"
+              strokeLinejoin="round"
+            />
+            <circle cx="32" cy="32" r="5.2" fill="#FFFFFF" />
+            <circle cx="48" cy="18" r="3.2" fill="#F0ABFC" />
+            <circle cx="16" cy="46" r="2.8" fill="#34D399" />
           </svg>
         </div>
 
