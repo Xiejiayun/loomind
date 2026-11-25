@@ -13,6 +13,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
   const camera = useMindmapStore((s) => s.camera);
   const setCamera = useMindmapStore((s) => s.setCamera);
   const zenMode = useMindmapStore((s) => s.zenMode);
+  const formatPanelOpen = useMindmapStore((s) => s.formatPanelOpen);
   const minimapOpen = useMindmapStore((s) => s.minimapOpen);
   const setMinimapOpen = useMindmapStore((s) => s.setMinimapOpen);
   const dispatch = useMindmapStore((s) => s.dispatch);
@@ -28,11 +29,11 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
   };
 
   const handleFitView = () => {
-    const vw = window.innerWidth - 300;
-    const vh = window.innerHeight - 100;
-    const scaleX = vw / Math.max(200, layout.bounds.width + 120);
-    const scaleY = vh / Math.max(200, layout.bounds.height + 120);
-    const scale = Math.max(0.25, Math.min(1.2, Math.min(scaleX, scaleY)));
+    const vw = window.innerWidth - (formatPanelOpen ? 280 : 0);
+    const vh = window.innerHeight - 76;
+    const scaleX = (vw - 72) / Math.max(160, layout.bounds.width);
+    const scaleY = (vh - 72) / Math.max(120, layout.bounds.height);
+    const scale = Math.max(0.25, Math.min(1.6, Math.min(scaleX, scaleY)));
     const cx = layout.bounds.x + layout.bounds.width / 2;
     const cy = layout.bounds.y + layout.bounds.height / 2;
     setCamera({
