@@ -169,11 +169,11 @@ export function buildBoundaryPath(
 const roughGen = rough.generator();
 
 /** Deterministic handdrawn SVG path conversion (zero Math.random flicker) */
-export function buildRoughSvgPath(svgPath: string, seed: number): string {
+export function buildRoughSvgPath(svgPath: string, seed: number, subtle = false): string {
   const drawable = roughGen.path(svgPath, {
     seed: seed | 1,
-    roughness: 1.35,
-    bowing: 1.1,
+    roughness: subtle ? 0.5 : 1.15,
+    bowing: subtle ? 0.35 : 0.9,
     disableMultiStroke: true,
   });
   const paths = roughGen.toPaths(drawable);

@@ -66,7 +66,7 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
         const tipY = above ? spineY - ribHeight : spineY + ribHeight;
 
         const nodeX = tipX - m.width / 2;
-        const nodeY = above ? tipY - m.height - 6 : tipY + 6;
+        const nodeY = above ? tipY - m.height : tipY;
 
         const cNode = ctx.makeLayoutNode(child, nodeX, nodeY, "left");
         ctx.nodes.set(child.id, cNode);
@@ -74,7 +74,7 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
 
         let ribLeftmostX = Math.min(nodeX, tipX);
 
-        // Slanted primary rib (±60°)
+        // Slanted primary rib (±60°) ending cleanly at header card edge
         const ribPath = `M ${r(joinX)} ${r(spineY)} L ${r(tipX)} ${r(tipY)}`;
         const ribSeed = fnv1aSeed(`fish-rib:${child.id}`);
         ctx.edges.push({
@@ -82,14 +82,14 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
           fromId: parent.id,
           toId: child.id,
           kind: "fishbone-rib",
-          svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(ribPath, ribSeed) : ribPath,
+          svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(ribPath, ribSeed, true) : ribPath,
           color: cNode.accentColor,
           strokeWidth: 2.2,
           handdrawn: ctx.theme.handdrawn,
           seed: ribSeed,
         });
 
-        // Stack secondary sub-bones vertically with exact subtree height clearance (no overlap with spine or header!)
+        // Stack secondary sub-bones vertically with exact on-rib (rx, ry) attachment
         if (!child.collapsed && child.children.length > 0) {
           const grandSizes = child.children.map((g) => ({
             topic: g,
@@ -97,13 +97,12 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
             m: ctx.measurements.get(g.id)!,
           }));
 
-          // Start 22px away from the spine and step toward the tip
-          let curDistFromSpine = 22;
+          let curDistFromSpine = 24;
           for (const { topic: grand, est, m: gm } of grandSizes) {
             const centerDist = curDistFromSpine + est.height / 2;
-            const t = Math.min(0.92, centerDist / ribHeight);
+            const t = Math.min(0.88, centerDist / ribHeight);
             const rx = joinX + (tipX - joinX) * t;
-            const ry = above ? spineY - centerDist : spineY + centerDist;
+            const ry = spineY + (tipY - spineY) * t;
 
             const gx = rx - 24 - gm.width;
             const gy = ry - gm.height / 2;
@@ -126,7 +125,7 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
               fromId: child.id,
               toId: grand.id,
               kind: "fishbone-rib",
-              svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(subPath, subSeed) : subPath,
+              svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(subPath, subSeed, true) : subPath,
               color: cNode.accentColor,
               strokeWidth: 1.5,
               handdrawn: ctx.theme.handdrawn,
