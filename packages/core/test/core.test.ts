@@ -142,6 +142,40 @@ describe("@mindmap/core layout engine (all 9 structures & mixed branches)", () =
     expect(res.edges.some((e) => e.kind === "brace")).toBe(true);
   });
 
+  it("keeps deep multi-level fishbone subtrees completely non-overlapping", () => {
+    const doc = getTemplate("blank-organic").create();
+    doc.sheets[0].structure = "fishbone";
+    doc.sheets[0].rootTopic.children.push(
+      createTopic("fb-deep", "深层分支", {
+        children: [
+          createTopic("fb-d1", "二级子主题", {
+            children: [
+              createTopic("fb-d1-1", "三级子主题 A", {
+                children: [createTopic("fb-d1-1-1", "四级节点 1"), createTopic("fb-d1-1-2", "四级节点 2")],
+              }),
+            ],
+          }),
+        ],
+      }),
+      createTopic("fb-next", "相邻大骨主题"),
+    );
+
+    const res = computeSheetLayout(doc);
+    const list = Array.from(res.nodes.values());
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i].contentBox;
+        const b = list[j].contentBox;
+        const overlaps =
+          a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y;
+        expect(overlaps, `Nodes ${list[i].id} and ${list[j].id} overlap`).toBe(false);
+      }
+    }
+  });
+
   it("keeps callout box non-overlapping above contentBox", () => {
     const doc = createDocument();
     doc.sheets[0].rootTopic.children[0] = createTopic("c1", "带批注节点", {

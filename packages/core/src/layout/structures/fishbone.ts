@@ -10,89 +10,141 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
   layoutChildren(parent: MindmapTopic, parentNode: LayoutNode, ctx: LayoutBuildContext): LayoutBox {
     if (parent.children.length === 0) return parentNode.box;
 
-    // Fish head is on the right (parentNode); main spine extends leftward
     const spineY = parentNode.contentBox.y + parentNode.contentBox.height / 2;
     const headLeftX = parentNode.contentBox.x;
-    const ribStepX = 185 * ctx.spacingScale;
-    const ribHeight = 132 * ctx.spacingScale;
     const tan60 = Math.tan(Math.PI / 3);
+    const levelGap = ctx.skeleton.levelGap * ctx.spacingScale;
+    const siblingGap = ctx.skeleton.siblingGap * ctx.spacingScale;
+    const ribGapX = 40 * ctx.spacingScale;
+    const subGapY = 14 * ctx.spacingScale;
+
+    // Estimate the full bounding size of any left-expanding subtree
+    const estimateSubtreeSize = (t: MindmapTopic): { width: number; height: number } => {
+      const m = ctx.measurements.get(t.id)!;
+      if (t.collapsed || t.children.length === 0) {
+        return { width: m.width, height: m.height };
+      }
+      const kidSizes = t.children.map(estimateSubtreeSize);
+      const maxKidW = Math.max(...kidSizes.map((s) => s.width));
+      const totalKidH =
+        kidSizes.reduce((acc, s) => acc + s.height, 0) + (kidSizes.length - 1) * siblingGap;
+      return {
+        width: m.width + levelGap + maxKidW,
+        height: Math.max(m.height, totalKidH),
+      };
+    };
+
+    // Pre-compute required vertical rib height for upper and lower halves independently
+    const calcRibRequiredHeight = (child: MindmapTopic): number => {
+      if (child.collapsed || child.children.length === 0) return 110 * ctx.spacingScale;
+      const heights = child.children.map((g) => estimateSubtreeSize(g).height);
+      const sumH = heights.reduce((a, b) => a + b, 0) + heights.length * subGapY;
+      return Math.max(120 * ctx.spacingScale, sumH + 44);
+    };
+
+    const aboveChildren = parent.children.filter((_, i) => i % 2 === 0);
+    const belowChildren = parent.children.filter((_, i) => i % 2 === 1);
+
+    const upperRibH = Math.max(120 * ctx.spacingScale, ...aboveChildren.map(calcRibRequiredHeight));
+    const lowerRibH = Math.max(120 * ctx.spacingScale, ...belowChildren.map(calcRibRequiredHeight));
 
     let bounds = parentNode.box;
     let tailX = headLeftX - 90;
 
-    for (let i = 0; i < parent.children.length; i++) {
-      const child = parent.children[i];
-      const above = i % 2 === 0;
-      const pairIdx = Math.floor(i / 2);
-      const joinX = headLeftX - 54 - pairIdx * ribStepX - (above ? 0 : 48);
-      const m = ctx.measurements.get(child.id)!;
+    // Layout one side (above = true or false) from right to left with dynamic horizontal clearance
+    const layoutSide = (ribs: MindmapTopic[], above: boolean, ribHeight: number, startOffsetX: number) => {
+      // Rightmost available X boundary for the next rib's header and its right-edge join
+      let rightLimitX = headLeftX - startOffsetX;
 
-      const tipDx = ribHeight / tan60;
-      const tipX = joinX - tipDx;
-      const tipY = above ? spineY - ribHeight : spineY + ribHeight;
+      for (const child of ribs) {
+        const m = ctx.measurements.get(child.id)!;
+        const tipDx = ribHeight / tan60;
 
-      const nodeX = tipX - m.width / 2;
-      const nodeY = above ? tipY - m.height - 4 : tipY + 4;
+        // Ensure header right edge (tipX + m.width / 2) AND joinX stay strictly <= rightLimitX
+        const joinX = Math.min(rightLimitX, rightLimitX + tipDx - m.width / 2);
+        const tipX = joinX - tipDx;
+        const tipY = above ? spineY - ribHeight : spineY + ribHeight;
 
-      const cNode = ctx.makeLayoutNode(child, nodeX, nodeY, "left");
-      ctx.nodes.set(child.id, cNode);
-      bounds = unionBox(bounds, cNode.box);
-      tailX = Math.min(tailX, joinX - 60, nodeX - 32);
+        const nodeX = tipX - m.width / 2;
+        const nodeY = above ? tipY - m.height - 6 : tipY + 6;
 
-      // Slanted primary rib (±60°)
-      const ribPath = `M ${r(joinX)} ${r(spineY)} L ${r(tipX)} ${r(tipY)}`;
-      const ribSeed = fnv1aSeed(`fish-rib:${child.id}`);
-      ctx.edges.push({
-        id: `e:${parent.id}->${child.id}`,
-        fromId: parent.id,
-        toId: child.id,
-        kind: "fishbone-rib",
-        svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(ribPath, ribSeed) : ribPath,
-        color: cNode.accentColor,
-        strokeWidth: 2.2,
-        handdrawn: ctx.theme.handdrawn,
-        seed: ribSeed,
-      });
+        const cNode = ctx.makeLayoutNode(child, nodeX, nodeY, "left");
+        ctx.nodes.set(child.id, cNode);
+        bounds = unionBox(bounds, cNode.box);
 
-      // Secondary horizontal sub-bones spaced well clear of the main spine (t in [0.36, 0.82])
-      if (!child.collapsed && child.children.length > 0) {
-        const count = child.children.length;
-        for (let j = 0; j < count; j++) {
-          const grand = child.children[j];
-          const t = count === 1 ? 0.56 : 0.36 + (0.46 * j) / (count - 1);
-          const rx = joinX + (tipX - joinX) * t;
-          const ry = spineY + (tipY - spineY) * t;
-          const gm = ctx.measurements.get(grand.id)!;
-          const gx = rx - 22 - gm.width;
-          const gy = ry - gm.height / 2;
+        let ribLeftmostX = Math.min(nodeX, tipX);
 
-          const subBox = ctx.placeSubtree(
-            grand,
-            gx,
-            gy,
-            "left",
-            grand.structure ?? "logic",
-          );
-          const gNode = ctx.nodes.get(grand.id)!;
-          bounds = unionBox(bounds, subBox);
-          tailX = Math.min(tailX, subBox.x - 36);
+        // Slanted primary rib (±60°)
+        const ribPath = `M ${r(joinX)} ${r(spineY)} L ${r(tipX)} ${r(tipY)}`;
+        const ribSeed = fnv1aSeed(`fish-rib:${child.id}`);
+        ctx.edges.push({
+          id: `e:${parent.id}->${child.id}`,
+          fromId: parent.id,
+          toId: child.id,
+          kind: "fishbone-rib",
+          svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(ribPath, ribSeed) : ribPath,
+          color: cNode.accentColor,
+          strokeWidth: 2.2,
+          handdrawn: ctx.theme.handdrawn,
+          seed: ribSeed,
+        });
 
-          const subPath = `M ${r(rx)} ${r(ry)} H ${r(gNode.contentBox.x + gNode.contentBox.width)}`;
-          const subSeed = fnv1aSeed(`fish-sub:${grand.id}`);
-          ctx.edges.push({
-            id: `e:${child.id}->${grand.id}`,
-            fromId: child.id,
-            toId: grand.id,
-            kind: "fishbone-rib",
-            svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(subPath, subSeed) : subPath,
-            color: cNode.accentColor,
-            strokeWidth: 1.5,
-            handdrawn: ctx.theme.handdrawn,
-            seed: subSeed,
-          });
+        // Stack secondary sub-bones vertically with exact subtree height clearance (no overlap with spine or header!)
+        if (!child.collapsed && child.children.length > 0) {
+          const grandSizes = child.children.map((g) => ({
+            topic: g,
+            est: estimateSubtreeSize(g),
+            m: ctx.measurements.get(g.id)!,
+          }));
+
+          // Start 22px away from the spine and step toward the tip
+          let curDistFromSpine = 22;
+          for (const { topic: grand, est, m: gm } of grandSizes) {
+            const centerDist = curDistFromSpine + est.height / 2;
+            const t = Math.min(0.92, centerDist / ribHeight);
+            const rx = joinX + (tipX - joinX) * t;
+            const ry = above ? spineY - centerDist : spineY + centerDist;
+
+            const gx = rx - 24 - gm.width;
+            const gy = ry - gm.height / 2;
+
+            const subBox = ctx.placeSubtree(
+              grand,
+              gx,
+              gy,
+              "left",
+              grand.structure ?? "logic",
+            );
+            const gNode = ctx.nodes.get(grand.id)!;
+            bounds = unionBox(bounds, subBox);
+            ribLeftmostX = Math.min(ribLeftmostX, subBox.x);
+
+            const subPath = `M ${r(rx)} ${r(ry)} H ${r(gNode.contentBox.x + gNode.contentBox.width)}`;
+            const subSeed = fnv1aSeed(`fish-sub:${grand.id}`);
+            ctx.edges.push({
+              id: `e:${child.id}->${grand.id}`,
+              fromId: child.id,
+              toId: grand.id,
+              kind: "fishbone-rib",
+              svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(subPath, subSeed) : subPath,
+              color: cNode.accentColor,
+              strokeWidth: 1.5,
+              handdrawn: ctx.theme.handdrawn,
+              seed: subSeed,
+            });
+
+            curDistFromSpine += est.height + subGapY;
+          }
         }
+
+        tailX = Math.min(tailX, ribLeftmostX - 36, joinX - 48);
+        // Next rib on this side must sit completely to the left of this rib's entire subtree
+        rightLimitX = ribLeftmostX - ribGapX;
       }
-    }
+    };
+
+    layoutSide(aboveChildren, true, upperRibH, 54);
+    layoutSide(belowChildren, false, lowerRibH, 96);
 
     // Main horizontal spine + tail fin chevron on the left + arrow pointing into fish head
     const tailFin =
