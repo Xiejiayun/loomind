@@ -178,15 +178,19 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
     e.target.value = "";
   };
 
+  const focusCls = isDark
+    ? "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111317]"
+    : "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:ring-offset-white";
+
   if (zenMode) {
     return (
       <button
         type="button"
         onClick={() => setZenMode(false)}
-        className={`fixed right-4 top-3 z-50 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md backdrop-blur ${
+        className={`fixed right-4 top-3 z-50 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md backdrop-blur ${focusCls} ${
           isDark
-            ? "border-slate-700 bg-slate-900/90 text-slate-200 hover:bg-slate-800"
-            : "border-slate-200 bg-white/90 text-slate-700 hover:bg-white"
+            ? "border-zinc-700 bg-[#111317] text-zinc-200 hover:bg-zinc-800"
+            : "border-zinc-200 bg-white/95 text-zinc-700 hover:bg-zinc-50"
         }`}
       >
         退出禅模式 (Esc)
@@ -194,17 +198,17 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
     );
   }
 
-  const hoverCls = isDark ? "hover:bg-slate-800 hover:text-white" : "hover:bg-slate-100 hover:text-slate-900";
+  const hoverCls = isDark ? "hover:bg-zinc-800 hover:text-white" : "hover:bg-zinc-100 hover:text-zinc-950";
   const borderBtnCls = isDark
-    ? "border-slate-700 bg-slate-800/70 text-slate-200 hover:bg-slate-800"
-    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
+    ? "border-zinc-700 bg-[#181b20] text-zinc-200 hover:bg-zinc-800"
+    : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50";
 
   return (
     <header
       className={`flex h-11 shrink-0 items-center justify-between border-b px-3 text-xs transition-colors ${
         isDark
-          ? "border-slate-800 bg-slate-900/95 text-slate-200"
-          : "border-slate-200 bg-white text-slate-700"
+          ? "border-zinc-800 bg-[#111317] text-zinc-200"
+          : "border-zinc-200 bg-white text-zinc-700"
       }`}
     >
       <input
@@ -222,16 +226,16 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <svg viewBox="0 0 64 64" className="h-6 w-6 shrink-0" fill="none">
             <defs>
               <linearGradient id="ms-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#1E1B4B" />
-                <stop offset="100%" stopColor="#090D1F" />
+                <stop offset="0%" stopColor="#1B2530" />
+                <stop offset="100%" stopColor="#090A0C" />
               </linearGradient>
               <linearGradient id="ms-prism" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
                 <stop offset="0%" stopColor="#38BDF8" />
-                <stop offset="55%" stopColor="#818CF8" />
-                <stop offset="100%" stopColor="#F0ABFC" />
+                <stop offset="55%" stopColor="#94A3B8" />
+                <stop offset="100%" stopColor="#E2E8F0" />
               </linearGradient>
               <linearGradient id="ms-ring" x1="14" y1="50" x2="50" y2="14" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#34D399" stopOpacity="0.75" />
+                <stop offset="0%" stopColor="#7DD3FC" stopOpacity="0.75" />
                 <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.25" />
               </linearGradient>
             </defs>
@@ -246,23 +250,23 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               strokeLinejoin="round"
             />
             <circle cx="32" cy="32" r="5.2" fill="#FFFFFF" />
-            <circle cx="48" cy="18" r="3.2" fill="#F0ABFC" />
-            <circle cx="16" cy="46" r="2.8" fill="#34D399" />
+            <circle cx="48" cy="18" r="3.2" fill="#E2E8F0" />
+            <circle cx="16" cy="46" r="2.8" fill="#7DD3FC" />
           </svg>
         </div>
 
-        <div className={`flex items-center rounded-lg p-0.5 ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
+        <div className={`flex items-center rounded-lg p-0.5 ${isDark ? "bg-zinc-800" : "bg-zinc-100"}`}>
           <button
             type="button"
             onClick={() => setViewMode("canvas")}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition ${
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition ${focusCls} ${
               viewMode === "canvas"
                 ? isDark
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-white text-slate-900 shadow-xs"
+                  ? "bg-zinc-700 text-white shadow-xs"
+                  : "bg-white text-zinc-950 shadow-xs"
                 : isDark
-                  ? "text-slate-400 hover:text-slate-200"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "text-zinc-400 hover:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-900"
             }`}
           >
             <GitBranch className="h-3.5 w-3.5" /> 导图
@@ -270,27 +274,27 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             type="button"
             onClick={() => setViewMode("outline")}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition ${
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition ${focusCls} ${
               viewMode === "outline"
                 ? isDark
-                  ? "bg-slate-700 text-white shadow-xs"
-                  : "bg-white text-slate-900 shadow-xs"
+                  ? "bg-zinc-700 text-white shadow-xs"
+                  : "bg-white text-zinc-950 shadow-xs"
                 : isDark
-                  ? "text-slate-400 hover:text-slate-200"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "text-zinc-400 hover:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-900"
             }`}
           >
             <ListTree className="h-3.5 w-3.5" /> 大纲
           </button>
         </div>
 
-        <div className={`h-4 w-px ${isDark ? "bg-slate-800" : "bg-slate-200"}`} />
+        <div className={`h-4 w-px ${isDark ? "bg-zinc-800" : "bg-zinc-200"}`} />
 
         <button
           type="button"
           disabled={!canUndo}
           onClick={undo}
-          className={`rounded p-1.5 disabled:opacity-35 ${hoverCls}`}
+          className={`rounded p-1.5 disabled:opacity-35 ${hoverCls} ${focusCls}`}
           title="撤销 (Ctrl+Z)"
         >
           <Undo2 className="h-4 w-4" />
@@ -299,7 +303,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           type="button"
           disabled={!canRedo}
           onClick={redo}
-          className={`rounded p-1.5 disabled:opacity-35 ${hoverCls}`}
+          className={`rounded p-1.5 disabled:opacity-35 ${hoverCls} ${focusCls}`}
           title="重做 (Ctrl+Shift+Z)"
         >
           <Redo2 className="h-4 w-4" />
@@ -308,9 +312,9 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
         <button
           type="button"
           onClick={onOpenTemplates}
-          className={`ml-0.5 flex items-center gap-1 rounded-md border px-2 py-1 font-medium ${borderBtnCls}`}
+          className={`ml-0.5 flex items-center gap-1 rounded-md border px-2 py-1 font-medium ${borderBtnCls} ${focusCls}`}
         >
-          <LayoutGrid className="h-3.5 w-3.5 text-blue-500" /> 模板库
+          <LayoutGrid className={`h-3.5 w-3.5 ${isDark ? "text-sky-400" : "text-sky-700"}`} /> 模板库
         </button>
       </div>
 
@@ -328,8 +332,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <Popover.Trigger asChild>
             <button
               type="button"
-              className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium ${
-                isDark ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium ${focusCls} ${
+                isDark ? "text-zinc-300 hover:bg-zinc-800 hover:text-white" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
               }`}
             >
               <Paperclip className="h-3.5 w-3.5" />
@@ -340,15 +344,15 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             <Popover.Content
               sideOffset={6}
               className={`z-50 w-44 rounded-xl border p-1.5 text-xs shadow-xl ${
-                isDark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"
+                isDark ? "border-zinc-800 bg-[#181b20] text-zinc-200" : "border-zinc-200 bg-white text-zinc-700"
               }`}
             >
               <button
                 type="button"
                 onClick={() => imgInputRef.current?.click()}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls} ${focusCls}`}
               >
-                <ImagePlus className="h-3.5 w-3.5 text-sky-500" /> 上传图片
+                <ImagePlus className="h-3.5 w-3.5 text-sky-600" /> 上传图片
               </button>
               <button
                 type="button"
@@ -360,9 +364,9 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                     latex: "E = mc^2",
                   })
                 }
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls} ${focusCls}`}
               >
-                <Sigma className="h-3.5 w-3.5 text-violet-500" /> 插入数学公式
+                <Sigma className="h-3.5 w-3.5 text-zinc-500" /> 插入数学公式
               </button>
               <button
                 type="button"
@@ -374,9 +378,9 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                     text: "在此补充节点的详细说明...",
                   })
                 }
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls} ${focusCls}`}
               >
-                <FileText className="h-3.5 w-3.5 text-amber-500" /> 添加备注
+                <FileText className="h-3.5 w-3.5 text-zinc-500" /> 添加备注
               </button>
               <button
                 type="button"
@@ -391,9 +395,9 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                     });
                   }
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left ${hoverCls} ${focusCls}`}
               >
-                <Link2 className="h-3.5 w-3.5 text-emerald-500" /> 添加超链接
+                <Link2 className="h-3.5 w-3.5 text-zinc-500" /> 添加超链接
               </button>
             </Popover.Content>
           </Popover.Portal>
@@ -406,10 +410,10 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             type="button"
             onClick={onOpenAi}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition ${
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition ${focusCls} ${
               isDark
-                ? "bg-violet-500/20 text-violet-300 hover:bg-violet-500/30"
-                : "bg-violet-50 text-violet-700 hover:bg-violet-100"
+                ? "bg-zinc-100 text-zinc-950 hover:bg-white"
+                : "bg-zinc-950 text-white hover:bg-zinc-800"
             }`}
           >
             <Sparkles className="h-3.5 w-3.5" /> AI 共创
@@ -418,7 +422,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
         <button
           type="button"
           onClick={() => setPitchMode(true)}
-          className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium ${hoverCls}`}
+          className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium ${hoverCls} ${focusCls}`}
           title="演说模式"
         >
           <Play className="h-3.5 w-3.5" /> 演说
@@ -426,7 +430,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
         <button
           type="button"
           onClick={() => setZenMode(true)}
-          className={`hidden rounded p-1.5 sm:inline-flex ${hoverCls}`}
+          className={`hidden rounded p-1.5 sm:inline-flex ${hoverCls} ${focusCls}`}
           title="禅模式"
         >
           <Maximize2 className="h-3.5 w-3.5" />
@@ -435,7 +439,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             type="button"
             onClick={onOpenExport}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 font-medium ${borderBtnCls}`}
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 font-medium ${borderBtnCls} ${focusCls}`}
           >
             <Download className="h-3.5 w-3.5" /> 导出
           </button>
@@ -443,11 +447,11 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
         <button
           type="button"
           onClick={() => setFormatPanelOpen(!formatPanelOpen)}
-          className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium transition ${
+          className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium transition ${focusCls} ${
             formatPanelOpen
               ? isDark
-                ? "bg-blue-500/20 text-blue-300"
-                : "bg-blue-50 text-blue-600"
+                ? "bg-sky-500/15 text-sky-300"
+                : "bg-sky-50 text-sky-800"
               : hoverCls
           }`}
           title="格式面板"
@@ -468,10 +472,10 @@ const ToolBtn: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium ${
+    className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
       isDark
-        ? "text-slate-300 hover:bg-slate-800 hover:text-white"
-        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        ? "text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:ring-sky-400 focus-visible:ring-offset-[#111317]"
+        : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 focus-visible:ring-sky-600 focus-visible:ring-offset-white"
     }`}
   >
     {icon}
