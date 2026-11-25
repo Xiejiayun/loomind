@@ -187,6 +187,8 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     const padExtraY =
       layoutNode.shape === "diamond" ? 8 : layoutNode.shape === "cloud" ? 6 : 0;
 
+    const centerAlign = !layoutNode.underlineMode && !isTransparentFill;
+
     return (
       <div
         data-topic-id={topic.id}
@@ -274,7 +276,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           style={{
             ...cardStyle,
             padding: `${layoutNode.paddingY + padExtraY}px ${layoutNode.paddingX + padExtraX}px`,
-            alignItems: isSvgShape ? "center" : undefined,
+            alignItems: centerAlign ? "center" : undefined,
           }}
         >
           {/* Crisp SVG vector background for Diamond / Hexagon / Cloud */}
@@ -327,7 +329,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           )}
 
           {/* Main Horizontal Row */}
-          <div className="relative z-10 flex items-center gap-1.5">
+          <div className={`relative z-10 flex items-center gap-1.5 ${centerAlign ? "justify-center text-center" : ""}`}>
             {!lodLow && topic.image?.pos === "left" && asset && (
               <img
                 src={`data:${asset.mimeType};base64,${asset.dataBase64}`}
