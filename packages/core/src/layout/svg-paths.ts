@@ -172,8 +172,9 @@ const roughGen = rough.generator();
 export function buildRoughSvgPath(svgPath: string, seed: number, subtle = false): string {
   const drawable = roughGen.path(svgPath, {
     seed: seed | 1,
-    roughness: subtle ? 0.5 : 1.15,
-    bowing: subtle ? 0.35 : 0.9,
+    roughness: subtle ? 0.35 : 1.0,
+    bowing: subtle ? 0.3 : 0.8,
+    maxRandomnessOffset: subtle ? 0.35 : 1.2,
     disableMultiStroke: true,
   });
   const paths = roughGen.toPaths(drawable);
