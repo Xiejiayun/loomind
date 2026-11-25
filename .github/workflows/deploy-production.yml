@@ -1,0 +1,320 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      tested_sha:
+        description: Full main commit SHA that passed end-to-end acceptance
+        required: true
+        type: string
+      e2e_evidence:
+        description: Link or record of the completed end-to-end acceptance
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loomind-production
+  cancel-in-progress: false
+
+jobs:
+  target:
+    name: Confirm tested main commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main and matching E2E acceptance
+        env:
+          TESTED_SHA: ${{ inputs.tested_sha }}
+          E2E_EVIDENCE: ${{ inputs.e2e_evidence }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Production releases must run from main." >&2
+            exit 1
+          fi
+          if [[ "$TESTED_SHA" != "$GITHUB_SHA" || -z "$E2E_EVIDENCE" ]]; then
+            echo "E2E evidence and its exact tested main commit are required." >&2
+            exit 1
+          fi
+
+  verify:
+    name: Re-run CI for the release commit
+    needs: target
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy after production approval
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://loomind.jeremyxie.com
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+      CLOUDFLARE_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID }}
+      LOOMIND_PRODUCTION_URL: ${{ vars.LOOMIND_PRODUCTION_URL }}
+    steps:
+      - name: Check out approved commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build approved commit
+        run: pnpm build
+
+      - name: Verify pinned production config
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import ts from 'typescript';
+
+          const required = (name) => {
+            const value = process.env[name];
+            if (!value) throw new Error(name + ' repository variable is missing');
+            return value;
+          };
+          const account = required('CLOUDFLARE_ACCOUNT_ID');
+          const worker = required('CLOUDFLARE_WORKER_NAME');
+          const databaseId = required('CLOUDFLARE_D1_DATABASE_ID');
+          const origin = required('LOOMIND_PRODUCTION_URL');
+          if (origin !== 'https://loomind.jeremyxie.com') {
+            throw new Error('Production URL does not match the approved domain');
+          }
+          const source = fs.readFileSync('apps/web/wrangler.jsonc', 'utf8');
+          const parsed = ts.parseConfigFileTextToJson('apps/web/wrangler.jsonc', source);
+          if (parsed.error) {
+            throw new Error(ts.flattenDiagnosticMessageText(parsed.error.messageText, '\n'));
+          }
+          const config = parsed.config;
+          const assert = (ok, message) => { if (!ok) throw new Error(message); };
+          const db = config.d1_databases?.filter((item) => item.binding === 'DB') ?? [];
+          assert(config.account_id === account, 'Cloudflare account does not match wrangler.jsonc');
+          assert(config.name === worker, 'Worker name does not match wrangler.jsonc');
+          assert(config.main === './worker/auth.ts', 'Worker entry point changed');
+          assert(db.length === 1 && db[0].database_id === databaseId && db[0].database_name === 'loomind',
+            'DB binding does not match the existing production D1');
+          assert(config.vars?.AUTH_ORIGIN === origin, 'AUTH_ORIGIN does not match production');
+          assert(typeof config.vars?.TURNSTILE_SITE_KEY === 'string' && config.vars.TURNSTILE_SITE_KEY.startsWith('0x'),
+            'Turnstile site key is missing');
+          assert(config.routes?.some((route) => route.pattern === new URL(origin).hostname && route.custom_domain === true),
+            'Production custom domain is missing');
+          assert(config.assets?.directory === './dist' && config.assets.run_worker_first?.includes('/api/*'),
+            'Static assets or API routing changed');
+          for (const name of ['GOOGLE_CLIENT_ID', 'TURNSTILE_SECRET', 'SESSION_SECRET']) {
+            assert(config.secrets?.required?.includes(name), 'Required Worker secret is undeclared: ' + name);
+          }
+          assert(fs.existsSync('apps/web/dist/index.html'), 'Built web assets are missing');
+          console.log('Pinned account, Worker, D1, route, assets and required bindings match.');
+          NODE
+
+      - name: Check remote Worker, secrets and D1 recovery point
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "CLOUDFLARE_API_TOKEN production secret is missing." >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/loomind-release"
+          pnpm exec wrangler deploy --dry-run
+          pnpm exec wrangler deployments list --json > "$RUNNER_TEMP/loomind-release/deployments-before.json"
+          pnpm exec wrangler secret list --format json > "$RUNNER_TEMP/loomind-release/secrets.json"
+          pnpm exec wrangler d1 time-travel info DB --json > "$RUNNER_TEMP/loomind-release/d1-before.json"
+
+      - name: Save recovery information before migrations
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const directory = path.join(process.env.RUNNER_TEMP, 'loomind-release');
+          const read = (name) => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'));
+          const deployments = read('deployments-before.json');
+          if (!Array.isArray(deployments) || deployments.length === 0) {
+            throw new Error('Existing production Worker has no deployment');
+          }
+          const current = deployments.at(-1);
+          const versions = current?.versions;
+          if (!Array.isArray(versions) || versions.length !== 1 || Number(versions[0].percentage) !== 100) {
+            throw new Error('Production Worker is not at one 100% version; resolve the rollout before release');
+          }
+          const previousVersion = versions[0].version_id;
+          if (typeof previousVersion !== 'string' || !previousVersion) {
+            throw new Error('Cannot identify the previous Worker version');
+          }
+          const secrets = read('secrets.json');
+          if (!Array.isArray(secrets)) throw new Error('Cannot inspect remote Worker secrets');
+          const names = new Set(secrets.map((item) => item.name));
+          for (const name of ['GOOGLE_CLIENT_ID', 'TURNSTILE_SECRET', 'SESSION_SECRET']) {
+            if (!names.has(name)) throw new Error('Remote Worker secret is missing: ' + name);
+          }
+          const bookmark = read('d1-before.json').bookmark;
+          if (typeof bookmark !== 'string' || bookmark.length < 10) {
+            throw new Error('Cannot record a D1 Time Travel bookmark');
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            '## Production recovery points',
+            '- Commit: ' + process.env.GITHUB_SHA,
+            '- Previous Worker version: ' + previousVersion,
+            '- D1 bookmark before migrations: ' + bookmark,
+            '- Account: ' + process.env.CLOUDFLARE_ACCOUNT_ID,
+            '- Worker: ' + process.env.CLOUDFLARE_WORKER_NAME,
+            '- D1 database ID: ' + process.env.CLOUDFLARE_D1_DATABASE_ID,
+            '',
+          ].join('\n'));
+          console.log('Remote Worker, required secret names and D1 Time Travel are verified.');
+          NODE
+
+      - name: Ensure main still points to the tested commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          const response = await fetch(
+            process.env.GITHUB_API_URL + '/repos/' + process.env.GITHUB_REPOSITORY + '/git/ref/heads/main',
+            { headers: {
+              Authorization: 'Bearer ' + process.env.GH_TOKEN,
+              Accept: 'application/vnd.github+json',
+            } },
+          );
+          if (!response.ok) throw new Error('Cannot verify current main ref: HTTP ' + response.status);
+          const ref = await response.json();
+          if (ref.object?.sha !== process.env.GITHUB_SHA) {
+            throw new Error('main moved after E2E acceptance; start a new release for the new commit');
+          }
+          console.log('Current main ref matches the E2E-tested commit.');
+          NODE
+
+      - name: Apply remote D1 migrations
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          pnpm exec wrangler d1 migrations list DB --remote
+          pnpm exec wrangler d1 migrations apply DB --remote
+          pnpm exec wrangler d1 execute DB --remote --command "SELECT COUNT(*) AS found FROM sqlite_master WHERE type = 'table' AND name = 'mindmaps'" --json > "$RUNNER_TEMP/loomind-release/schema.json"
+
+      - name: Check migrated schema
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const file = path.join(process.env.RUNNER_TEMP, 'loomind-release', 'schema.json');
+          const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (Number(result?.[0]?.results?.[0]?.found) !== 1) {
+            throw new Error('Remote D1 mindmaps table is missing after migrations');
+          }
+          console.log('Remote D1 mindmaps table is present.');
+          NODE
+
+      - name: Deploy Worker and static assets
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm exec wrangler deploy --tag "$GITHUB_SHA" --message "GitHub Actions run $GITHUB_RUN_ID"
+
+      - name: Check production domain and API
+        run: |
+          node --input-type=module <<'NODE'
+          const origin = process.env.LOOMIND_PRODUCTION_URL;
+          const request = (path, options = {}) => fetch(origin + path, {
+            ...options,
+            redirect: 'error',
+            signal: AbortSignal.timeout(10000),
+            headers: { 'Cache-Control': 'no-cache', ...options.headers },
+          });
+          async function check() {
+            const home = await request('/');
+            if (home.status !== 200 || !home.headers.get('content-type')?.includes('text/html')) {
+              throw new Error('Home page is unavailable');
+            }
+            const html = await home.text();
+            if (!html.includes('id="root"')) throw new Error('Home page is not the web app');
+            const assetName = html.split('src="/assets/')[1]?.split('"')[0];
+            if (!assetName) throw new Error('Built JavaScript asset is not referenced');
+            const asset = await request('/assets/' + assetName);
+            if (asset.status !== 200 || !asset.headers.get('content-type')?.includes('javascript')) {
+              throw new Error('Built JavaScript asset is unavailable');
+            }
+            await asset.body?.cancel();
+
+            const sessionResponse = await request('/api/auth/session');
+            if (sessionResponse.status !== 200) throw new Error('Guest session endpoint failed');
+            const session = await sessionResponse.json();
+            if (session.user !== null || session.expiresAt !== null) {
+              throw new Error('Guest session endpoint returned an unexpected response');
+            }
+
+            const challengeResponse = await request('/api/auth/challenge', {
+              method: 'POST',
+              headers: { Origin: origin },
+            });
+            if (challengeResponse.status !== 200) throw new Error('Login challenge endpoint failed');
+            const challenge = await challengeResponse.json();
+            if (!challenge.nonce || !challenge.googleClientId || !challenge.turnstileSiteKey) {
+              throw new Error('Google or Turnstile login binding is unavailable');
+            }
+
+            const maps = await request('/api/mindmaps');
+            if (maps.status !== 401) throw new Error('Private mindmaps endpoint is not protected');
+          }
+          let lastError;
+          for (let attempt = 1; attempt <= 6; attempt++) {
+            try {
+              await check();
+              lastError = undefined;
+              break;
+            } catch (error) {
+              lastError = error;
+              if (attempt < 6) {
+                console.warn('Smoke attempt ' + attempt + ' failed: ' + error.message);
+                await new Promise((resolve) => setTimeout(resolve, 5000));
+              }
+            }
+          }
+          if (lastError) throw lastError;
+          console.log('Production home, asset, guest session, login challenge and private API checks passed.');
+          NODE
+
+      - name: Record new Worker version
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm exec wrangler deployments list --json > "$RUNNER_TEMP/loomind-release/deployments-after.json"
+
+      - name: Confirm active deployment
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const directory = path.join(process.env.RUNNER_TEMP, 'loomind-release');
+          const read = (name) => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'));
+          const before = read('deployments-before.json').at(-1)?.versions?.[0]?.version_id;
+          const after = read('deployments-after.json').at(-1)?.versions;
+          if (!Array.isArray(after) || after.length !== 1 || Number(after[0].percentage) !== 100 ||
+              !after[0].version_id || after[0].version_id === before) {
+            throw new Error('A new 100% Worker deployment was not confirmed');
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '- New Worker version: ' + after[0].version_id + '\n- Automated production smoke: passed\n');
+          console.log('New Worker version is active at 100%.');
+          NODE
