@@ -92,7 +92,7 @@ export async function handleShare(request: Request, env: Env, subject: string | 
       INSERT INTO share_invites (id, token_hash, type, resource_id, role, created_by, expires_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).bind(id, await tokenHash(token), type, resourceId, input.role, subject, expiresAt).run();
-    return json({ id, token, expiresAt: new Date(expiresAt).toISOString() }, 201);
+    return json({ id, token, role: input.role, expiresAt: new Date(expiresAt).toISOString() }, 201);
   }
 
   const match = /^\/api\/shares\/([^/]+)$/.exec(path);

@@ -1,7 +1,7 @@
 import { canonicalJson, getTemplate, type MindmapDocument } from "@mindmap/core";
 import { loadLocal, saveLocal } from "../persistence.js";
 import { CloudError, readCloud, writeCloud } from "./cloud.js";
-import type { LocalDraft } from "./shared.js";
+import type { LocalDraft, MapAccess } from "./shared.js";
 
 export type SyncState = { label: string; detail: string; conflict?: boolean };
 const conflict: SyncState = { label: "版本冲突", detail: "云端也有修改，已暂停上传。可先导出本机版本，再决定是否打开云端版本。", conflict: true };
@@ -21,7 +21,13 @@ export class DraftWorkspace {
 
   constructor(private owner: string | null, private id: string | null, private show: (document: MindmapDocument) => void,
     private status: (state: SyncState) => void, private localError: (message: string) => void,
-    private storage = { loadLocal, saveLocal, readCloud, writeCloud }) {}
+    private storage = { loadLocal, saveLocal, readCloud, writeCloud },
+    private workspaceId?: string | null, private access?: MapAccess) {}
+
+  private withScope(draft: LocalDraft): LocalDraft {
+    if (this.workspaceId === undefined && this.access === undefined) return draft;
+    return { ...draft, workspaceId: this.workspaceId ?? draft.workspaceId ?? null, access: this.access ?? draft.access ?? "owner" };
+  }
 
   async start() {
     let local: LocalDraft | null = null;
@@ -31,7 +37,7 @@ export class DraftWorkspace {
       if (!this.closed) this.localError("未能读取本机草稿，已暂停本机写入以免覆盖。请导出备份后重试。");
     }
     if (this.closed) return;
-    this.draft = local ?? { document: getTemplate("blank-organic").create(), revision: 0, dirty: false };
+    this.draft = this.withScope(local ?? { document: getTemplate("blank-organic").create(), revision: 0, dirty: false });
     this.show(this.draft.document);
     if (this.owner) await this.sync();
   }
@@ -77,7 +83,7 @@ export class DraftWorkspace {
           this.draft = { ...this.draft, revision: remote.revision, dirty: false };
           this.needsLocalSave = true;
         } else if (remote.document && (useCloud || (!this.draft.dirty && remote.revision !== this.draft.revision))) {
-          this.draft = { document: remote.document, revision: remote.revision, dirty: false };
+          this.draft = this.withScope({ document: remote.document, revision: remote.revision, dirty: false });
           this.show(remote.document);
           this.needsLocalSave = true;
         }
@@ -86,7 +92,9 @@ export class DraftWorkspace {
       }
       if (this.draft.dirty) {
         const sent = this.draft.document;
-        const revision = await this.storage.writeCloud(this.owner, this.id, this.draft.revision, sent);
+        const revision = this.workspaceId && this.draft.revision === 0
+          ? await this.storage.writeCloud(this.owner, this.id, this.draft.revision, sent, this.workspaceId)
+          : await this.storage.writeCloud(this.owner, this.id, this.draft.revision, sent);
         if (this.closed) return;
         this.draft = { ...this.draft, revision, dirty: this.draft.document !== sent };
         this.needsLocalSave = true;

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  9 Professional Structures · 10 Curated Palettes & Hand-Drawn Sketch Mode · Fullscreen Outliner · Pitch Mode 2.0 · Streaming AI Co-Creation · Loro CRDT Real-Time Collaboration · Lossless <code>.xmind</code> / Vector PDF / PPTX I/O
+  9 Professional Structures · 10 Curated Palettes & Hand-Drawn Sketch Mode · Fullscreen Outliner · Pitch Mode · Multiple Mindmaps & Shared Workspaces · <code>.xmind</code> / Vector PDF / PPTX I/O
 </p>
 
 <p align="center">
@@ -35,13 +35,14 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Rough.js hand-drawn mode**, 8 distinct topic shapes, boundaries, summaries, relationship arrows, rich-text editing (TipTap), and **KaTeX math equations**.
 - Dark-mode adaptive chrome and an interactive **Minimap** viewport navigator.
 
-### Streaming AI Co-Creation
-- Topic-level AI expansion, brainstorming, and one-click **long-text hybrid reconstruction** that automatically maps schedules to timelines, root-cause risks to fishbones, comparisons to matrices, and action items to task checklists.
-- Streaming **Ghost Topic** previews so you can review and accept AI suggestions without disrupting your existing map.
+### Mindmap Library & Outline Import
+- Each Google account can create and switch between multiple independent mindmaps, search the library, and continue a saved map in the existing editor.
+- Import Markdown headings, lists, or indented text as a full hierarchy. Choose a visual template without replacing the imported content.
+- An idea can start a blank mindmap. Conversational AI co-creation is planned for Aerial Web; this release does not connect a model or generate AI content.
 
-### Real-Time Collaboration & Brainstorm Workshop
-- Powered by **Loro CRDT (Wasm)** for conflict-free collaborative editing across tabs (`BroadcastChannel`) and remote rooms (**Cloudflare Durable Objects WebSocket**).
-- Live collaborator presence, remote cursors, and quick reactions.
+### Workspace & Mindmap Sharing
+- Invite another Google account to an entire workspace or a single mindmap with editor or viewer access. Invitations expire after seven days and can be revoked before acceptance.
+- The Worker checks each read and write against the signed session. D1 revisions prevent one editor from silently overwriting another's changes; editing is not live multi-user sync.
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
 - **Pitch Mode**: Automatically compiles your mind map into polished presentation slides and exports directly to **`.pptx`**.
@@ -64,9 +65,9 @@ loomind/
 │   └── web/              # Vite + React 19 + Tailwind CSS v4 web app & Cloudflare Workers config
 │       └── worker/       # Google / Turnstile authentication and private D1 draft API
 └── packages/
-    ├── core/             # Document schema, 9 layout engines, 10 palettes, Loro CRDT adapter & I/O codecs
-    ├── editor/           # Hybrid canvas, TipTap editor, Outliner, Pitch Mode, collab cursors & chrome UI
-    └── ai/               # Streaming AI actions, Zod schemas & incremental patcher
+    ├── core/             # Document schema, 9 layout engines, 10 palettes & I/O codecs
+    ├── editor/           # Hybrid canvas, TipTap editor, Outliner, Pitch Mode & chrome UI
+    └── ai/               # Existing experimental helpers; no production model connection
 ```
 
 ---
@@ -109,26 +110,14 @@ pnpm build
 
 - **Google:** use a Web application OAuth client with authorized JavaScript origin `https://loomind.jeremyxie.com` (no path). The Google button returns an ID token to a JavaScript popup callback, so no authorized redirect URI or Google client secret is needed. `/api/auth/google` is a same-origin JSON endpoint, not a redirect target.
 - **Turnstile:** use the Managed widget for `loomind.jeremyxie.com`. The Worker checks Siteverify success, hostname and `google_login` action before signing a session. `TURNSTILE_SITE_KEY` is public; `TURNSTILE_SECRET` is server-only. Store `GOOGLE_CLIENT_ID`, `TURNSTILE_SECRET` and an independent, randomly generated production `SESSION_SECRET` (at least 32 random bytes, encoded as hex or base64url) in the Worker's protected configuration. Never put secrets in `VITE_*`, the repository or the browser bundle.
-- **Mindmaps:** guests keep their original IndexedDB document; it is never uploaded on login. Each verified Google account can create and switch between independent mindmaps. D1 stores each map by its own ID and Google `sub`, with a separate IndexedDB cache and revision. The account button lists maps and shows sync status for the current map. Edits sync after 2.5 seconds idle. Revision conflicts stop uploads; export the local copy before choosing the cloud version. Maps larger than 1 MiB remain local. To move a guest map into an account, export it as `.xmind`, sign in, then import it intentionally.
+- **Mindmaps:** guests keep a separate IndexedDB document; it is never uploaded on login. Each verified Google account can create and switch between independent mindmaps in the workspace library. D1 stores each map by its own ID and Google `sub`, with a separate IndexedDB cache and revision. The editor account button shows sync status for the current map. Edits sync after 2.5 seconds idle. Revision conflicts stop uploads; export the local copy before choosing the cloud version. Maps larger than 1 MiB remain local. To move a guest map into an account, export it as `.xmind`, sign in, then import it intentionally.
 - **Cost:** the app uses the existing Workers and D1 Free resources and does not require R2, KV or a paid plan. If storage or quota is exhausted, cloud sync shows an error instead of discarding the local draft.
 
 ### Release to Cloudflare Workers
 
-The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. The `DB` binding must point at the existing `loomind` D1; do not create a replacement. Record the active Worker deployment and a D1 Time Travel bookmark before production changes. A Worker rollback does not restore the database.
+The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. The fourth migration adds shared workspaces, member roles and invitations to the existing `mindmaps` table. Worker rollback does not restore D1 data.
 
-```bash
-pnpm test
-pnpm build
-pnpm --filter @mindmap/web exec wrangler versions upload --dry-run
-```
-
-For remote operations use a trusted authenticated Wrangler and check that `wrangler whoami` matches the configured account. Run from `apps/web`. The second migration creates `mindmaps` and copies any existing account drafts; the third removes the obsolete table. Applying the migrations with Wrangler records them in the migration history.
-
-```bash
-wrangler d1 migrations apply DB --remote
-```
-
-The dashboard cannot attach variables or bindings to a static-assets-only Worker. For the initial backend version, use `wrangler versions upload` with the production bindings and the required secrets from an approved secret manager (Wrangler accepts `--secrets-file` for an existing protected JSON file). **Uploading a version is separate from deploying it.** Do not use `wrangler deploy` or `wrangler secret put` to stage changes: they can change live traffic. After release approval use `wrangler versions deploy` to select the verified version. Validate the guest editor, a real Turnstile + Google login on the registered hostname, cross-device draft recovery, and logout. If any fails, switch traffic back to the previous Worker version; keep D1 data intact.
+PRs and pushes to `main` run GitHub Actions CI. Production deployment is a separate, manually dispatched workflow for an E2E-tested `main` commit; it waits for `production` environment approval, records the previous Worker version and a D1 Time Travel bookmark, applies pending migrations, deploys, and checks public health. See [production deployment and recovery](docs/DEPLOYMENT.md) for required repository settings, acceptance and rollback steps.
 
 ---
 

@@ -122,7 +122,9 @@ describe("collaboration API (signed sessions and local D1)", () => {
   async function share(cookie: string, type: "workspace" | "mindmap", resourceId: string, role: "editor" | "viewer") {
     const response = await request("shares", "POST", cookie, { type, resourceId, role });
     expect(response.status).toBe(201);
-    return response.json() as Promise<{ id: string; token: string; expiresAt: string }>;
+    const created = await response.json() as { id: string; token: string; role: "editor" | "viewer"; expiresAt: string };
+    expect(created.role).toBe(role);
+    return created;
   }
 
   it("keeps ownership and revision while granting workspace editors and viewers distinct rights", async () => {

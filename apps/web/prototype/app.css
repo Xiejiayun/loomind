@@ -70,6 +70,14 @@
 .dashboard-main { padding: 46px clamp(22px, 4vw, 58px) 90px; }
 .dashboard-heading h1 { margin: 13px 0 0; font-size: clamp(35px, 4vw, 53px); font-weight: 590; line-height: 1.12; }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(265px, .75fr); gap: 16px; margin-top: 32px; }
+.dashboard-page .dashboard-grid { display: block; width: min(940px, 100%); }
+.dashboard-page .new-map-button { margin-top: 24px; }
+.dashboard-page .sidebar-recent { margin-top: 0; }
+.dashboard-page .start-panel { padding: clamp(24px, 3vw, 42px); }
+.dashboard-page .ai-start-form textarea { min-height: clamp(170px, 26vh, 300px); }
+.outline-shortcut { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 27px; padding-top: 19px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.outline-shortcut a { color: var(--text); white-space: nowrap; }
+.outline-shortcut a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .start-panel, .quick-panel { min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .start-panel { padding: 23px; }
 .start-panel-heading, .quick-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -307,6 +315,7 @@
   .dashboard-main, .library-main, .create-main { padding-top: 29px; }
   .dashboard-heading h1 { font-size: 39px; }
   .dashboard-grid { margin-top: 27px; }
+  .outline-shortcut { align-items: flex-start; flex-direction: column; }
   .start-panel, .quick-panel { padding: 18px; }
   .ai-start-form textarea { min-height: 110px; }
   .ai-start-footer span { display: none; }

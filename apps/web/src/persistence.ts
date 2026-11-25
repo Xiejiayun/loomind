@@ -61,12 +61,22 @@ export async function listLocalMaps(owner: string): Promise<MindmapSummary[]> {
       if (!cursor) { resolve(maps); return; }
       const key = String(cursor.key);
       const id = key.startsWith(`google:${owner}:`) ? key.slice(`google:${owner}:`.length) : "";
-      if (MAP_ID.test(id)) {
+      if (MAP_ID.test(id) && (!cursor.value?.access || cursor.value.access === "owner")) {
         const parsed = MindmapDocumentSchema.safeParse(cursor.value?.document);
-        if (parsed.success) maps.push({ id, title: mapTitle(parsed.data), updatedAt: "" });
+        if (parsed.success) maps.push({ id, title: mapTitle(parsed.data), updatedAt: "", workspaceId: cursor.value?.workspaceId ?? null, access: "owner" });
       }
       cursor.continue();
     };
     request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteLocal(owner: string, id: string): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(documentKey(owner, id));
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error ?? new Error("本机导图删除失败。"));
   });
 }

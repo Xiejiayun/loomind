@@ -18,7 +18,9 @@ async function request(owner: string, id?: string, init?: RequestInit) {
 
 export async function listCloud(owner: string): Promise<MindmapSummary[]> {
   const data = await request(owner);
-  if (!Array.isArray(data) || !data.every((item) => item && MAP_ID.test(item.id) && typeof item.title === "string" && typeof item.updatedAt === "string")) {
+  if (!Array.isArray(data) || !data.every((item) => item && MAP_ID.test(item.id) && typeof item.title === "string" && typeof item.updatedAt === "string" &&
+      (item.workspaceId === null || (typeof item.workspaceId === "string" && MAP_ID.test(item.workspaceId))) &&
+      ["owner", "editor", "viewer"].includes(item.access))) {
     throw new CloudError(502, "云端导图列表格式异常。");
   }
   return data;
@@ -33,10 +35,16 @@ export async function readCloud(owner: string, id: string): Promise<CloudDraft> 
   return data;
 }
 
-export async function writeCloud(owner: string, id: string, revision: number, document: MindmapDocument): Promise<number> {
+export async function writeCloud(owner: string, id: string, revision: number, document: MindmapDocument, workspaceId?: string | null): Promise<number> {
   const body = JSON.stringify(document);
   if (new Blob([body]).size > DRAFT_LIMIT) throw new CloudError(413, DRAFT_SIZE_ERROR);
-  const data = await request(owner, id, { method: "PUT", headers: { "Content-Type": "application/json", "If-Match": `"${revision}"` }, body });
+  const headers: Record<string, string> = { "Content-Type": "application/json", "If-Match": `"${revision}"` };
+  if (revision === 0 && workspaceId) headers["X-Loomind-Workspace"] = workspaceId;
+  const data = await request(owner, id, { method: "PUT", headers, body });
   if (data?.revision !== revision + 1) throw new CloudError(502, "未收到云端保存确认，请重试。");
   return data.revision;
+}
+
+export async function deleteCloud(owner: string, id: string): Promise<void> {
+  await request(owner, id, { method: "DELETE" });
 }
