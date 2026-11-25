@@ -74,8 +74,11 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
 
         let ribLeftmostX = Math.min(nodeX, tipX);
 
-        // Slanted primary rib (±60°) ending cleanly at header card edge
-        const ribPath = `M ${r(joinX)} ${r(spineY)} L ${r(tipX)} ${r(tipY)}`;
+        // Slanted primary rib (±60°) starting cleanly on the near edge of the spine (never pokes through!)
+        const spineInset = 1.2;
+        const ribStartY = above ? spineY - spineInset : spineY + spineInset;
+        const ribStartX = joinX - spineInset / tan60;
+        const ribPath = `M ${r(ribStartX)} ${r(ribStartY)} L ${r(tipX)} ${r(tipY)}`;
         const ribSeed = fnv1aSeed(`fish-rib:${child.id}`);
         ctx.edges.push({
           id: `e:${parent.id}->${child.id}`,
@@ -84,7 +87,7 @@ export const fishboneStructurePlugin: StructureLayoutPlugin = {
           kind: "fishbone-rib",
           svgPath: ctx.theme.handdrawn ? buildRoughSvgPath(ribPath, ribSeed, true) : ribPath,
           color: cNode.accentColor,
-          strokeWidth: 2.2,
+          strokeWidth: 2.0,
           handdrawn: ctx.theme.handdrawn,
           seed: ribSeed,
         });
