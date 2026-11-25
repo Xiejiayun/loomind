@@ -1,6 +1,7 @@
 import React from "react";
 import { Check, ExternalLink, FileText, Plus, Minus } from "lucide-react";
 import {
+  buildCloudBoundaryPath,
   hex8ToCss,
   isDarkFill,
   richTextToPlainText,
@@ -123,45 +124,65 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
 
     const relContentTop = layoutNode.contentBox.y - layoutNode.box.y;
 
+    const isSvgShape =
+      layoutNode.shape === "diamond" ||
+      layoutNode.shape === "hexagon" ||
+      layoutNode.shape === "cloud";
+
+    const cardW = layoutNode.contentBox.width;
+    const cardH = layoutNode.contentBox.height;
+
     const cardStyle: React.CSSProperties = {
-      width: layoutNode.contentBox.width,
-      minHeight: layoutNode.contentBox.height,
+      width: cardW,
+      minHeight: cardH,
       marginTop: relContentTop,
-      backgroundColor: fillCss,
+      backgroundColor: isSvgShape ? "transparent" : fillCss,
       color: textCss,
-      borderRadius: layoutNode.underlineMode ? 0 : layoutNode.cornerRadius,
-      borderBottom: layoutNode.underlineMode
-        ? layoutNode.underlineDrawnByEdge
+      borderRadius: layoutNode.underlineMode || isSvgShape ? 0 : layoutNode.cornerRadius,
+      borderBottom:
+        isSvgShape
           ? "none"
-          : `${Math.max(1.2, layoutNode.strokeWidth)}px solid ${strokeCss}`
-        : layoutNode.strokeWidth > 0
-          ? `${layoutNode.strokeWidth}px solid ${strokeCss}`
-          : "none",
+          : layoutNode.underlineMode
+            ? layoutNode.underlineDrawnByEdge
+              ? "none"
+              : `${Math.max(1.2, layoutNode.strokeWidth)}px solid ${strokeCss}`
+            : layoutNode.strokeWidth > 0
+              ? `${layoutNode.strokeWidth}px solid ${strokeCss}`
+              : "none",
       borderTop:
-        !layoutNode.underlineMode && layoutNode.strokeWidth > 0
+        !isSvgShape && !layoutNode.underlineMode && layoutNode.strokeWidth > 0
           ? `${layoutNode.strokeWidth}px solid ${strokeCss}`
           : "none",
       borderLeft:
-        !layoutNode.underlineMode && layoutNode.strokeWidth > 0
+        !isSvgShape && !layoutNode.underlineMode && layoutNode.strokeWidth > 0
           ? `${layoutNode.strokeWidth}px solid ${strokeCss}`
           : "none",
       borderRight:
-        !layoutNode.underlineMode && layoutNode.strokeWidth > 0
+        !isSvgShape && !layoutNode.underlineMode && layoutNode.strokeWidth > 0
           ? `${layoutNode.strokeWidth}px solid ${strokeCss}`
           : "none",
       boxShadow:
-        layoutNode.depth === 0
-          ? "0 8px 24px -6px rgba(15,23,42,0.22)"
-          : layoutNode.depth === 1 && !layoutNode.underlineMode && !isTransparentFill
-            ? "0 2px 8px -2px rgba(15,23,42,0.08)"
-            : undefined,
-      clipPath:
-        layoutNode.shape === "diamond"
-          ? "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)"
-          : layoutNode.shape === "hexagon"
-            ? "polygon(12% 0%, 88% 0%, 100% 50%, 88% 100%, 12% 100%, 0% 50%)"
-            : undefined,
+        isSvgShape
+          ? undefined
+          : layoutNode.depth === 0
+            ? "0 8px 24px -6px rgba(15,23,42,0.22)"
+            : layoutNode.depth === 1 && !layoutNode.underlineMode && !isTransparentFill
+              ? "0 2px 8px -2px rgba(15,23,42,0.08)"
+              : undefined,
     };
+
+    const padExtraX =
+      layoutNode.shape === "diamond"
+        ? 16
+        : layoutNode.shape === "hexagon"
+          ? 11
+          : layoutNode.shape === "cloud"
+            ? 10
+            : layoutNode.shape === "pill"
+              ? 6
+              : 0;
+    const padExtraY =
+      layoutNode.shape === "diamond" ? 8 : layoutNode.shape === "cloud" ? 6 : 0;
 
     return (
       <div
@@ -201,9 +222,48 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           }`}
           style={{
             ...cardStyle,
-            padding: `${layoutNode.paddingY}px ${layoutNode.paddingX}px`,
+            padding: `${layoutNode.paddingY + padExtraY}px ${layoutNode.paddingX + padExtraX}px`,
+            alignItems: isSvgShape ? "center" : undefined,
           }}
         >
+          {/* Crisp SVG vector background for Diamond / Hexagon / Cloud */}
+          {isSvgShape && (
+            <svg
+              className="pointer-events-none absolute inset-0 overflow-visible"
+              width={cardW}
+              height={cardH}
+              viewBox={`0 0 ${cardW} ${cardH}`}
+            >
+              {layoutNode.shape === "diamond" && (
+                <polygon
+                  points={`${cardW / 2},1 ${cardW - 1},${cardH / 2} ${cardW / 2},${cardH - 1} 1,${cardH / 2}`}
+                  fill={fillCss}
+                  stroke={strokeCss}
+                  strokeWidth={Math.max(1.5, layoutNode.strokeWidth)}
+                  strokeLinejoin="round"
+                />
+              )}
+              {layoutNode.shape === "hexagon" && (
+                <polygon
+                  points={`${Math.min(18, cardW * 0.16)},1 ${cardW - Math.min(18, cardW * 0.16)},1 ${cardW - 1},${cardH / 2} ${cardW - Math.min(18, cardW * 0.16)},${cardH - 1} ${Math.min(18, cardW * 0.16)},${cardH - 1} 1,${cardH / 2}`}
+                  fill={fillCss}
+                  stroke={strokeCss}
+                  strokeWidth={Math.max(1.5, layoutNode.strokeWidth)}
+                  strokeLinejoin="round"
+                />
+              )}
+              {layoutNode.shape === "cloud" && (
+                <path
+                  d={buildCloudBoundaryPath({ x: 3, y: 3, width: Math.max(20, cardW - 6), height: Math.max(16, cardH - 6) }, 16)}
+                  fill={fillCss}
+                  stroke={strokeCss}
+                  strokeWidth={Math.max(1.5, layoutNode.strokeWidth)}
+                  strokeLinejoin="round"
+                />
+              )}
+            </svg>
+          )}
+
           {/* Top Image */}
           {topic.image?.pos === "top" && asset && !lodLow && (
             <img
@@ -216,7 +276,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           )}
 
           {/* Main Horizontal Row */}
-          <div className="flex items-center gap-1.5">
+          <div className="relative z-10 flex items-center gap-1.5">
             {!lodLow && layoutNode.taskSummary && (
               <svg width={16} height={16} viewBox="0 0 20 20" className="shrink-0">
                 <circle
