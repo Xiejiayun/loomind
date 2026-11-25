@@ -125,7 +125,7 @@ export function exportToXMind(doc: MindmapDocument): Uint8Array {
 
   return zipSync({
     "content.json": strToU8(JSON.stringify(contentJson, null, 2)),
-    "metadata.json": strToU8(JSON.stringify({ creator: { name: "Mindmap Studio", version: "2.0" } })),
+    "metadata.json": strToU8(JSON.stringify({ creator: { name: "Loomind", version: "2.0" } })),
     "manifest.json": strToU8(JSON.stringify(manifest)),
   });
 }
