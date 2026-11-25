@@ -23,6 +23,7 @@ interface NodeLayerProps {
   onCancelEdit: () => void;
   onToggleCollapse: (topicId: string) => void;
   onToggleTask: (topicId: string) => void;
+  onUpdateCallout: (topicId: string, text: string | null) => void;
   onStartDrag: (topicId: string, e: React.PointerEvent) => void;
   onStartResizeWidth: (topicId: string, e: React.PointerEvent) => void;
   onContextMenu: (topicId: string, e: React.MouseEvent) => void;
@@ -44,6 +45,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
     onCancelEdit,
     onToggleCollapse,
     onToggleTask,
+    onUpdateCallout,
     onStartDrag,
     onStartResizeWidth,
     onContextMenu,
@@ -99,6 +101,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
                 onCancelEdit={onCancelEdit}
                 onToggleCollapse={onToggleCollapse}
                 onToggleTask={onToggleTask}
+                onUpdateCallout={onUpdateCallout}
                 onStartDrag={onStartDrag}
                 onStartResizeWidth={onStartResizeWidth}
                 onContextMenu={onContextMenu}

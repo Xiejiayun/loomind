@@ -78,6 +78,7 @@ const MindmapEditorInner: React.FC = () => {
             <HybridCanvas
               layout={layout}
               onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
+              onOpenAi={() => setAiOpen(true)}
             />
             <Minimap layout={layout} />
           </>

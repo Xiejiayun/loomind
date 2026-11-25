@@ -1,5 +1,5 @@
-import React from "react";
-import { Check, ExternalLink, FileText, Plus, Minus } from "lucide-react";
+import React, { useState } from "react";
+import { Check, ExternalLink, FileText, Minus, X } from "lucide-react";
 import {
   buildCloudBoundaryPath,
   hex8ToCss,
@@ -91,6 +91,7 @@ export interface TopicCardProps {
   onCancelEdit: () => void;
   onToggleCollapse: (topicId: string) => void;
   onToggleTask: (topicId: string) => void;
+  onUpdateCallout?: (topicId: string, text: string | null) => void;
   onStartDrag: (topicId: string, e: React.PointerEvent) => void;
   onStartResizeWidth: (topicId: string, e: React.PointerEvent) => void;
   onContextMenu: (topicId: string, e: React.MouseEvent) => void;
@@ -111,10 +112,13 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     onCancelEdit,
     onToggleCollapse,
     onToggleTask,
+    onUpdateCallout,
     onStartDrag,
     onStartResizeWidth,
     onContextMenu,
   }) => {
+    const [editingCallout, setEditingCallout] = useState(false);
+    const [calloutDraft, setCalloutDraft] = useState("");
     const isTransparentFill = layoutNode.fillColor.toUpperCase().endsWith("00");
     const darkBg = !layoutNode.underlineMode && !isTransparentFill && isDarkFill(layoutNode.fillColor);
     const fillCss = layoutNode.underlineMode || isTransparentFill ? "transparent" : hex8ToCss(layoutNode.fillColor);
@@ -202,19 +206,63 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
         }}
         onContextMenu={(e) => onContextMenu(topic.id, e)}
       >
-        {/* Callout Bubble above contentBox */}
+        {/* Callout Bubble above contentBox (double-click to edit, × to remove) */}
         {topic.callout && layoutNode.calloutBox && !lodLow && (
           <div
-            className="absolute flex items-center justify-center rounded-lg bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 shadow-sm ring-1 ring-amber-300"
+            className="group/co absolute flex items-center justify-center rounded-lg bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900 shadow-sm ring-1 ring-amber-300"
             style={{
               left: layoutNode.calloutBox.x - layoutNode.box.x,
               top: 0,
-              width: layoutNode.calloutBox.width,
+              minWidth: layoutNode.calloutBox.width,
               height: layoutNode.calloutBox.height,
             }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              setCalloutDraft(richTextToPlainText(topic.callout!.title));
+              setEditingCallout(true);
+            }}
+            title="双击编辑批注"
           >
-            <span className="truncate">{richTextToPlainText(topic.callout.title)}</span>
-            <span className="absolute -bottom-1.5 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 border-b border-r border-amber-300 bg-amber-100" />
+            {editingCallout ? (
+              <input
+                value={calloutDraft}
+                autoFocus
+                onChange={(e) => setCalloutDraft(e.target.value)}
+                onBlur={() => {
+                  onUpdateCallout?.(topic.id, calloutDraft);
+                  setEditingCallout(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onUpdateCallout?.(topic.id, calloutDraft);
+                    setEditingCallout(false);
+                  } else if (e.key === "Escape") {
+                    setEditingCallout(false);
+                  }
+                }}
+                className="w-28 rounded bg-white/90 px-1 text-center text-xs text-amber-950 outline-none"
+              />
+            ) : (
+              <span className="truncate">{richTextToPlainText(topic.callout.title)}</span>
+            )}
+            {!editingCallout && onUpdateCallout && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateCallout(topic.id, null);
+                }}
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-amber-950 opacity-0 shadow-xs transition group-hover/co:opacity-100 hover:bg-amber-500"
+                title="删除批注"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            )}
+            <span className="pointer-events-none absolute -bottom-1.5 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 border-b border-r border-amber-300 bg-amber-100" />
           </div>
         )}
 
@@ -280,6 +328,15 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
 
           {/* Main Horizontal Row */}
           <div className="relative z-10 flex items-center gap-1.5">
+            {!lodLow && topic.image?.pos === "left" && asset && (
+              <img
+                src={`data:${asset.mimeType};base64,${asset.dataBase64}`}
+                alt=""
+                className="shrink-0 rounded object-contain"
+                style={{ maxWidth: Math.min(topic.image.width, 160), maxHeight: Math.min(topic.image.height, 120) }}
+                draggable={false}
+              />
+            )}
             {!lodLow && layoutNode.taskSummary && (
               <svg width={16} height={16} viewBox="0 0 20 20" className="shrink-0">
                 <circle
@@ -389,6 +446,16 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 <FileText className="h-3.5 w-3.5" />
               </span>
             )}
+
+            {!lodLow && topic.image?.pos === "right" && asset && (
+              <img
+                src={`data:${asset.mimeType};base64,${asset.dataBase64}`}
+                alt=""
+                className="shrink-0 rounded object-contain"
+                style={{ maxWidth: Math.min(topic.image.width, 160), maxHeight: Math.min(topic.image.height, 120) }}
+                draggable={false}
+              />
+            )}
           </div>
 
           {/* Labels */}
@@ -442,8 +509,14 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 e.stopPropagation();
                 onToggleCollapse(topic.id);
               }}
-              className={`absolute top-1/2 z-20 flex h-5 min-w-[20px] -translate-y-1/2 items-center justify-center rounded-full px-1 text-[10px] font-semibold shadow-sm transition-opacity ${
-                layoutNode.side === "left" ? "-left-3" : "-right-3"
+              className={`absolute z-20 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-semibold shadow-sm transition-opacity ${
+                layoutNode.side === "bottom"
+                  ? "-bottom-3 left-1/2 -translate-x-1/2"
+                  : layoutNode.side === "top"
+                    ? "-top-3 left-1/2 -translate-x-1/2"
+                    : layoutNode.side === "left"
+                      ? "-left-3 top-1/2 -translate-y-1/2"
+                      : "-right-3 top-1/2 -translate-y-1/2"
               } ${
                 topic.collapsed
                   ? "opacity-100"
