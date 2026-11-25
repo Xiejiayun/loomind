@@ -9,6 +9,7 @@ import {
   generateId,
   getPalette,
   hex8ToCss,
+  richTextToPlainText,
   type LayoutBox,
   type MindmapLayoutResult,
   type RichTextDoc,
@@ -39,9 +40,10 @@ interface MarqueeState {
 interface HybridCanvasProps {
   layout: MindmapLayoutResult;
   onOpenContextMenu?: (topicId: string, pos: { x: number; y: number }) => void;
+  onOpenAi?: () => void;
 }
 
-export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContextMenu }) => {
+export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContextMenu, onOpenAi }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1200, height: 800 });
@@ -615,12 +617,30 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
   const addBoundaryForSelection = () => {
     const first = selectedTopicIds[0];
     if (!first) return;
+    const firstLoc = findTopicLocation(sheet, first);
+    let target: { kind: "subtree"; topicId: string } | { kind: "range"; parentId: string; startIndex: number; endIndex: number } = {
+      kind: "subtree",
+      topicId: first,
+    };
+    if (selectedTopicIds.length > 1 && firstLoc?.parent) {
+      const indices = selectedTopicIds
+        .map((id) => firstLoc.parent!.children.findIndex((c) => c.id === id))
+        .filter((i) => i >= 0);
+      if (indices.length > 1) {
+        target = {
+          kind: "range",
+          parentId: firstLoc.parent.id,
+          startIndex: Math.min(...indices),
+          endIndex: Math.max(...indices),
+        };
+      }
+    }
     dispatch({
       type: "boundary/upsert",
       sheetId: sheet.id,
       boundary: {
         id: generateId("bnd", deletedSet),
-        target: { kind: "subtree", topicId: first },
+        target,
         shape: "rounded",
         title: "分组外框",
       },
@@ -689,6 +709,23 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
     [selectTopics, onOpenContextMenu],
   );
 
+  const handleUpdateCallout = useCallback(
+    (topicId: string, text: string | null) => {
+      const existing = topicMap.get(topicId)?.callout;
+      if (text === null || text.trim().length === 0) {
+        dispatch({ type: "topic/setCallout", sheetId: sheet.id, topicId, callout: null });
+      } else {
+        dispatch({
+          type: "topic/setCallout",
+          sheetId: sheet.id,
+          topicId,
+          callout: { id: existing?.id ?? generateId("co", deletedSet), title: createRichText(text.trim()) },
+        });
+      }
+    },
+    [dispatch, sheet.id, topicMap, deletedSet],
+  );
+
   return (
     <div
       ref={containerRef}
@@ -740,6 +777,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
           onCancelEdit={handleCancelEdit}
           onToggleCollapse={handleToggleCollapse}
           onToggleTask={handleToggleTask}
+          onUpdateCallout={handleUpdateCallout}
           onStartDrag={handleStartDragTopic}
           onStartResizeWidth={handleStartResizeWidth}
           onContextMenu={handleContextMenuTopic}
@@ -798,7 +836,9 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
             返回完整导图
           </button>
           <span className="text-slate-400">/</span>
-          <span>当前下钻分支</span>
+          <span>
+            {topicMap.get(drillRootId) ? richTextToPlainText(topicMap.get(drillRootId)!.title) : "当前下钻分支"}
+          </span>
         </div>
       )}
 
@@ -834,12 +874,15 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
           >
             <Palette className="h-3.5 w-3.5" /> 统一改色
           </button>
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-violet-700 hover:bg-violet-100"
-          >
-            <Sparkles className="h-3.5 w-3.5" /> AI 共创
-          </button>
+          {onOpenAi && (
+            <button
+              type="button"
+              onClick={onOpenAi}
+              className="flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-violet-700 hover:bg-violet-100"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> AI 共创
+            </button>
+          )}
         </div>
       )}
     </div>
