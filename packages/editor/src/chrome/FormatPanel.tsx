@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { ClipboardCopy, ClipboardPaste, Eraser, Palette, Pencil } from "lucide-react";
 import {
@@ -7,11 +7,84 @@ import {
   PALETTE_LIST,
   SKELETON_LIST,
   type MindmapStructure,
+  type MindmapTopic,
   type TopicShape,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 import { MARKER_CATALOG, STICKER_CATALOG } from "./markers-catalog.js";
 import { StructureIcon } from "./structure-icons.js";
+
+function collectIdsByDepth(root: MindmapTopic, targetDepth: number): string[] {
+  const out: string[] = [];
+  const walk = (t: MindmapTopic, d: number) => {
+    if (d === targetDepth) out.push(t.id);
+    for (const c of t.children) walk(c, d + 1);
+  };
+  walk(root, 0);
+  return out;
+}
+
+function findTopicDepth(root: MindmapTopic, id: string, d = 0): number {
+  if (root.id === id) return d;
+  for (const c of root.children) {
+    const found = findTopicDepth(c, id, d + 1);
+    if (found >= 0) return found;
+  }
+  return -1;
+}
+
+const ShapeIcon: React.FC<{ shape: TopicShape }> = ({ shape }) => {
+  switch (shape) {
+    case "auto":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <rect x="2" y="2" width="28" height="14" rx="4" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 2" />
+        </svg>
+      );
+    case "rounded":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <rect x="2" y="2" width="28" height="14" rx="3" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      );
+    case "capsule":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <rect x="2" y="2" width="28" height="14" rx="6" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      );
+    case "pill":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <rect x="2" y="2" width="28" height="14" rx="7" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      );
+    case "underline":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <line x1="3" y1="14" x2="29" y2="14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
+    case "diamond":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <polygon points="16,1.5 30,9 16,16.5 2,9" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+      );
+    case "hexagon":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <polygon points="7,2 25,2 30,9 25,16 7,16 2,9" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+      );
+    case "cloud":
+      return (
+        <svg viewBox="0 0 32 18" className="h-4 w-7" fill="none">
+          <path d="M9 15 H23 A4.5 4.5 0 0 0 23.5 6.2 A6 6 0 0 0 12 4.5 A4.5 4.5 0 0 0 9 15 Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        </svg>
+      );
+  }
+};
 
 const STRUCTURES: Array<{ id: MindmapStructure; label: string }> = [
   { id: "mindmap", label: "思维导图" },
@@ -87,6 +160,8 @@ export const FormatPanel: React.FC = () => {
   const setStyleClipboard = useMindmapStore((s) => s.setStyleClipboard);
   const dispatch = useMindmapStore((s) => s.dispatch);
 
+  const [styleScope, setStyleScope] = useState<"selected" | "level" | "all">("selected");
+
   if (!open || zenMode || viewMode === "outline") return null;
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
@@ -94,7 +169,15 @@ export const FormatPanel: React.FC = () => {
   const topicMap = collectAllTopics(sheet);
   const primaryId = selectedTopicIds[0] ?? sheet.rootTopic.id;
   const primaryTopic = topicMap.get(primaryId);
-  const targetIds = selectedTopicIds.length > 0 ? selectedTopicIds : [sheet.rootTopic.id];
+  const primaryDepth = Math.max(0, findTopicDepth(sheet.rootTopic, primaryId));
+  const targetIds =
+    styleScope === "all"
+      ? Array.from(topicMap.keys())
+      : styleScope === "level"
+        ? collectIdsByDepth(sheet.rootTopic, primaryDepth)
+        : selectedTopicIds.length > 0
+          ? selectedTopicIds
+          : [sheet.rootTopic.id];
 
   return (
     <aside className="flex h-full w-[280px] shrink-0 flex-col border-l border-slate-200 bg-white text-xs text-slate-700">
@@ -122,6 +205,32 @@ export const FormatPanel: React.FC = () => {
 
         {/* TAB 1: Node Style */}
         <Tabs.Content value="style" className="flex-1 space-y-4 overflow-y-auto p-3">
+          {/* Apply Scope Selector */}
+          <Section title={`作用范围（当前将修改 ${targetIds.length} 个节点）`}>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-0.5 text-[11px]">
+              {(
+                [
+                  ["selected", "当前选中"],
+                  ["level", "同级节点"],
+                  ["all", "全部节点"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setStyleScope(id)}
+                  className={`rounded-md py-1 font-medium transition ${
+                    styleScope === id
+                      ? "bg-white text-blue-600 shadow-2xs"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Section>
+
           {/* Format Painter */}
           <div className="flex items-center gap-1.5">
             <button
@@ -166,27 +275,31 @@ export const FormatPanel: React.FC = () => {
           {/* Shape Grid */}
           <Section title="节点形状">
             <div className="grid grid-cols-4 gap-1.5">
-              {SHAPES.map((sh) => (
-                <button
-                  key={sh.id}
-                  type="button"
-                  onClick={() =>
-                    dispatch({
-                      type: "topic/setStyle",
-                      sheetId: sheet.id,
-                      topicIds: targetIds,
-                      shape: sh.id,
-                    })
-                  }
-                  className={`rounded border py-1.5 text-[11px] hover:bg-slate-50 ${
-                    (primaryTopic?.shape ?? "auto") === sh.id
-                      ? "border-blue-500 bg-blue-50 text-blue-700"
-                      : "border-slate-200"
-                  }`}
-                >
-                  {sh.label}
-                </button>
-              ))}
+              {SHAPES.map((sh) => {
+                const active = (primaryTopic?.shape ?? "auto") === sh.id;
+                return (
+                  <button
+                    key={sh.id}
+                    type="button"
+                    onClick={() =>
+                      dispatch({
+                        type: "topic/setStyle",
+                        sheetId: sheet.id,
+                        topicIds: targetIds,
+                        shape: sh.id,
+                      })
+                    }
+                    className={`flex flex-col items-center gap-1 rounded-lg border py-1.5 text-[10px] transition ${
+                      active
+                        ? "border-blue-500 bg-blue-50 font-semibold text-blue-700"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <ShapeIcon shape={sh.id} />
+                    <span>{sh.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </Section>
 

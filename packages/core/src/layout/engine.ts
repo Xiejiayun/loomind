@@ -69,6 +69,7 @@ function topicMeasureHash(topic: MindmapTopic, token: DepthStyleToken, hasTaskSu
   return JSON.stringify([
     topic.title,
     topic.subtitle,
+    topic.shape,
     topic.customWidth,
     topic.markers,
     topic.stickerId,
@@ -204,6 +205,9 @@ export class LayoutEngine {
 
       const shape: Exclude<TopicShape, "auto"> =
         topic.shape && topic.shape !== "auto" ? topic.shape : token.shape;
+      const explicitNonUnderline = Boolean(
+        topic.shape && topic.shape !== "auto" && topic.shape !== "underline",
+      );
       const underlineMode = shape === "underline" || (topic.shape === undefined && token.underlineMode);
 
       const defaultFill =
@@ -213,16 +217,38 @@ export class LayoutEngine {
             ? "#00000000"
             : token.softFillAlpha > 0
               ? mixHexWithAlpha(branchColor, token.softFillAlpha)
-              : palette.cardBg;
+              : explicitNonUnderline
+                ? mixHexWithAlpha(branchColor, palette.isDark ? 0.22 : 0.12)
+                : palette.cardBg;
+
+      const defaultStrokeWidth =
+        explicitNonUnderline && token.strokeWidth === 0
+          ? shape === "capsule" || shape === "diamond" || shape === "hexagon" || shape === "cloud"
+            ? 1.6
+            : 1.2
+          : explicitNonUnderline && token.underlineMode
+            ? 1.5
+            : token.strokeWidth;
 
       const defaultStroke =
         st.depth === 0
           ? palette.rootStroke
           : underlineMode
             ? branchColor
-            : token.strokeWidth > 0
+            : defaultStrokeWidth > 0
               ? branchColor
               : palette.cardBorder;
+
+      const shapeCornerRadius =
+        topic.shape && topic.shape !== "auto"
+          ? shape === "rounded"
+            ? 6
+            : shape === "capsule"
+              ? 18
+              : shape === "pill"
+                ? 9999
+                : 0
+          : token.cornerRadius;
 
       const defaultText = st.depth === 0 ? palette.rootText : palette.textPrimary;
 
@@ -253,13 +279,13 @@ export class LayoutEngine {
         accentColor,
         fillColor: topic.style?.fillColor ?? defaultFill,
         strokeColor: topic.style?.strokeColor ?? defaultStroke,
-        strokeWidth: topic.style?.strokeWidth ?? token.strokeWidth,
+        strokeWidth: topic.style?.strokeWidth ?? defaultStrokeWidth,
         textColor: topic.style?.textColor ?? defaultText,
         fontSize: topic.style?.fontSize ?? token.fontSize,
         fontWeight: topic.style?.fontWeight ?? token.fontWeight,
         paddingX: token.paddingX,
         paddingY: token.paddingY,
-        cornerRadius: topic.style?.cornerRadius ?? token.cornerRadius,
+        cornerRadius: topic.style?.cornerRadius ?? shapeCornerRadius,
         shape,
         underlineMode,
         handdrawnSeed: fnv1aSeed(topic.id),
