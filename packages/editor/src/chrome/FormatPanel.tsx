@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { ClipboardCopy, ClipboardPaste, Eraser, Palette, Pencil } from "lucide-react";
 import {
@@ -160,7 +160,14 @@ export const FormatPanel: React.FC = () => {
   const setStyleClipboard = useMindmapStore((s) => s.setStyleClipboard);
   const dispatch = useMindmapStore((s) => s.dispatch);
 
-  const [styleScope, setStyleScope] = useState<"selected" | "level" | "all">("selected");
+  const [manualScope, setManualScope] = useState<"selected" | "level" | "all" | null>(null);
+  const selKey = selectedTopicIds.join(",");
+  useEffect(() => {
+    setManualScope(null);
+  }, [selKey]);
+
+  const styleScope: "selected" | "level" | "all" =
+    manualScope ?? (selectedTopicIds.length > 0 ? "selected" : "all");
 
   if (!open || zenMode || viewMode === "outline") return null;
 
@@ -177,7 +184,7 @@ export const FormatPanel: React.FC = () => {
         ? collectIdsByDepth(sheet.rootTopic, primaryDepth)
         : selectedTopicIds.length > 0
           ? selectedTopicIds
-          : [sheet.rootTopic.id];
+          : Array.from(topicMap.keys());
 
   return (
     <aside className="flex h-full w-[280px] shrink-0 flex-col border-l border-slate-200 bg-white text-xs text-slate-700">
@@ -218,7 +225,7 @@ export const FormatPanel: React.FC = () => {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setStyleScope(id)}
+                  onClick={() => setManualScope(id)}
                   className={`rounded-md py-1 font-medium transition ${
                     styleScope === id
                       ? "bg-white text-blue-600 shadow-2xs"
