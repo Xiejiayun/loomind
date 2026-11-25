@@ -43,6 +43,7 @@ export interface LayoutNode {
   shape: Exclude<TopicShape, "auto">;
   underlineMode: boolean;
   underlineDrawnByEdge?: boolean;
+  neonGlow?: boolean;
   handdrawnSeed: number;
   taskSummary?: { done: number; total: number };
   hiddenCount: number;

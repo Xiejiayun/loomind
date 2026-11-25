@@ -29,6 +29,7 @@ export interface PaletteSpec {
   id: PaletteId;
   name: string;
   isDark: boolean;
+  neonGlow?: boolean;
   canvasBg: string; // 8-digit hex
   rootFill: string;
   rootText: string;

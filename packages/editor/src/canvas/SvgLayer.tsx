@@ -29,10 +29,18 @@ export const SvgLayer: React.FC<SvgLayerProps> = React.memo(
     const width = Math.max(800, layout.bounds.width + pad * 2);
     const height = Math.max(600, layout.bounds.height + pad * 2);
 
+    const hasNeon = Array.from(layout.nodes.values()).some((n) => n.neonGlow);
+
     return (
       <svg
         className="pointer-events-none absolute overflow-visible"
-        style={{ left: minX, top: minY, width, height }}
+        style={{
+          left: minX,
+          top: minY,
+          width,
+          height,
+          filter: hasNeon ? "drop-shadow(0 0 5px rgba(34, 211, 238, 0.55))" : undefined,
+        }}
         viewBox={`${minX} ${minY} ${width} ${height}`}
       >
         <defs>
