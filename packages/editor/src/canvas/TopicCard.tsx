@@ -114,8 +114,9 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     onStartResizeWidth,
     onContextMenu,
   }) => {
-    const darkBg = !layoutNode.underlineMode && isDarkFill(layoutNode.fillColor);
-    const fillCss = layoutNode.underlineMode ? "transparent" : hex8ToCss(layoutNode.fillColor);
+    const isTransparentFill = layoutNode.fillColor.toUpperCase().endsWith("00");
+    const darkBg = !layoutNode.underlineMode && !isTransparentFill && isDarkFill(layoutNode.fillColor);
+    const fillCss = layoutNode.underlineMode || isTransparentFill ? "transparent" : hex8ToCss(layoutNode.fillColor);
     const strokeCss = hex8ToCss(layoutNode.strokeColor);
     const textCss = hex8ToCss(layoutNode.textColor);
     const accentCss = hex8ToCss(layoutNode.accentColor);
@@ -151,7 +152,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
       boxShadow:
         layoutNode.depth === 0
           ? "0 8px 24px -6px rgba(15,23,42,0.22)"
-          : layoutNode.depth === 1 && !layoutNode.underlineMode
+          : layoutNode.depth === 1 && !layoutNode.underlineMode && !isTransparentFill
             ? "0 2px 8px -2px rgba(15,23,42,0.08)"
             : undefined,
       clipPath:
