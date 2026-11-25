@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { StoreApi } from "zustand";
 import {
   createMindmapStore,
+  getPalette,
   getTemplate,
   LayoutEngine,
   type MindmapDocument,
@@ -17,6 +18,7 @@ import { ContextMenu } from "./chrome/ContextMenu.js";
 import { ExportModal } from "./chrome/ExportModal.js";
 import { FormatPanel } from "./chrome/FormatPanel.js";
 import { SheetBar } from "./chrome/SheetBar.js";
+import { ShortcutsHelp } from "./chrome/ShortcutsHelp.js";
 import { TemplateModal } from "./chrome/TemplateModal.js";
 import { TopToolbar } from "./chrome/TopToolbar.js";
 import { MindmapStoreContext, useMindmapStore } from "./context.js";
@@ -35,6 +37,17 @@ const MindmapEditorInner: React.FC = () => {
   const viewMode = useMindmapStore((s) => s.viewMode);
   const zenMode = useMindmapStore((s) => s.zenMode);
   const setZenMode = useMindmapStore((s) => s.setZenMode);
+  const setFormatPanelOpen = useMindmapStore((s) => s.setFormatPanelOpen);
+
+  // Auto-collapse FormatPanel on mobile screens (< 768px)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setFormatPanelOpen(false);
+    }
+  }, [setFormatPanelOpen]);
+
+  const activeSheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
+  const isDark = getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark && viewMode === "canvas";
 
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [cmdkOpen, setCmdkOpen] = useState(false);
@@ -81,6 +94,7 @@ const MindmapEditorInner: React.FC = () => {
               onOpenAi={() => setAiOpen(true)}
             />
             <Minimap layout={layout} />
+            {!zenMode && <ShortcutsHelp isDark={isDark} />}
           </>
         ) : (
           <OutlinerView />
