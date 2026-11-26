@@ -71,7 +71,11 @@ export function App() {
 
 function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
   const { t, locale } = useI18n();
+  const [activePreviewNode, setActivePreviewNode] = useState<"leftTop" | "leftBottom" | "rightTop" | "rightBottom" | null>(null);
   const featureIcons = [Sparkles, GitBranch, Boxes];
+  const togglePreviewNode = (key: "leftTop" | "leftBottom" | "rightTop" | "rightBottom") => {
+    setActivePreviewNode((cur) => (cur === key ? null : key));
+  };
   return <div className="lm-public">
     <div className="lm-ambient-glow" aria-hidden="true" />
     <header className="lm-site-header">
@@ -127,6 +131,12 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
                   <span>{t.landing.previewMutation}</span>
                 </div>
               </div>
+              {activePreviewNode && (
+                <div className="lm-preview-node-note">
+                  <strong>@ {t.landing.previewNodes[activePreviewNode]}</strong>
+                  <p>{t.landing.previewNodeDetails[activePreviewNode]}</p>
+                </div>
+              )}
             </div>
             <div className="lm-preview-prompt">
               <span>{t.landing.previewPromptPlaceholder}</span>
@@ -139,11 +149,11 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
               <svg viewBox="0 0 760 320" preserveAspectRatio="none" aria-hidden="true">
                 <path d="M380 160 C310 160 300 72 215 72 M380 160 C310 160 300 248 215 248 M380 160 C450 160 460 72 545 72 M380 160 C450 160 460 248 545 248"/>
               </svg>
-              <span className="lm-preview-node center">{t.landing.previewNodes.center}</span>
-              <span className="lm-preview-node left top">{t.landing.previewNodes.leftTop}</span>
-              <span className="lm-preview-node left bottom">{t.landing.previewNodes.leftBottom}</span>
-              <span className="lm-preview-node right top">{t.landing.previewNodes.rightTop}</span>
-              <span className="lm-preview-node right bottom">{t.landing.previewNodes.rightBottom}</span>
+              <button type="button" className="lm-preview-node center" onClick={() => setActivePreviewNode(null)}>{t.landing.previewNodes.center}</button>
+              <button type="button" className={`lm-preview-node left top ${activePreviewNode === "leftTop" ? "is-active" : ""}`} onClick={() => togglePreviewNode("leftTop")}>{t.landing.previewNodes.leftTop}</button>
+              <button type="button" className={`lm-preview-node left bottom ${activePreviewNode === "leftBottom" ? "is-active" : ""}`} onClick={() => togglePreviewNode("leftBottom")}>{t.landing.previewNodes.leftBottom}</button>
+              <button type="button" className={`lm-preview-node right top ${activePreviewNode === "rightTop" ? "is-active" : ""}`} onClick={() => togglePreviewNode("rightTop")}>{t.landing.previewNodes.rightTop}</button>
+              <button type="button" className={`lm-preview-node right bottom ${activePreviewNode === "rightBottom" ? "is-active" : ""}`} onClick={() => togglePreviewNode("rightBottom")}>{t.landing.previewNodes.rightBottom}</button>
             </div>
             <div className="lm-preview-dock" aria-hidden="true">
               <span>{t.landing.previewDock.subtopic}</span>

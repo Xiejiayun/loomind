@@ -176,6 +176,12 @@
   background: var(--lm-bg-canvas); color: var(--lm-text-primary); font-size: 11.5px; font-weight: 500;
 }
 .lm-preview-mutation svg { color: var(--lm-status-ok); flex: none; }
+.lm-preview-node-note {
+  padding: 9px 11px; border: 1px solid var(--lm-border-strong); border-radius: 8px;
+  background: var(--lm-bg-canvas);
+}
+.lm-preview-node-note strong { display: block; color: var(--lm-text-primary); font-size: 11.5px; font-weight: 550; }
+.lm-preview-node-note p { margin: 4px 0 0; color: var(--lm-text-secondary); font-size: 11.5px; line-height: 1.55; }
 .lm-preview-prompt {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin: 10px; padding: 6px 8px 6px 11px;
@@ -205,6 +211,11 @@
   background: var(--lm-bg-surface); color: var(--lm-text-primary);
   font-size: 12.5px; font-weight: 500; white-space: nowrap;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
+  transition: border-color .14s var(--lm-ease), background .14s var(--lm-ease), transform .14s var(--lm-ease);
+}
+.lm-preview-node:hover, .lm-preview-node.is-active {
+  border-color: var(--lm-border-strong);
+  background: var(--lm-bg-elevated);
 }
 .lm-preview-node.center {
   top: 50%; left: 50%; min-width: 142px; height: 44px; transform: translate(-50%,-50%);
