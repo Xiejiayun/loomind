@@ -1,5 +1,6 @@
 import { createRemoteJWKSet, errors, jwtVerify, SignJWT } from "jose";
 import { LOGIN_ACTION, type AuthUser, type LoginChallenge, type Session } from "../src/auth/shared.js";
+import { handleAi } from "./ai.js";
 import { handleDraft } from "./drafts.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import { handleShare, handleInvite } from "./sharing.js";
@@ -105,6 +106,10 @@ async function handle(request: Request, env: Env) {
   if (path.startsWith("/api/invites/")) {
     const session = request.method === "GET" ? null : await readCookie(request, env, sessionCookie);
     return handleInvite(request, env, session?.sub, path);
+  }
+  if (path === "/api/ai/config" || path === "/api/ai/stream") {
+    const session = await readCookie(request, env, sessionCookie);
+    return handleAi(request, env, session?.sub, path);
   }
   if (!["/api/auth/session", "/api/auth/challenge", "/api/auth/google", "/api/auth/logout"].includes(path)) {
     return json({ error: "接口不存在。" }, 404);

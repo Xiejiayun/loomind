@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, PanelLeft, Share2 } from "lucide-react";
 import { LocalImmerSyncAdapter, type MindmapDocument, type SyncAdapter } from "@mindmap/core";
 import { MindmapEditor } from "@mindmap/editor";
+import { useWebAiRuntime } from "./ai.js";
 import { AccountControl } from "./auth/AccountControl.js";
 import type { Session } from "./auth/shared.js";
 import { readCloud } from "./drafts/cloud.js";
@@ -60,6 +61,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
   listError: string;
 }) {
   const { t } = useI18n();
+  const proAiRuntime = useWebAiRuntime("pro");
   const [initial, setInitial] = useState<{ document: MindmapDocument; key: number }>();
   const [sync, setSync] = useState<SyncState>(() => ({ label: t.sync.connectingLabel, detail: t.sync.connectingDetail, status: "connecting" }));
   const [localError, setLocalError] = useState("");
@@ -118,6 +120,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
       chromeTheme={theme}
       initialFormatPanelOpen={false}
       initialAiPrompt={promptOnce.current}
+      aiRuntime={proAiRuntime}
       accountControl={<div className="lm-editor-navigation">
         <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={onToggleSidebar}>
           <PanelLeft size={15}/>

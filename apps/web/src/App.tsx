@@ -10,6 +10,7 @@ import { Brand, LanguageToggle, LoomindMark, ThemeToggle, type UiTheme } from ".
 
 const themeKey = "loomind-ui-theme";
 const WorkspaceApp = lazy(() => import("./WorkspaceApp.js").then(({ WorkspaceApp }) => ({ default: WorkspaceApp })));
+const TryPlaygroundPage = lazy(() => import("./TryPlaygroundPage.js").then(({ TryPlaygroundPage }) => ({ default: TryPlaygroundPage })));
 
 function useTheme() {
   const [theme, setTheme] = useState<UiTheme>(() => {
@@ -43,12 +44,18 @@ export function App() {
   useEffect(() => {
     document.title = route.pathname.startsWith("/app/mindmaps/") ? t.meta.mapTitle
       : route.pathname.startsWith("/app") ? t.meta.workspaceTitle
+      : route.pathname === "/try" ? t.meta.tryTitle
       : route.pathname === "/login" ? t.meta.loginTitle
       : t.meta.homeTitle;
   }, [route.pathname, t]);
 
   if (!session) return <div className="lm-theme lm-loading">{t.common.loadingApp}</div>;
   const notice = sessionError && <div className="lm-session-notice" role="alert">{sessionError} <button type="button" onClick={() => void refresh()}>{t.common.retry}</button></div>;
+  if (route.pathname === "/try") return <div className="lm-theme" data-theme={theme}>
+    {notice}<Suspense fallback={<div className="lm-loading">{t.common.loadingApp}</div>}>
+      <TryPlaygroundPage session={session} theme={theme} toggleTheme={toggle}/>
+    </Suspense>
+  </div>;
   if (route.pathname.startsWith("/invite/")) return <div className="lm-theme" data-theme={theme}>
     {notice}<InvitePage key={route.pathname} token={route.pathname.slice("/invite/".length)} session={session} theme={theme} toggle={toggle}/>
   </div>;
@@ -82,6 +89,7 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
       <div className="lm-container lm-site-header-inner">
         <Brand to="/"/>
         <nav aria-label={t.landing.navAria}>
+          <AppLink href="/try">{t.landing.tryFreeCta}</AppLink>
           <AppLink href="/login" className="lm-primary-button lm-header-cta">{t.landing.startCta} <ArrowRight size={13}/></AppLink>
           <LanguageToggle/>
           <ThemeToggle theme={theme} toggle={toggle}/>
@@ -94,7 +102,8 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         <h1>{t.landing.heroTitleLine1}{locale === "en" ? " " : ""}<span>{t.landing.heroTitleLine2}</span></h1>
         <p className="lm-hero-subtitle">{t.landing.heroSubtitle}</p>
         <div className="lm-hero-actions">
-          <AppLink href="/login" className="lm-primary-button">{t.landing.heroPrimaryCta} <ArrowRight size={15}/></AppLink>
+          <AppLink href="/try" className="lm-primary-button"><Sparkles size={14}/> {t.landing.tryFreeCta}</AppLink>
+          <AppLink href="/login" className="lm-secondary-button">{t.landing.heroPrimaryCta} <ArrowRight size={14}/></AppLink>
           <a href="#features" className="lm-secondary-button">{t.landing.heroSecondaryCta} <ArrowDown size={14}/></a>
         </div>
       </section>

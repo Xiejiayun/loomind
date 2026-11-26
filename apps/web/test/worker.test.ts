@@ -59,6 +59,10 @@ beforeAll(async () => {
   for (const statement of collaborationMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const aiUsageMigration = await readFile(new URL("../migrations/0005_ai_usage.sql", import.meta.url), "utf8");
+  for (const statement of aiUsageMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -75,6 +79,13 @@ beforeAll(async () => {
       return Response.json({ success, hostname: token === "wrong-host" ? "other.test" : "loomind.test", action: token === "wrong-action" ? "contact" : "google_login" });
     }
     const host = new URL(input instanceof Request ? input.url : url).hostname;
+    if (host === "pro-llm.test") {
+      const sse = [
+        `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: '{"title":"Pro Plan","recommendedStructure":"mindmap","recommendedPalette":"aurora","root":{"title":"Pro Plan","children":[{"title":"Pillar 1"}]}}' })}\n\n`,
+        `event: response.completed\ndata: {}\n\n`,
+      ].join("");
+      return new Response(sse, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+    }
     if (host === "127.0.0.1" || host === "localhost" || host === "[::1]") return realFetch(input, init);
     throw new Error("Unexpected outbound request during isolated test");
   });
@@ -292,5 +303,98 @@ describe("mindmaps API (local workerd D1)", () => {
     expect(await (await request(`mindmaps/${first}`, "GET", alice, undefined, owner)).json()).toEqual({ revision: 2, document: variants[responses.findIndex(value => value.ok)] });
     expect(await (await request(`mindmaps/${first}`, "GET", bob, undefined, { [OWNER_HEADER]: "bob" })).json()).toEqual({ revision: 0, document: null });
     expect(await (await request(`mindmaps/${second}`, "GET", bob, undefined, { [OWNER_HEADER]: "bob" })).json()).toEqual({ revision: 0, document: null });
+  });
+});
+
+describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
+  it("reports free config for guests and enforces auth + origin + quota + streaming", async () => {
+    const guestFreeCfg = await (await request("ai/config?tier=free")).json() as { tier: string; available: boolean; isMock: boolean; requiresLogin: boolean };
+    expect(guestFreeCfg).toMatchObject({ tier: "free", available: true, isMock: true, requiresLogin: false });
+
+    const guestProCfg = await (await request("ai/config?tier=pro")).json() as { tier: string; available: boolean; requiresLogin: boolean };
+    expect(guestProCfg).toMatchObject({ tier: "pro", available: false, requiresLogin: true });
+
+    // Cross-origin rejected
+    expect((await request("ai/stream", "POST", "", { tier: "free", intent: "generate_map", prompt: "Hi", locale: "en" }, { Origin: "https://evil.test" })).status).toBe(403);
+    // Pro requires login
+    expect((await request("ai/stream", "POST", "", { tier: "pro", intent: "generate_map", prompt: "Hi", locale: "en" })).status).toBe(401);
+
+    // Free Workers AI real binding path
+    const fakeAiEnv: Env = {
+      ...env,
+      AI_FREE_DAILY_LIMIT: "2",
+      AI_ALLOW_MOCK: "false",
+      AI: {
+        run: async () => {
+          const enc = new TextEncoder();
+          return new ReadableStream({
+            start(controller) {
+              controller.enqueue(enc.encode(`data: ${JSON.stringify({ response: '{"title":"Free Map","recommendedStructure":"mindmap","recommendedPalette":"aurora","root":{"title":"Free Map","children":[{"title":"A"}]}}' })}\n\n`));
+              controller.enqueue(enc.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          });
+        },
+      } as unknown as Ai,
+    };
+
+    const freeRes1 = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.10" },
+      body: JSON.stringify({ tier: "free", intent: "generate_map", prompt: "Free Map", locale: "en" }),
+    }), fakeAiEnv);
+    expect(freeRes1.status).toBe(200);
+    expect(freeRes1.headers.get("Content-Type")).toContain("text/event-stream");
+    const freeBody1 = await freeRes1.text();
+    expect(freeBody1).toContain("event: meta");
+    expect(freeBody1).toContain('"isMock":false');
+    expect(freeBody1).toContain("event: map_patch");
+    expect(freeBody1).toContain("event: done");
+
+    // Exhaust 2/day free quota on same IP
+    const freeRes2 = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.10" },
+      body: JSON.stringify({ tier: "free", intent: "generate_map", prompt: "Second", locale: "en" }),
+    }), fakeAiEnv);
+    expect(freeRes2.status).toBe(200);
+    await freeRes2.text();
+
+    const freeRes3 = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.10" },
+      body: JSON.stringify({ tier: "free", intent: "generate_map", prompt: "Third", locale: "en" }),
+    }), fakeAiEnv);
+    expect(freeRes3.status).toBe(429);
+    expect(await freeRes3.json()).toMatchObject({ code: "RATE_LIMITED" });
+
+    // Logged-in Pro path with real upstream OpenAI Responses API
+    const proCookie = await login("pro-user");
+    const proEnv: Env = {
+      ...env,
+      PRO_LLM_BASE_URL: "https://pro-llm.test/v1",
+      PRO_LLM_API_KEY: "test-key",
+      PRO_LLM_MODEL: "gpt-6.2-sol",
+      AI_ALLOW_MOCK: "false",
+    };
+    const proRes = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST",
+      headers: { Origin: origin, Cookie: proCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "pro", intent: "generate_map", prompt: "Pro Plan", locale: "en" }),
+    }), proEnv);
+    expect(proRes.status).toBe(200);
+    const proBody = await proRes.text();
+    expect(proBody).toContain('"tier":"pro"');
+    expect(proBody).toContain('"isMock":false');
+    expect(proBody).toContain("Pillar 1");
+
+    // Pro fails closed with 503 when unconfigured and mock is disabled
+    const noProRes = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST",
+      headers: { Origin: origin, Cookie: proCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "pro", intent: "generate_map", prompt: "Pro Plan", locale: "en" }),
+    }), { ...env, AI_ALLOW_MOCK: "false" });
+    expect(noProRes.status).toBe(503);
+    expect(await noProRes.json()).toMatchObject({ code: "PRO_NOT_CONFIGURED" });
   });
 });

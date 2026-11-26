@@ -8,6 +8,7 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  Square,
   SquareDashedBottom,
   FileText,
   Braces,
@@ -19,10 +20,12 @@ import {
   type MindmapLayoutResult,
 } from "@mindmap/core";
 import {
+  AiClientError,
   runNodeAiAction,
   streamGenerateMindmap,
   type NodeAiActionKind,
 } from "@mindmap/ai";
+import type { EditorAiRuntime } from "../ai-runtime.js";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
 
@@ -31,6 +34,7 @@ export interface AiChatMessage {
   role: "user" | "assistant";
   content: string;
   contextLabel?: string;
+  upgradePrompt?: boolean;
   mutation?: {
     summary: string;
     targetTopicId?: string;
@@ -43,6 +47,7 @@ interface AiChatPanelProps {
   isDark: boolean;
   layout: MindmapLayoutResult;
   queuedPrompt?: string;
+  aiRuntime?: EditorAiRuntime;
   onConsumeQueuedPrompt?: () => void;
   onClose: () => void;
 }
@@ -61,6 +66,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   isDark,
   layout,
   queuedPrompt,
+  aiRuntime,
   onConsumeQueuedPrompt,
   onClose,
 }) => {
@@ -91,6 +97,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [ignoreSelection, setIgnoreSelection] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   const sheet = useMemo(
     () => doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0],
@@ -156,6 +165,14 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     ]);
     setInput("");
     setBusy(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const onEvent = (ev: { event: string; data: unknown }) => {
+      if (ev.event === "meta" && aiRuntime?.onMeta) {
+        aiRuntime.onMeta(ev.data as Parameters<NonNullable<EditorAiRuntime["onMeta"]>>[0]);
+      }
+    };
 
     try {
       let inferredAction: NodeAiActionKind | undefined = explicitAction;
@@ -169,7 +186,23 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       }
 
       if (inferredAction) {
-        const resultText = await runNodeAiAction(adapter, sheet.id, targetId, inferredAction, locale);
+        const resultText = await runNodeAiAction(
+          adapter,
+          sheet.id,
+          targetId,
+          inferredAction,
+          locale,
+          aiRuntime
+            ? {
+                transport: aiRuntime.transport,
+                tier: aiRuntime.tier,
+                prompt: text,
+                selectedTopicIds,
+                signal: controller.signal,
+                onEvent,
+              }
+            : undefined,
+        );
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
@@ -186,11 +219,15 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           ),
         );
       } else {
-        await streamGenerateMindmap({
+        const result = await streamGenerateMindmap({
           adapter,
           sheetId: sheet.id,
           prompt: text,
           locale,
+          transport: aiRuntime?.transport,
+          tier: aiRuntime?.tier,
+          signal: controller.signal,
+          onEvent,
         });
         setMessages((prev) =>
           prev.map((m) =>
@@ -198,9 +235,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               ? {
                   ...m,
                   pending: false,
-                  content: t.aiChat.generatedFull(text),
+                  content: result?.message || t.aiChat.generatedFull(text),
                   mutation: {
-                    summary: t.aiChat.generatedFullMutation,
+                    summary: result?.summary || t.aiChat.generatedFullMutation,
                     targetTopicId: sheet.rootTopic.id,
                   },
                 }
@@ -209,13 +246,29 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t.aiChat.errorFallback;
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId ? { ...m, pending: false, content: t.aiChat.errorPrefix(msg) } : m,
-        ),
-      );
+      if (err instanceof AiClientError && err.code === "ABORTED") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId ? { ...m, pending: false, content: t.aiChat.stoppedNotice } : m,
+          ),
+        );
+      } else {
+        const msg = err instanceof Error ? err.message : t.aiChat.errorFallback;
+        const showUpgrade =
+          aiRuntime?.tier === "free" &&
+          Boolean(aiRuntime.onUpgradeToPro) &&
+          err instanceof AiClientError &&
+          err.code === "RATE_LIMITED";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? { ...m, pending: false, content: t.aiChat.errorPrefix(msg), upgradePrompt: showUpgrade }
+              : m,
+          ),
+        );
+      }
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setBusy(false);
     }
   };
@@ -281,6 +334,65 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Tier & Quota Status Strip */}
+      {aiRuntime && (
+        <div
+          className={`flex shrink-0 flex-wrap items-center justify-between gap-1.5 border-b px-3 py-1.5 text-[10.5px] ${borderCls} ${
+            isDark ? "bg-white/[0.025]" : "bg-slate-900/[0.025]"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${
+                aiRuntime.tier === "pro"
+                  ? isDark
+                    ? "bg-indigo-500/20 text-indigo-200"
+                    : "bg-indigo-100 text-indigo-800"
+                  : isDark
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "bg-emerald-100 text-emerald-800"
+              }`}
+            >
+              {aiRuntime.tier === "pro" ? t.aiChat.tierProBadge : t.aiChat.tierFreeBadge}
+            </span>
+            {aiRuntime.config?.modelLabel && (
+              <span className={`truncate ${mutedTextCls}`} title={aiRuntime.config.modelLabel}>
+                {aiRuntime.config.modelLabel}
+              </span>
+            )}
+            {aiRuntime.config?.isMock && (
+              <span
+                className={`rounded border px-1 py-0.25 text-[9.5px] ${
+                  isDark
+                    ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                    : "border-amber-500/30 bg-amber-50 text-amber-800"
+                }`}
+              >
+                {t.aiChat.mockBadge}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {aiRuntime.config && (
+              <span className={mutedTextCls}>
+                {t.aiChat.quotaLabel(aiRuntime.config.remainingToday, aiRuntime.config.dailyLimit)}
+              </span>
+            )}
+            {aiRuntime.tier === "free" && aiRuntime.onUpgradeToPro && (
+              <button
+                type="button"
+                onClick={aiRuntime.onUpgradeToPro}
+                className={`font-medium underline-offset-2 hover:underline ${
+                  isDark ? "text-indigo-300 hover:text-indigo-200" : "text-indigo-700 hover:text-indigo-900"
+                }`}
+              >
+                {t.aiChat.upgradeCta}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Message Stream */}
       <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-3.5">
@@ -369,6 +481,19 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   <div className={`text-[12.5px] leading-relaxed ${msg.pending ? mutedTextCls : ""}`}>
                     {msg.content}
                   </div>
+                  {msg.upgradePrompt && aiRuntime?.onUpgradeToPro && (
+                    <button
+                      type="button"
+                      onClick={aiRuntime.onUpgradeToPro}
+                      className={`inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-[11px] font-medium transition ${
+                        isDark
+                          ? "bg-indigo-500/25 text-indigo-100 hover:bg-indigo-500/35"
+                          : "bg-indigo-600 text-white hover:bg-indigo-700"
+                      }`}
+                    >
+                      <Sparkles className="h-3 w-3" /> {t.aiChat.upgradeCta}
+                    </button>
+                  )}
                   {msg.mutation && (
                     <div
                       className={`rounded-[7px] border p-2.5 text-[11.5px] ${
@@ -496,19 +621,35 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              disabled={busy || !input.trim()}
-              onClick={() => void executePrompt(input)}
-              aria-label={t.aiChat.sendAria}
-              className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition disabled:opacity-35 ${
-                isDark
-                  ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"
-                  : "bg-[#14161b] text-white hover:bg-[#282c35]"
-              }`}
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </button>
+            {busy ? (
+              <button
+                type="button"
+                onClick={() => abortRef.current?.abort()}
+                aria-label={t.aiChat.stopAria}
+                title={t.aiChat.stopAria}
+                className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition ${
+                  isDark
+                    ? "bg-red-500/25 text-red-200 hover:bg-red-500/35"
+                    : "bg-red-600 text-white hover:bg-red-700"
+                }`}
+              >
+                <Square className="h-3 w-3 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!input.trim()}
+                onClick={() => void executePrompt(input)}
+                aria-label={t.aiChat.sendAria}
+                className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition disabled:opacity-35 ${
+                  isDark
+                    ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"
+                    : "bg-[#14161b] text-white hover:bg-[#282c35]"
+                }`}
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>

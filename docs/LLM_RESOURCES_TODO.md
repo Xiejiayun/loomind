@@ -8,9 +8,9 @@
 
 | 编号 | 资源名称 | 对应环境变量 / 配置项 | 用途 | 当前开发态替代方案（Mock） | 是否必填（生产） |
 |---|---|---|---|---|---|
-| **R1** | **自有付费 LLM 代理站地址** | `PRO_LLM_BASE_URL`（Worker Secret / Var） | 已登录 Pro 用户调用的 OpenAI 兼容接口根地址（如 `https://your-proxy.example.com/v1`） | 当未配置且 `AI_ALLOW_MOCK=true` 时，走 `Pro Mock Provider`（带 `isMock: true` 标记） | **生产必填** |
-| **R2** | **自有付费 LLM 代理站密钥** | `PRO_LLM_API_KEY`（Worker Secret） | 调用代理站的 `Authorization: Bearer <key>` 凭据 | 同上（Mock 兜底） | **生产必填** |
-| **R3** | **付费模式默认模型名** | `PRO_LLM_MODEL`（Worker Var） | 指定代理站上的强力模型 ID（例如 `gpt-4o`、`claude-sonnet-4-5`、`gemini-2.5-pro` 等） | 默认占位值 `pro-mock-model` | **生产必填** |
+| **R1** | **自有付费 LLM 代理站地址** | `PRO_LLM_BASE_URL`（Worker Secret / Var） | 已登录 Pro 用户调用的 OpenAI Responses / Chat 兼容接口根地址（已写入本地 `.dev.vars`：`https://aerial.jeremyxie.com/v1`） | 本地 `.dev.vars` 已配置真实地址；线上缺失且 `AI_ALLOW_MOCK=true` 时走 `Pro Mock Provider` | **需写入 Cloudflare Worker Secret** |
+| **R2** | **自有付费 LLM 代理站密钥** | `PRO_LLM_API_KEY`（Worker Secret） | 调用代理站的 `Authorization: Bearer <key>` 凭据（已从本地文件写入被 `.gitignore` 忽略的 `apps/web/.dev.vars`） | 本地 `.dev.vars` 已配置真实密钥；线上未写入前走 Mock 兜底 | **需写入 Cloudflare Worker Secret** |
+| **R3** | **付费模式默认模型名** | `PRO_LLM_MODEL`（Worker Var） | 指定代理站上的强力模型 ID（已在 `wrangler.jsonc` 配置为 `gpt-6.2-sol`，已实测通过 `/v1/responses` 流式返回） | 已配置真实模型名 | **已完成配置** |
 | **R4** | **Cloudflare Workers AI 绑定确认** | `wrangler.jsonc` 中 `"ai": { "binding": "AI" }` | `/try` 免费体验页调用 Cloudflare 原生免费 10,000 Neurons/天 推理 | 本地 `wrangler dev --local` 无远端 AI 绑定且 `AI_ALLOW_MOCK=true` 时走 `Free Mock Provider` | **生产自动生效**（确认账户已开通 Workers AI） |
 | **R5** | **免费体验默认模型名** | `AI_FREE_MODEL`（Worker Var） | Cloudflare Workers AI 免费目录模型 ID | 代码内置默认 `@cf/qwen/qwen2.5-7b-instruct`（可按需替换如 `@cf/meta/llama-3.1-8b-instruct`） | 可选（已有默认值） |
 | **R6** | **每日调用配额阈值** | `AI_FREE_DAILY_LIMIT`、`AI_PRO_DAILY_LIMIT` | 控制单 IP 免费体验次数与单登录用户付费调用次数 | 代码默认 `10`（免费） / `100`（付费） | 可选（已有默认值） |

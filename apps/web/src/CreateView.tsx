@@ -20,7 +20,7 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
   activeWorkspaceId: string | null;
   workspaces: WorkspaceSummary[];
   onModeChange: (mode: "idea" | "outline") => void;
-  onCreate: (document: MindmapDocument, workspaceId: string | null) => Promise<void>;
+  onCreate: (document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) => Promise<void>;
 }) {
   const { t } = useI18n();
   const writable = workspaces.filter((space) => space.role !== "viewer");
@@ -44,7 +44,7 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
       const document = mode === "outline"
         ? documentFromOutline(parsed.outline ?? parseOutline(outlineText), templateId)
         : documentFromTopic(prompt, templateId);
-      await onCreate(document, workspaceId);
+      await onCreate(document, workspaceId, mode === "idea" ? prompt.trim() : undefined);
     } catch (reason) { setError(reason instanceof Error ? reason.message : t.createView.createError); }
     finally { setBusy(false); }
   }
@@ -59,7 +59,7 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
     <div className="lm-create-grid">
       <section className="lm-create-input-panel" aria-label={mode === "outline" ? t.createView.outlineInputAria : t.createView.topicInputAria}>
         {mode === "idea" ? <>
-          <div className="lm-panel-heading"><span className="lm-eyebrow">01 / START WITH AN IDEA</span><span className="lm-badge">AI COMING SOON</span></div>
+          <div className="lm-panel-heading"><span className="lm-eyebrow">01 / START WITH AN IDEA</span><span className="lm-badge">PRO LLM READY</span></div>
           <h2>{t.createView.ideaHeading}</h2><p>{t.createView.ideaDesc}</p>
           <label htmlFor="lm-topic-input">{t.createView.ideaLabel}</label>
           <textarea id="lm-topic-input" className="lm-create-textarea lm-topic-textarea" value={prompt} maxLength={120}

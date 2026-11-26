@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Braces, FileText, ListChecks, Sparkles, X } from "lucide-react";
 import { collectAllTopics, richTextToPlainText } from "@mindmap/core";
-import { runNodeAiAction, type NodeAiActionKind } from "@mindmap/ai";
+import { AiClientError, runNodeAiAction, type NodeAiActionKind } from "@mindmap/ai";
+import type { EditorAiRuntime } from "../ai-runtime.js";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
 
 interface InlineAiBarProps {
   open: boolean;
   isDark: boolean;
+  aiRuntime?: EditorAiRuntime;
   onClose: () => void;
   onContinueInPanel: (prompt?: string) => void;
 }
@@ -15,6 +17,7 @@ interface InlineAiBarProps {
 export const InlineAiBar: React.FC<InlineAiBarProps> = ({
   open,
   isDark,
+  aiRuntime,
   onClose,
   onContinueInPanel,
 }) => {
@@ -24,11 +27,13 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
   const { locale, t } = useEditorI18n();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       setText("");
+      setError("");
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
@@ -53,9 +58,30 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
   const triggerQuick = async (action: NodeAiActionKind) => {
     if (busy) return;
     setBusy(true);
+    setError("");
     try {
-      await runNodeAiAction(adapter, sheet.id, targetId, action, locale);
+      await runNodeAiAction(
+        adapter,
+        sheet.id,
+        targetId,
+        action,
+        locale,
+        aiRuntime
+          ? {
+              transport: aiRuntime.transport,
+              tier: aiRuntime.tier,
+              prompt: t.aiChat.quickActions[action].prompt,
+              selectedTopicIds,
+              onEvent: (ev) => {
+                if (ev.event === "meta") aiRuntime.onMeta?.(ev.data);
+              },
+            }
+          : undefined,
+      );
       onClose();
+    } catch (err) {
+      if (err instanceof AiClientError && err.code === "ABORTED") return;
+      setError(err instanceof Error ? err.message : t.aiChat.errorFallback);
     } finally {
       setBusy(false);
     }
@@ -150,6 +176,11 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
           {t.inlineAi.continueInPanel} <ArrowUpRight className="h-3 w-3" />
         </button>
       </div>
+      {error && (
+        <p role="alert" className="mt-1.5 text-[11px] text-red-500">
+          {error}
+        </p>
+      )}
     </div>
   );
 };

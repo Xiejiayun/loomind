@@ -1,4 +1,13 @@
 export { MindmapEditor, type MindmapEditorProps } from "./MindmapEditor.js";
+export {
+  AiClientError,
+  createHttpAiTransport,
+  type AiConfigResponse,
+  type AiStreamMeta,
+  type AiTier,
+  type AiTransport,
+  type EditorAiRuntime,
+} from "./ai-runtime.js";
 export { useMindmapStore, useMindmapStoreApi, MindmapStoreContext } from "./context.js";
 export { DomTextMeasurer } from "./canvas/DomMeasurer.js";
 export { HybridCanvas } from "./canvas/HybridCanvas.js";
