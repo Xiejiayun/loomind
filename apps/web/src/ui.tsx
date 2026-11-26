@@ -15,20 +15,30 @@ export function LoomindMark({ size = 24 }: { size?: number }) {
       aria-hidden="true"
       className="lm-brand-svg"
     >
-      <path
-        d="M11 7C10.2 14.5 10.5 20.5 12.2 22.8C13.8 25 18.8 24.2 23.5 21.5"
-        stroke="currentColor"
-        strokeWidth="2.1"
-        strokeLinecap="round"
-      />
-      <path
-        d="M14.5 14C17.8 11.2 21.2 10.2 24 10.8"
+      <rect
+        x="2.5"
+        y="2.5"
+        width="27"
+        height="27"
+        rx="6.5"
+        fill="currentColor"
+        fillOpacity="0.04"
         stroke="currentColor"
         strokeWidth="1.25"
-        strokeLinecap="round"
-        strokeOpacity="0.52"
+        strokeOpacity="0.42"
       />
-      <circle cx="24" cy="10.8" r="1.5" fill="currentColor" fillOpacity="0.72" />
+      <text
+        x="16"
+        y="21.4"
+        textAnchor="middle"
+        fill="currentColor"
+        fontFamily='"Instrument Serif", Georgia, "Times New Roman", serif'
+        fontSize="16"
+        fontStyle="italic"
+        letterSpacing="-0.5"
+      >
+        Lm
+      </text>
     </svg>
   );
 }

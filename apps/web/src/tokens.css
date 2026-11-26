@@ -46,6 +46,7 @@
   --lm-grid: rgba(255, 255, 255, 0.035);
 
   /* Radius & Motion */
+  --lm-font-display: "Instrument Serif", "Noto Serif SC", "Songti SC", Georgia, "Times New Roman", serif;
   --lm-radius-sm: 5px;
   --lm-radius-md: 7px;
   --lm-radius-lg: 10px;
