@@ -61,9 +61,9 @@ loomind/
 | 验证批次 | 执行内容与结果 | 真实环境与边界限制 |
 |---|---|---|
 | **GitHub CI 基线读取** | 读取 `origin/main@7fc979c` 最新 CI Run `45805166129`（`Verify` 通过，7 文件 55 用例）。 | 覆盖既有 Node 单测与构建；不包含 `apps/web/test/*` 类型检查，不包含 `packages/editor` 组件/浏览器测试。 |
-| **源码全仓静态核对** | 在独立只读工作区逐文件核对 `0c483e9..7fc979c` 变更与全部历史线索及当前代码路径。 | 纯静态读码，隔离工作区无 `node_modules`，未在本地执行安装/测试。 |
-| **初轮定向内存验证（7 项）** | 针对 `7fc979c` 冻结源码运行 7 项定向 Vitest 内存测试（7/7 通过）：双标签 CAS 后本地缓存覆盖（409 前/后）、概要 `indent`/`outdent`/`reparent` 产生 `INVALID_SUMMARY_RANGE`、`addSibling` 合法平移、远端空文档导致 clean 缓存误报 `synced`、XMind 往返丢布局/任务与嵌套概要改挂根、OPML 双顶层仅留后者。 | 复用既有依赖，使用内存 mock 存储/云端；**未执行**干净 `--frozen-lockfile` 重装、真实浏览器、真实 Worker/D1 网络调用或原生 XMind 客户端验证；422 为服务端源码静态链路推断。 |
-| **输入与结构引用补核（1+5 项）** | 针对 `7fc979c` 运行 6 项定向 Vitest 测试（6/6 通过）：`replaceSheetRoot` 与概要级联悬空引用、`relationship/upsert` 6 位色、真实 TipTap 2.27.3 schema 构造 `#FEF08A` 高亮 mark 致 `loadLocal` parse 失败（且确认原 IDB 记录保留而非永久删除）、图片 `image/gif` MIME 拒判与移除图片后残留资产触发客户端 1 MiB 413、双 adapter（`LocalImmer` / `Loro`）拒绝边界。 | 使用合成测试数据与 `fake-indexeddb`/mock 云端；**真实浏览器点击/键盘/剪贴板验证未完成**（因浏览器自动化工具无法校验当前 URL 许可而停止，该子任务结果为 `failed`）。 |
+| **源码全仓静态核对** | 在独立只读工作区逐文件核对 `0c483e9..7fc979c` 变更与全部历史线索及当前代码路径。 | 纯静态读码；初轮只读静态核对在无 `node_modules` 的干净隔离工作区执行，该阶段未运行本地安装或测试。 |
+| **初轮定向内存验证（7 项）** | 针对 `7fc979c` 冻结源码运行 7 项定向 Vitest 内存测试（7/7 通过）：双标签 CAS 后本地缓存覆盖（409 前/后）、概要 `indent`/`outdent`/`reparent` 产生 `INVALID_SUMMARY_RANGE`、`addSibling` 合法平移、远端空文档导致 clean 缓存误报 `synced`、XMind 往返丢布局/任务与嵌套概要改挂根、OPML 双顶层仅留后者。 | 随后在独立本地临时目录复用既有本地依赖执行，使用内存 mock 存储/云端；**未执行**干净 `--frozen-lockfile` 重装、真实浏览器、真实 Worker/D1 网络调用或原生 XMind 客户端验证；422 为服务端源码静态链路推断。 |
+| **输入与结构引用补核（1+5 项）** | 针对 `7fc979c` 运行 6 项定向 Vitest 测试（6/6 通过）：`replaceSheetRoot` 与概要级联悬空引用、`relationship/upsert` 6 位色、真实 TipTap 2.27.3 schema 构造 `#FEF08A` 高亮 mark 致 `loadLocal` parse 失败（且确认原 IDB 记录保留而非永久删除）、图片 `image/gif` MIME 拒判与移除图片后残留资产触发客户端 1 MiB 413、双 adapter（`LocalImmer` / `Loro`）拒绝边界。 | 随后在独立本地临时目录复用既有本地依赖执行，使用合成测试数据与 `fake-indexeddb`/mock 云端；**真实浏览器点击/键盘/剪贴板验证未完成**（因浏览器自动化工具无法校验当前 URL 许可而停止，该子任务结果为 `failed`）。 |
 
 > **重要区分**：第 6 节中各任务列出的“实施期必过验收命令”是**未来逐任务 PR 必须实际运行并贴出真实结果的验收要求**，不是当前已完成执行的验证。
 
@@ -76,15 +76,15 @@ loomind/
 | 编号 | 问题描述 | 精确源码位置（`7fc979c`） | 验证状态与真实影响 | 归属任务 |
 |---|---|---|---|---|
 | **E1** | 同账号同图多标签共享无保护 IndexedDB 键，胜者回写覆盖他页未确认草稿（无论在 409 前或 409 后发生），刷新后分歧稿丢失 | `apps/web/src/persistence.ts:7-9, 43-51`；`apps/web/src/drafts/workspace.ts:67-74, 81-91, 108-125, 130-135` | 源码 + 7 项定向内存验证已证实 | **T1** |
-| **E2** | 远端删除或失权后单图 `GET` 返回 `{revision:0,document:null}`：clean 旧缓存仍显示“已同步”，dirty 缓存陷入“用云端版本→再次 409”循环；列表缺项无状态区分 | `apps/web/worker/drafts.ts:40-44, 90-108`；`apps/web/src/drafts/workspace.ts:99-115, 125-133`；`apps/web/src/WorkspaceApp.tsx:90-116`；`apps/web/src/auth/AccountControl.tsx:34-57` | 源码 + 定向内存验证已证实（服务端刻意不区分删除与无权，客户端不得臆断） | **T1** |
+| **E2** | 远端删除或失权后单图 `GET` 返回 `{revision:0,document:null}`：clean 旧缓存仍显示“已同步”，dirty 缓存陷入“用云端版本→再次 409”循环；列表缺项无状态区分 | `apps/web/worker/drafts.ts:40-44, 90-108`；`apps/web/src/drafts/workspace.ts:99-115, 125-133`；`apps/web/src/WorkspaceApp.tsx:90-116`；`apps/web/src/auth/AccountControl.tsx:34-57` | 定向内存验证已复现 **clean 缓存在 `{revision:0,document:null}` 下误报 `synced`**；**dirty 缓存点击“使用云端版本”进入 409 循环及列表缺项展示**为源码静态链路推断（服务端刻意不区分删除与无权，客户端不得臆断） | **T1** |
 | **E3** | 本地坏记录触发 `loadLocal` `MindmapDocumentSchema.parse` 失败后设置 `cacheReadable=false`，普通 UI 无法加载或导出原始坏记录（原记录保留在 IDB 但缺恢复入口，且易被他页覆盖） | `apps/web/src/persistence.ts:28-40, 53-67`；`apps/web/src/drafts/workspace.ts:48-58, 81-85`；`apps/web/src/EditorWorkspace.tsx:76-106` | 源码 + 补核定向 `fake-indexeddb` 验证已证实（注：非“刷新即永久删除”，而是无内置恢复入口） | **T1** |
-| **E4** | 结构移动命令 `reparent`/`indent`/`outdent`/`reorder`/`detachToFloating` 未维护 `sheet.summaries`，产生 `INVALID_SUMMARY_RANGE` 或覆盖错位，阻断云端校验保存 | `packages/core/src/model/document.ts:124-130`；`packages/core/src/model/invariants.ts:90-101`；`packages/core/src/store/reducer.ts:249-325`；`packages/editor/src/outline/OutlinerView.tsx:145-149`；`packages/editor/src/canvas/HybridCanvas.tsx:303-327`；`apps/web/worker/drafts.ts:62-71` | 源码 + 定向核心测试已证实（422 经服务端源码静态推断；`addSibling`/`delete` 已有部分维护） | **T2** |
+| **E4** | 结构移动命令 `reparent`/`indent`/`outdent`/`reorder`/`detachToFloating` 未维护 `sheet.summaries`，产生 `INVALID_SUMMARY_RANGE` 或覆盖错位，阻断云端校验保存 | `packages/core/src/model/document.ts:124-130`；`packages/core/src/model/invariants.ts:90-101`；`packages/core/src/store/reducer.ts:249-325`；`packages/editor/src/outline/OutlinerView.tsx:145-149`；`packages/editor/src/canvas/HybridCanvas.tsx:303-327`；`apps/web/worker/drafts.ts:62-71` | 定向核心测试已复现 **`reparent`/`indent`/`outdent` 产生 `INVALID_SUMMARY_RANGE`**；**`reorder`/`detachToFloating` 覆盖语义错位与 Worker HTTP 422 响应**为源码静态链路推断（`addSibling`/`delete` 已有部分维护） | **T2** |
 | **E5** | `doc/replaceSheetRoot` 未按消失节点执行级联清理；`cascadeCleanup` 删除失效概要时未递归纳入 `summary.topic` 子树且部分分支未登记概要 ID；`invariants.ts` 未校验 `boundary` 目标存在性 | `packages/core/src/store/reducer.ts:85-116, 171-175, 215-246`；`packages/core/src/model/invariants.ts:90-120`；`packages/ai/src/actions.ts:143-150` | 源码 + 补核定向测试已证实 | **T2** |
 | **E6** | TipTap 高亮按钮传入 6 位色 `#FEF08A` 且 `normalizeTipTapJson` 原样透传 marks 并丢弃 `hardBreak`；`TopicCard` 读 `backgroundColor` 而 TipTap 写 `color`；`relationship/upsert` 跳过 `normalizeHexColor` | `packages/editor/src/canvas/TopicEditor.tsx:22-46, 61-74, 157-164`；`packages/editor/src/canvas/TopicCard.tsx:48-69`；`packages/core/src/model/schema.ts:5-8, 55-64, 169-182`；`packages/core/src/store/reducer.ts:546-564` | 源码 + 补核真实 TipTap 2.27.3 schema 测试已证实（真实浏览器点击/粘贴未测；关系 6 位色普通 UI 可达性未证实） | **T3** |
 | **E7** | 剪贴板粘贴/文件处理未在写入前校验 `InlineAssetSchema` 允许的 4 种 MIME；清除/替换图片或删节点不回收无引用 `doc.assets`，导致残留资产触发客户端/服务端 1 MiB 413 | `packages/editor/src/canvas/HybridCanvas.tsx:454-484`；`packages/editor/src/chrome/CanvasDock.tsx:129-155, 176-181`；`packages/core/src/model/schema.ts:206-213`；`packages/core/src/store/reducer.ts:491-500`；`apps/web/src/drafts/cloud.ts:40-45` | 源码 + 补核定向测试已证实（属可恢复残留资产 413，非永久 413；真实浏览器剪贴板 MIME 未测） | **T4** |
 | **E8** | XMind 导出/导入丢失 sheet 布局/方向/间距及 `topic.task`，将子分支概要扁平写至 `rootTopic` 并在导入时强挂根导致非法范围，且导入缺少 schema/invariants 门禁 | `packages/core/src/io/xmind.ts:38-179`；`packages/core/src/model/document.ts:251-288`；`packages/core/test/io.test.ts:15-25` | 源码 + 真实 codec 内存往返测试已证实（未测原生 XMind 客户端） | **T5** |
 | **E9** | OPML 导入遇到多个顶层 `<outline>` 时反复覆写 `root = topic`，仅保留最后一个顶层节点及其子树 | `packages/core/src/io/opml.ts:54-93`；`packages/core/test/io.test.ts:39-46` | 源码 + 真实 codec 内存测试已证实 | **T6** |
-| **E10** | `apps/web/package.json` 暴露直接执行 `wrangler deploy` 的 `deploy` 脚本（目标指向生产配置），与受控生产发布工作流不一致；`docs/DEPLOYMENT.md` 仍包含已删除的 `/try` 游客检查项 | `apps/web/package.json:12`；`apps/web/wrangler.jsonc:3-4, 9, 15-20`；`.github/workflows/deploy-production.yml`；`docs/DEPLOYMENT.md:7, 25-29` | 源码与文档静态核对已证实（未检查生产凭据/权限，删脚本不等于撤销 Cloudflare 权限） | **T7** |
+| **E10** | `apps/web/package.json` 暴露直接执行 `wrangler deploy` 的 `deploy` 脚本（目标指向生产配置），与受控生产发布工作流不一致；`docs/DEPLOYMENT.md:25` 人工验收清单仍包含过时的“至少检查游客打开编辑器”条目（`docs/DEPLOYMENT.md` 不含 `/try` 字样，第 29 行“游客会话”系对应仍有效的 `/api/auth/session` 自动健康检查，须保留） | `apps/web/package.json:12`；`apps/web/wrangler.jsonc:3-4, 9, 15-20`；`.github/workflows/deploy-production.yml:260-265`；`docs/DEPLOYMENT.md:7, 25, 29` | 源码与文档静态核对已证实（未检查生产凭据/权限，删脚本不等于撤销 Cloudflare 权限） | **T7** |
 | **E11** | `apps/web/tsconfig.json` 与 `apps/web/worker/tsconfig.json` 均未包含 `apps/web/test/*`，导致 Web 测试脱离 `pnpm typecheck` 与 CI 类型门禁 | `apps/web/tsconfig.json:8`；`apps/web/worker/tsconfig.json:8`；`apps/web/package.json:13`（对比 `packages/core/tsconfig.json:7` 与 `packages/ai/tsconfig.json:7`） | 配置缺失已证实；具体 TS 编译诊断须在 T8 实施期以实际 `tsc` 输出为准（不预先假定特定四参 mock 必报错） | **T8** |
 
 ### 4.2 部分修复 / 残余边界（Partially Fixed）
@@ -123,7 +123,7 @@ loomind/
 - **第 1 轮共同决议**：采纳四分类门槛、杠杆优先级微调（且业务 PR 不得依赖未合并护栏 PR）、按行为契约与可独立回滚界定拆分边界；核实并记录 GitHub `main` 分支保护事实（`Verify`、`strict=true`、`enforce_admins=true`）。
 
 ### 第 2 轮：概要覆盖语义、结构编辑不变量与独立 IO 契约
-- **架构师主张与证据**：基于 7 项定向内存验证，证实 `addSibling`/`delete` 已有部分维护，而 `reparent`/`indent`/`outdent` 产生 `INVALID_SUMMARY_RANGE`、`reorder`/`detach` 会导致覆盖语义错位；主张本项定 P1、不迁移现有 `parentId + [startIndex, endIndex]` 格式、不放宽服务端校验；反对截断区间，倾向在形成非连续/跨父时原子拒绝并给编辑器反馈；提出三类最小语义（部分移出收缩、全员同父连续是否迁移、浮出/非连续拒绝），并要求 XMind 保持独立 IO 任务。
+- **架构师主张与证据**：基于 7 项定向内存验证与源码核对，定向核心测试实测证实 `addSibling` 合法平移及 `reparent`/`indent`/`outdent` 产生 `INVALID_SUMMARY_RANGE`，源码静态分析同时指出 `delete` 已有局部维护、`reorder`/`detachToFloating` 会导致覆盖语义错位且 Worker 校验链路会返回 422（静态推断）；主张本项定 P1、不迁移现有 `parentId + [startIndex, endIndex]` 格式、不放宽服务端校验；反对截断区间，倾向在形成非连续/跨父时原子拒绝并给编辑器反馈；提出三类最小语义（部分移出收缩、全员同父连续是否迁移、浮出/非连续拒绝），并要求 XMind 保持独立 IO 任务。
 - **实现方回应、结构证明与新增证据**：
   1. **结构反证**：在单节点移动命令下，从连续区间移出单个节点后剩余成员必然连续，真正破坏连续性的仅限同父 `reorder`、跨父 `reparent` 插断区间内部以及单成员 `detachToFloating`。
   2. **三类确定语义**：部分移出自动收缩；单成员/整组移至常规新父且连续时**迁移概要绑定**（反例证明：拒绝单成员移动会导致加概要后节点无法升降级，删除则会静默丢概要内容）；`reorder`/跨父插断及单成员 `detachToFloating` 原子拒绝并轻提示（`addSibling` 延续现行并入行为，已有子树插断则拒绝防误吞）。
@@ -173,7 +173,7 @@ loomind/
 |---|---|---|---|---|
 | **T8** | P2 | Web 测试类型检查补齐 | `apps/web/test/tsconfig.json`、`apps/web/package.json`（`typecheck`）、`apps/web/test/*.ts` 既有类型修正 | 与 T1 共享 `apps/web/test/workspace.test.ts`；与 T7 共享 `apps/web/package.json` 不同 script 字段 |
 | **T3** | P1 | 富文本与命令输入契约 | `packages/editor/src/canvas/TopicEditor.tsx`、`TopicCard.tsx`、`packages/core/src/store/reducer.ts`（`relationship/upsert`）、对应测试 | 与 T2/T4 共享 `reducer.ts` 不同命令段 |
-| **T1** | P1 | 草稿隔离、远端不可用与原件恢复 | `apps/web/src/persistence.ts`、`apps/web/src/drafts/*`、`AccountControl.tsx`、`WorkspaceApp.tsx`（仅本地列表映射与安全 legacy 迁移）、`i18n.ts`、`apps/web/test/workspace.test.ts` | 与 T8 共享 `apps/web/test/workspace.test.ts` |
+| **T1** | P1 | 草稿隔离、远端不可用与原件恢复 | `apps/web/src/persistence.ts`、`apps/web/src/drafts/*`、`AccountControl.tsx`、`WorkspaceApp.tsx`（仅本地列表映射与安全 legacy 迁移）、`i18n.ts`、`apps/web/test/workspace.test.ts`、独立只读回滚恢复产物与手册 | 与 T8 共享 `apps/web/test/workspace.test.ts` |
 | **T2** | P1 | Core 结构命令与引用完整性 | `packages/core/src/store/reducer.ts`（移动/替换根/级联）、`invariants.ts`、最小拒绝通知契约、`packages/editor/` 最小拒绝轻提示、核心与适配器测试 | 与 T3/T4 共享 `reducer.ts` 不同命令段 |
 | **T5** | P1 | XMind 导入导出保真与兼容说明 | `packages/core/src/io/xmind.ts`、`packages/core/test/xmind.test.ts`、必要兼容说明 | 独立专用测试文件，不重排既有共用测试 |
 | **T6** | P1 | OPML 多顶层导入保全 | `packages/core/src/io/opml.ts`、`packages/core/test/opml.test.ts`、必要兼容说明 | 独立专用测试文件 |
@@ -218,26 +218,27 @@ loomind/
 
 #### T1（P1）：草稿隔离、远端不可用与原件恢复
 - **证据**：`apps/web/src/persistence.ts:7-9, 28-67`、`apps/web/src/drafts/workspace.ts:48-144`、`apps/web/src/WorkspaceApp.tsx:90-119`、`apps/web/worker/drafts.ts:40-44, 90-108`、`apps/web/src/auth/AccountControl.tsx:34-57`。
-- **范围**：`apps/web/src/persistence.ts`、`apps/web/src/drafts/workspace.ts`、`apps/web/src/drafts/cloud.ts`（仅状态分类）、`apps/web/src/auth/AccountControl.tsx`（及最小恢复条 UI）、`apps/web/src/WorkspaceApp.tsx`（仅本地缓存列表聚合/状态标记与幂等 legacy 迁移）、`apps/web/src/i18n.ts`、`apps/web/test/workspace.test.ts`。
+- **范围**：`apps/web/src/persistence.ts`、`apps/web/src/drafts/workspace.ts`、`apps/web/src/drafts/cloud.ts`（仅状态分类）、`apps/web/src/auth/AccountControl.tsx`（及最小恢复条 UI）、`apps/web/src/WorkspaceApp.tsx`（仅本地缓存列表聚合/状态标记与幂等 legacy 迁移）、`apps/web/src/i18n.ts`、`apps/web/test/workspace.test.ts`，以及随 T1 独立交付的一份经审查的**独立零依赖只读浏览器恢复脚本/片段、校验和（如 SHA-256）与操作手册**（存放于独立于新版前端 bundle 的不可变已审提交/独立恢复文档中，本方案文档仅定义规格、不在此处附带脚本实现）。
 - **核心设计约束（第 3 轮终版决议）**：
   1. **存储与键隔离**：保持 `loomind-db` `DB_VERSION = 1`（`docs` store），采用编码定界键 + 记录体 `{ schema: 2, kind, owner, mapId, writerId? }` 双重校验隔离四类记录：`v2:synced`（云端已确认快照）、`v2:draft`（按内存一次性 `writerId = crypto.randomUUID()` 隔离的实例草稿，绝不存 `sessionStorage`）、`v2:corrupt`（坏原始记录只读隔离区）、`v2:migrated`（按 `(owner, sourceKey, sourceFingerprint)` 幂等记录，防止重复复制坏记录或删空后复活未变更 legacy 稿）；旧单键 `google:${owner}:${id}` 只读兼容迁移、永不先删。
   2. **活跃 Writer 保护**：绝不自动删除其他 `writerId` 的草稿；认领恢复仅复制到新实例自己的 `writerId` 键；相同内容仅在 UI 层合并展示；其他 `writerId` 仅可由其自身精确上传确认清理，或由用户显式选中放弃并在事务内用 `(expectedLocalGen, expectedContentFingerprint)` 做 CAS 校验（若已更新则中止删除并提示）。
-  3. **全路径 CAS、因果水位与 `await` 重核**：
-     - 普通防抖 `flush` 在 IDB 事务内执行 `localGen` CAS 与因果水位检查，拒绝迟到旧 `gen` 覆盖新记录或把已确认清理的草稿重新写活，且 `baseRevision` 仅按本 `writerId` 自身因果确认推进，绝不回退、绝不借用他页 `synced.revision`；
-     - 上传前捕获不可变四元组 `{ writerId, sentGen, baseRevision, docSnapshot }`，确认事务内对 `v2:synced` 执行 `existing.revision < newRevision` CAS，并仅当 `stored.localGen === sentGen && this.localGen === sentGen` 时清理本 `writerId` 草稿并推进水位；
-     - `await` IDB 提交后、更新 UI 为 `synced` 前必须重核 `!closed && owner === reqOwner && localGen === sentGen`。
+  3. **全路径 CAS、因果水位与草稿清理解耦及 `await` 重核**：
+     - 普通防抖 `flush` 在 IDB 事务内执行 `localGen` CAS 与本 `writerId` 因果水位校验（`ackedGen` / `confirmedBaseRevision`），拒绝迟到旧 `gen` 覆盖新记录或把已确认清理的草稿重新写活；草稿写入的基线单调不降（取 `Math.max(flushBaseRevision, confirmedBaseRevision)`），绝不回退，也绝不借用他页 `synced.revision`；
+     - 上传前捕获不可变四元组 `{ writerId, sentGen, baseRevision, docSnapshot }`，收到该次上传确认（`sentGen -> newRevision`）后，在确认事务内对 `v2:synced` 执行 `existing.revision < newRevision` CAS，并将因果水位推进与草稿清理**严格解耦为两步**：
+       - **步骤 A（本 `writerId` 收到 `sentGen -> newRevision` 确认时恒执行）**：单调推进本 `writerId` 独立的已确认因果水位（`ackedGen = Math.max(ackedGen, sentGen)`）与已确认因果基线（`confirmedBaseRevision = Math.max(confirmedBaseRevision, newRevision)`），绝不借用其他 `writerId` 的 `synced.revision`；若存储或内存中已存在因果建立在 `sentGen` 之上的更新编辑（`gen2 > sentGen`），**完整保留 `gen2` 的 dirty 内容不被触碰或覆盖**，同时将其因果基线安全推进至 `newRevision`，确保 `gen2` 后续 flush/上传基于 `r2` 重试而非与旧 `r1` 自撞 409；
+       - **步骤 B（仅当不存在更新本地编辑时执行）**：**仅当**事务内满足 `stored.localGen === sentGen` 且 `await` IDB 提交后重核确认 `!closed && owner === reqOwner && this.localGen === sentGen` 时，才删除本 `writerId` 的待同步草稿并将 UI 状态切换为 `synced(newRevision)`；否则保持 `gen2` 为 dirty 状态并调度下一次上传。
   4. **五类状态语义**：本机新建（`rev=0`）待首次同步；远端不可用（clean/dirty 遇到单图 `GET` HTTP 200 `{0, null}`）绝不假报 `synced`、不自动删 clean 缓存、打破 dirty 409 死循环、提供另存新图（新 ID `rev=0`）/导出/显式移除（移除 clean 前事务内确认无 pending draft）、绝不自动用旧 ID 重建远端；离线/网络失败与列表 API 缺项绝不等同不可用；坏原始记录隔离到 `v2:corrupt` 并提供原样 JSON 下载与显式丢弃，IDB 配额/不可读错误明确提示未持久化并保留内存导出。
   5. **鉴权不变**：不改动服务端鉴权契约，不新增自定义鉴权头，以服务端 session 与 D1 权限为唯一权威。
 - **不包含**：不混入工作区并行加载性能优化、不做 CRDT 重写、不改文档 schema 或放宽校验、不改服务端 API 权限边界、不做生产清库或 D1 迁移。
 - **验收标准**：
   1. 真实共享同一 `fake-indexeddb` 实例的双 `DraftWorkspace` 交错测试：胜者回写分别发生在 409 前/后、刷新重建（新 `writerId`）完整恢复分歧稿；
-  2. 并发与乱序测试：普通防抖旧 `gen` 乱序落盘被拒、`gen=1` 确认推进 `baseRevision=2` 与迟到 `gen=2(base=1)` 相交不回退基线、草稿确认清理后迟到旧 `flush` 不写活、`await` 提交期间新编辑/关闭/切账号防误标 `synced`、乱序 `r2`/`r3` 确认不回退 `synced`、显式放弃草稿的 CAS 中止；
+  2. 并发与乱序测试：普通防抖旧 `gen` 乱序落盘被拒；**`gen2` 已在 `gen1 -> r2` 确认到达前存在**时，确认推进因果水位/基线至 `r2` 且完整保留 `gen2` dirty 内容、后续以 `r2` 同步不自撞 409；迟到 `gen2(base=1)` `flush` 既不回退已确认基线也不覆盖更新编辑；`gen1` 确认清理后迟到旧 `gen1` `flush` 不写活已清理草稿；**重载/重启后 `gen2` 仍完整保留并可基于 `r2` 恢复/同步**（测试须校验中间持久化状态、因果基线与文档内容，**明确不得仅断言最终 `revision`**）；`await` 提交期间新编辑/关闭/切账号防误标 `synced`；乱序 `r2`/`r3` 确认不回退 `synced`；显式放弃草稿的 CAS 中止；
   3. 状态与异常测试：新建 `rev=0`、clean/dirty 远端不可用、离线/失败、列表缺项保留、坏记录隔离与原样导出、`QuotaExceededError`/不可读提示、跨账号隔离、legacy 幂等迁移不复活；
-  4. **回滚可用性实测**：提取现行 `main@7fc979c` 旧版读取器逻辑在混合库（含 `v2:synced`/`v2:draft`/`v2:corrupt`/`v2:migrated`）上实测不崩溃且**绝不误识别**为正常导图；同时对新版 UI 导出入口及回滚后可执行的只读 `v2` 恢复导出函数做真实单元测试验证。
+  4. **回滚可用性与独立只读恢复实测**：在模拟回滚环境（运行现行 `main@7fc979c` 旧版读取器/应用逻辑，面对包含 legacy 旧键与 `v2:synced`/`v2:draft`/`v2:corrupt`/`v2:migrated` 的混合 IndexedDB）中同时完成两项实测：① 验证旧版读取器不崩溃且**绝不误识别**任何 `v2:*` 记录为正常导图；② 在不加载任何 T1 新版应用 UI/模块代码的前提下，实际执行独立零依赖只读恢复制品，验证其通过严格 `readonly` 事务完整导出全部相关 `writer` 草稿与 `v2:corrupt` 原件且对 IndexedDB **零写入/零清理**（明确说明：**仅对新版 UI 内部函数做单元测试不足以证明回滚后的可恢复性**）。
 - **实施期必过验证命令**：
   - `pnpm vitest run apps/web/test/workspace.test.ts`
   - `pnpm typecheck && pnpm test && pnpm build`
-- **风险与回滚**：风险为跨标签边界竞态、键编码兼容或紧急回滚后旧 UI 不展示 `v2:` 记录；回滚时严禁清理 IDB 中 `v2:` 键，回滚前可通过新版 UI 导出全部未同步/冲突/坏原件，紧急回滚后通过经测试验证的只读恢复工具取回 `v2` 原件。未覆盖边界（真实浏览器多标签 `pagehide` 与真实 D1）须在 PR 报告中如实注明。
+- **风险与回滚**：风险为跨标签边界竞态、键编码兼容或紧急回滚后旧 UI 不展示 `v2:` 记录；回滚时严禁清理 IDB 中 `v2:` 键，回滚前可通过新版 UI 导出全部未同步/冲突/坏原件；紧急回滚后的可获取、可执行只读恢复路径须满足三项规格：① **产物与获取来源**：T1 随 PR 交付独立零依赖只读浏览器恢复脚本/片段、校验和（如 SHA-256）及操作手册，存于独立于新版前端 bundle 的不可变已审提交/独立恢复文档中，回滚时可单独留存或直接自该不可变已审提交/tag 取得并校验后使用；② **触发与执行域**：由用户/操作员在原应用源（origin）的浏览器 DevTools Console 中直接执行，无需加载任何新版应用 UI 代码；③ **只读行为与输出**：严格以 `readonly` 事务打开 `loomind-db` / `docs` store，读取全部 `v2:draft`、`v2:synced`、`v2:corrupt`、`v2:migrated` 记录并导出为本地 JSON 下载/输出，严格**永不写入或清理 IndexedDB**。未覆盖边界（真实浏览器多标签 `pagehide` 与真实 D1）须在 PR 报告中如实注明。
 
 #### T2（P1）：Core 结构命令与引用完整性
 - **证据**：`packages/core/src/store/reducer.ts:85-116, 171-175, 249-325`、`packages/core/src/model/invariants.ts:90-120`。
@@ -302,13 +303,13 @@ loomind/
 - **风险与回滚**：风险为漏扫浮动/概要/其他 sheet 引用导致误删共享图片；回滚仅还原 MIME 校验与 GC 逻辑，不删除用户已有资产数据。
 
 #### T7（P2）：受支持的发布入口与文档一致性
-- **证据**：`apps/web/package.json:12`、`docs/DEPLOYMENT.md:7, 25-29`。
-- **范围**：严格最小范围——移除或替换 `apps/web/package.json:12` 直接执行生产 `wrangler deploy` 的误导性 `deploy` 脚本（改为明确拒绝直接本地发布并指向官方 GitHub Actions 发布工作流与经批准应急流程）；修正 `docs/DEPLOYMENT.md` 中过时的 `/try` 游客编辑器核对项并核对相关脚本文档引用；仅做无真实部署的只读脚本行为与文档引用核对。
+- **证据**：`apps/web/package.json:12`、`docs/DEPLOYMENT.md:7, 25, 29`、`.github/workflows/deploy-production.yml:260-265`。
+- **范围**：严格最小范围——移除或替换 `apps/web/package.json:12` 直接执行生产 `wrangler deploy` 的误导性 `deploy` 脚本（改为明确拒绝直接本地发布并指向官方 GitHub Actions 发布工作流与经批准应急流程）；按当前实际路由更新 `docs/DEPLOYMENT.md:25` 中过时的“至少检查游客打开编辑器”人工验收条目，并核对相关脚本文档引用；**明确保留 `docs/DEPLOYMENT.md:29` 与 `.github/workflows/deploy-production.yml:260-265` 中仍有效的游客会话（`/api/auth/session`）自动健康/冒烟检查**；仅做无真实部署的只读脚本行为与文档引用核对。
 - **不包含**：**不修改** `.github/workflows/deploy-production.yml` 逻辑、**不修改** `apps/web/wrangler.jsonc`（含 `workers_dev`）、**不修改** Cloudflare token/权限、GitHub 环境或分支保护、**绝不执行**任何实际部署或远程 D1 迁移。
 - **验收标准**：
   1. 本地无部署执行 `pnpm --filter @mindmap/web deploy`（或替代检查脚本）不会调用 `wrangler deploy`，并清晰输出唯一受支持发布路径说明；
   2. 文档明确声明“移除 npm 脚本仅消除误操作入口，不等于撤销已持有者的 Cloudflare 访问权限”，且完整保留经批准的应急恢复流程说明；
-  3. 静态核对 `docs/DEPLOYMENT.md` 与仓库内路由/脚本引用一致，不再残留已删除的 `/try` 检查项。
+  3. 静态核对 `docs/DEPLOYMENT.md` 与仓库内实际路由/脚本引用一致：`docs/DEPLOYMENT.md:25` 过时的“至少检查游客打开编辑器”条目已按现行路由更新，同时 `docs/DEPLOYMENT.md:29` 与 `.github/workflows/deploy-production.yml:260-265` 的游客会话健康/冒烟检查保持原样不受破坏；**明确不得以搜索仓库中本就不存在的 `/try` 字样作为验收标准**。
 - **实施期必过验证命令**：
   - 无部署脚本行为静态/退出验证命令（在 PR 中贴出真实输出）
   - `pnpm typecheck && pnpm test && pnpm build`
