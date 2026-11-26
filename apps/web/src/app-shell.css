@@ -98,10 +98,12 @@
 }
 .lm-hero h1 {
   margin: 22px 0 0;
-  font-size: clamp(42px, 5.4vw, 68px); font-weight: 620; line-height: 1.1; letter-spacing: -.045em;
+  font-family: var(--lm-font-display);
+  font-size: clamp(36px, 4.8vw, 62px); font-weight: 500; line-height: 1.16; letter-spacing: -.015em;
   color: var(--lm-text-primary);
 }
 .lm-hero h1 span {
+  font-style: italic;
   background: linear-gradient(180deg, var(--lm-text-primary) 10%, var(--lm-text-secondary) 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
@@ -223,22 +225,38 @@
 .lm-preview-dock span.is-pill { background: var(--lm-bg-elevated); color: var(--lm-text-primary); font-weight: 500; }
 
 .lm-features { padding: 100px 0 84px; }
-.lm-section-heading h2 { margin: 12px 0 36px; font-size: clamp(28px, 3.2vw, 38px); font-weight: 600; line-height: 1.18; letter-spacing: -.035em; }
+.lm-section-heading h2 {
+  margin: 12px 0 36px;
+  font-family: var(--lm-font-display);
+  font-size: clamp(30px, 3.6vw, 44px); font-weight: 500; line-height: 1.22; letter-spacing: -.01em;
+}
 .lm-feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-block: 1px solid var(--lm-border-subtle); }
 .lm-feature-grid article { min-height: 196px; padding: 28px 28px 28px 0; }
 .lm-feature-grid article + article { padding-left: 28px; border-left: 1px solid var(--lm-border-subtle); }
 .lm-feature-grid article > svg { display: block; margin-top: 22px; color: var(--lm-text-primary); opacity: .82; }
 .lm-feature-number { color: var(--lm-text-muted); font: 11px ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; }
-.lm-feature-grid h3 { margin: 14px 0 8px; font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+.lm-feature-grid h3 {
+  margin: 14px 0 8px;
+  font-family: var(--lm-font-display);
+  font-size: 20px; font-weight: 500; letter-spacing: -.005em;
+}
 .lm-feature-grid p { max-width: 320px; margin: 0; color: var(--lm-text-secondary); font-size: 13px; line-height: 1.7; }
 .lm-closing { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 52px 0 68px; border-top: 1px solid var(--lm-border-subtle); }
-.lm-closing h2 { margin: 0; font-size: clamp(24px, 3vw, 34px); font-weight: 600; letter-spacing: -.035em; }
+.lm-closing h2 {
+  margin: 0;
+  font-family: var(--lm-font-display);
+  font-size: clamp(28px, 3.4vw, 40px); font-weight: 500; letter-spacing: -.01em;
+}
 .lm-closing-sub { margin: 8px 0 0; color: var(--lm-text-secondary); font-size: 13.5px; }
 .lm-public-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 0 36px; border-top: 1px solid var(--lm-border-subtle); color: var(--lm-text-muted); font-size: 12px; }
 .lm-login-main { display: grid; place-items: center; min-height: calc(100dvh - 56px); padding: 48px 20px 80px; }
 .lm-login-card { width: min(100%, 360px); text-align: center; }
 .lm-login-symbol { display: grid; place-items: center; width: 44px; height: 44px; margin: 0 auto 20px; color: var(--lm-text-primary); }
-.lm-login-card h1 { margin: 8px 0 8px; font-size: 24px; font-weight: 600; letter-spacing: -.03em; }
+.lm-login-card h1 {
+  margin: 8px 0 8px;
+  font-family: var(--lm-font-display);
+  font-size: 30px; font-weight: 500; letter-spacing: -.01em;
+}
 .lm-login-intro { margin: 0; color: var(--lm-text-secondary); font-size: 13px; line-height: 1.65; }
 .lm-login-form { margin-top: 26px; text-align: left; }
 .lm-google-entry-btn {
