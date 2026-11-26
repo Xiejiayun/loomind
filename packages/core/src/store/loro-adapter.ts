@@ -11,7 +11,7 @@ import {
   type MindmapTopic,
 } from "../model/document.js";
 import type { MindmapCommand } from "./commands.js";
-import { applyMindmapCommand } from "./reducer.js";
+import { applyMindmapCommand, type CommandRejection } from "./reducer.js";
 import type { SyncAdapter } from "./sync-adapter.js";
 
 export interface PeerPresence {
@@ -52,7 +52,7 @@ export class LoroSyncAdapter implements SyncAdapter {
     if (peerId !== undefined) this.loro.setPeerId(peerId);
     this.tree = this.loro.getTree("topics");
     this.tree.enableFractionalIndex(0);
-    this.undoManager = new UndoManager(this.loro, { maxUndoSteps: 100 });
+    this.undoManager = new UndoManager(this.loro, { maxUndoSteps: 100, mergeInterval: 0 });
     this.cachedDoc = initialDoc ?? {
       format: "mindmap-document",
       version: 1,
@@ -112,15 +112,17 @@ export class LoroSyncAdapter implements SyncAdapter {
     this.notify(new Set());
   }
 
-  applyCommand(cmd: MindmapCommand, _options?: { coalesceKey?: string }): void {
-    const { nextDoc, patches, dirtyTopicIds } = applyMindmapCommand(this.cachedDoc, cmd);
-    if (patches.length === 0) return;
+  applyCommand(cmd: MindmapCommand, _options?: { coalesceKey?: string }): CommandRejection | undefined {
+    const { nextDoc, patches, dirtyTopicIds, rejected } = applyMindmapCommand(this.cachedDoc, cmd);
+    if (rejected) return rejected;
+    if (patches.length === 0) return undefined;
 
     this.syncCommandToLoro(cmd, nextDoc);
     this.loro.commit();
     this.rebuildIndexFromTree();
     this.cachedDoc = this.readDocumentFromLoro();
     this.notify(dirtyTopicIds);
+    return undefined;
   }
 
   undo(): void {

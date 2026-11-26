@@ -104,6 +104,27 @@ export function validateDocumentInvariants(doc: MindmapDocument): InvariantViola
 
     for (const b of sheet.boundaries) {
       registerId(b.id, "boundary");
+      if (b.target.kind === "subtree") {
+        if (!topicMap.has(b.target.topicId)) {
+          violations.push({
+            code: "DANGLING_REFERENCE",
+            message: `Boundary "${b.id}" references missing topic "${b.target.topicId}"`,
+          });
+        }
+      } else {
+        const parent = topicMap.get(b.target.parentId);
+        if (
+          !parent ||
+          b.target.startIndex < 0 ||
+          b.target.endIndex < b.target.startIndex ||
+          b.target.endIndex >= parent.children.length
+        ) {
+          violations.push({
+            code: "DANGLING_REFERENCE",
+            message: `Boundary "${b.id}" has invalid range [${b.target.startIndex}, ${b.target.endIndex}] for parent "${b.target.parentId}"`,
+          });
+        }
+      }
       if (b.style) {
         checkColor(b.style.fillColor, `boundary(${b.id}).style.fillColor`);
         checkColor(b.style.strokeColor, `boundary(${b.id}).style.strokeColor`);
