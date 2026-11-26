@@ -53,6 +53,14 @@ const MindmapEditorInner: React.FC<
   const setZenMode = useMindmapStore((s) => s.setZenMode);
   const formatPanelOpen = useMindmapStore((s) => s.formatPanelOpen);
   const setFormatPanelOpen = useMindmapStore((s) => s.setFormatPanelOpen);
+  const lastRejection = useMindmapStore((s) => s.lastRejection);
+  const clearRejection = useMindmapStore((s) => s.clearRejection);
+
+  useEffect(() => {
+    if (!lastRejection) return;
+    const timer = setTimeout(() => clearRejection(), 3500);
+    return () => clearTimeout(timer);
+  }, [lastRejection, clearRejection]);
 
   const [aiPanelOpen, setAiPanelOpen] = useState(() => {
     if (readOnly) return false;
@@ -226,6 +234,15 @@ const MindmapEditorInner: React.FC<
         onOpenAi={readOnly ? undefined : (p) => openAiWithPrompt(p)}
       />
       <PitchOverlay />
+      {lastRejection && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed bottom-12 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-amber-300/60 bg-amber-50/95 px-3.5 py-2 text-xs font-medium text-amber-950 shadow-lg backdrop-blur dark:border-amber-500/40 dark:bg-amber-950/90 dark:text-amber-100"
+        >
+          {lastRejection.message}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,11 +1,11 @@
 import { applyPatches, type Patch } from "immer";
 import type { MindmapDocument } from "../model/document.js";
 import type { MindmapCommand } from "./commands.js";
-import { applyMindmapCommand } from "./reducer.js";
+import { applyMindmapCommand, type CommandRejection } from "./reducer.js";
 
 export interface SyncAdapter {
   getDocument(): MindmapDocument;
-  applyCommand(cmd: MindmapCommand, options?: { coalesceKey?: string }): void;
+  applyCommand(cmd: MindmapCommand, options?: { coalesceKey?: string }): CommandRejection | void;
   replaceDocument(doc: MindmapDocument): void;
   undo(): void;
   redo(): void;
@@ -45,9 +45,10 @@ export class LocalImmerSyncAdapter implements SyncAdapter {
     this.notify(new Set());
   }
 
-  applyCommand(cmd: MindmapCommand, options?: { coalesceKey?: string }): void {
-    const { nextDoc, patches, inversePatches, dirtyTopicIds } = applyMindmapCommand(this.doc, cmd);
-    if (patches.length === 0) return;
+  applyCommand(cmd: MindmapCommand, options?: { coalesceKey?: string }): CommandRejection | undefined {
+    const { nextDoc, patches, inversePatches, dirtyTopicIds, rejected } = applyMindmapCommand(this.doc, cmd);
+    if (rejected) return rejected;
+    if (patches.length === 0) return undefined;
 
     this.doc = nextDoc;
     this.redoStack = [];

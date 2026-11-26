@@ -13,11 +13,17 @@ import type { MindmapCommand } from "./commands.js";
 
 enablePatches();
 
+export interface CommandRejection {
+  code: "SUMMARY_RANGE_BROKEN" | "SUMMARY_CANNOT_DETACH";
+  message: string;
+}
+
 export interface ReduceResult {
   nextDoc: MindmapDocument;
   patches: Patch[];
   inversePatches: Patch[];
   dirtyTopicIds: Set<string>;
+  rejected?: CommandRejection;
 }
 
 interface TopicLocation {
@@ -82,42 +88,170 @@ function normalizeStyle(style?: Partial<TopicStyleOverride>): Partial<TopicStyle
   return out;
 }
 
-function cascadeCleanup(doc: MindmapDocument, sheet: MindmapSheet, removedIds: Set<string>): void {
-  if (removedIds.size === 0) return;
-  for (const id of removedIds) {
+function cascadeCleanup(doc: MindmapDocument, sheet: MindmapSheet, initialRemovedIds: Set<string>): void {
+  const removed = new Set<string>(initialRemovedIds);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    const prevSize = removed.size;
+
+    sheet.summaries = sheet.summaries.filter((s) => {
+      const parentLoc = findTopicLocation(sheet, s.parentId);
+      const invalidParent = !parentLoc || removed.has(s.parentId) || removed.has(s.topic.id);
+      const invalidRange =
+        !parentLoc ||
+        s.startIndex < 0 ||
+        s.endIndex < s.startIndex ||
+        s.endIndex >= parentLoc.topic.children.length;
+      if (invalidParent || invalidRange) {
+        removed.add(s.id);
+        collectSubtreeIds(s.topic, removed);
+        return false;
+      }
+      return true;
+    });
+
+    sheet.relationships = sheet.relationships.filter((r) => {
+      const drop = removed.has(r.fromId) || removed.has(r.toId);
+      if (drop) removed.add(r.id);
+      return !drop;
+    });
+
+    sheet.boundaries = sheet.boundaries.filter((b) => {
+      let drop = false;
+      if (b.target.kind === "subtree") {
+        drop = removed.has(b.target.topicId) || !findTopicLocation(sheet, b.target.topicId);
+      } else {
+        const parentLoc = findTopicLocation(sheet, b.target.parentId);
+        drop =
+          !parentLoc ||
+          removed.has(b.target.parentId) ||
+          b.target.startIndex < 0 ||
+          b.target.endIndex < b.target.startIndex ||
+          b.target.endIndex >= parentLoc.topic.children.length;
+      }
+      if (drop) removed.add(b.id);
+      return !drop;
+    });
+
+    if (removed.size > prevSize) {
+      changed = true;
+    }
+  }
+
+  for (const id of removed) {
     if (!doc.deletedIds.includes(id)) doc.deletedIds.push(id);
   }
-  sheet.relationships = sheet.relationships.filter((r) => {
-    const drop = removedIds.has(r.fromId) || removedIds.has(r.toId);
-    if (drop && !doc.deletedIds.includes(r.id)) doc.deletedIds.push(r.id);
-    return !drop;
-  });
-  sheet.boundaries = sheet.boundaries.filter((b) => {
-    const drop =
-      b.target.kind === "subtree"
-        ? removedIds.has(b.target.topicId)
-        : removedIds.has(b.target.parentId);
-    if (drop && !doc.deletedIds.includes(b.id)) doc.deletedIds.push(b.id);
-    return !drop;
-  });
-  sheet.summaries = sheet.summaries.filter((s) => {
-    const parentLoc = findTopicLocation(sheet, s.parentId);
-    if (!parentLoc || removedIds.has(s.parentId) || removedIds.has(s.topic.id)) {
-      if (!doc.deletedIds.includes(s.id)) doc.deletedIds.push(s.id);
-      return false;
+}
+
+/**
+ * Validates and applies a same-parent reorder while preserving summary contiguity.
+ * Rejects atomically if any summary on `parent` would become non-contiguous.
+ */
+function reorderWithinParentWithSummaries(
+  sheet: MindmapSheet,
+  parent: MindmapTopic,
+  fromIdx: number,
+  toIdx: number,
+): CommandRejection | null {
+  if (fromIdx === toIdx) return null;
+  const childIds = parent.children.map((c) => c.id);
+  const reorderedIds = [...childIds];
+  const [movedId] = reorderedIds.splice(fromIdx, 1);
+  reorderedIds.splice(toIdx, 0, movedId);
+
+  const updates: Array<{ index: number; startIndex: number; endIndex: number }> = [];
+  for (let i = 0; i < sheet.summaries.length; i++) {
+    const s = sheet.summaries[i];
+    if (s.parentId !== parent.id) continue;
+    const covered = childIds.slice(s.startIndex, s.endIndex + 1);
+    const newPositions = covered.map((id) => reorderedIds.indexOf(id)).sort((a, b) => a - b);
+    const minPos = newPositions[0];
+    const maxPos = newPositions[newPositions.length - 1];
+    if (maxPos - minPos + 1 !== covered.length) {
+      return {
+        code: "SUMMARY_RANGE_BROKEN",
+        message: "无法移动：该操作会打断概要覆盖的连续范围。",
+      };
     }
-    const maxIdx = parentLoc.topic.children.length - 1;
-    if (maxIdx < 0 || s.startIndex > maxIdx) {
-      if (!doc.deletedIds.includes(s.id)) doc.deletedIds.push(s.id);
-      return false;
+    updates.push({ index: i, startIndex: minPos, endIndex: maxPos });
+  }
+
+  const [item] = parent.children.splice(fromIdx, 1);
+  parent.children.splice(toIdx, 0, item);
+  for (const u of updates) {
+    sheet.summaries[u.index].startIndex = u.startIndex;
+    sheet.summaries[u.index].endIndex = u.endIndex;
+  }
+  return null;
+}
+
+/**
+ * Validates and applies a cross-parent move (reparent / indent / outdent) while maintaining summaries:
+ * - Rejects atomically if inserting an existing subtree splits a destination summary's interior range.
+ * - Shrinks multi-member source summaries when one member moves out.
+ * - Migrates single-member source summaries to the new regular parent at `dstIdx`.
+ */
+function moveAcrossParentsWithSummaries(
+  sheet: MindmapSheet,
+  src: TopicLocation,
+  dstParent: MindmapTopic,
+  dstIdx: number,
+): CommandRejection | null {
+  // Check destination summaries: inserting strictly inside (startIndex, endIndex] splits the range
+  for (const s of sheet.summaries) {
+    if (s.parentId === dstParent.id && dstIdx > s.startIndex && dstIdx <= s.endIndex) {
+      return {
+        code: "SUMMARY_RANGE_BROKEN",
+        message: "无法移入：不能将已有节点插入概要覆盖的连续范围中间。",
+      };
     }
-    s.endIndex = Math.min(s.endIndex, maxIdx);
-    return s.startIndex <= s.endIndex;
-  });
+  }
+
+  // Perform the tree move
+  const [moved] = src.container.splice(src.index, 1);
+  delete moved.floatingPos;
+  delete moved.manualOffset;
+  dstParent.collapsed = false;
+  dstParent.children.splice(dstIdx, 0, moved);
+
+  // Update destination summaries first (before migrating any source summary to dstParent)
+  for (const s of sheet.summaries) {
+    if (s.parentId === dstParent.id && dstIdx <= s.startIndex) {
+      s.startIndex += 1;
+      s.endIndex += 1;
+    }
+  }
+
+  // Update source summaries (shrink, shift, or migrate single-member summary)
+  if (src.parent) {
+    const srcParentId = src.parent.id;
+    for (const s of sheet.summaries) {
+      if (s.parentId !== srcParentId) continue;
+      if (src.index < s.startIndex) {
+        s.startIndex -= 1;
+        s.endIndex -= 1;
+      } else if (src.index >= s.startIndex && src.index <= s.endIndex) {
+        if (s.startIndex === s.endIndex) {
+          // Single-member summary migrates with its sole covered topic to dstParent
+          s.parentId = dstParent.id;
+          s.startIndex = dstIdx;
+          s.endIndex = dstIdx;
+        } else {
+          // Multi-member summary shrinks to remaining contiguous members
+          s.endIndex -= 1;
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): ReduceResult {
   const dirtyTopicIds = new Set<string>();
+  let rejected: CommandRejection | undefined;
 
   const [nextDoc, patches, inversePatches] = produceWithPatches(doc, (draft) => {
     if (cmd.type === "sheet/add") {
@@ -169,7 +303,16 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         break;
       }
       case "doc/replaceSheetRoot": {
+        const oldRootIds = new Set<string>();
+        collectSubtreeIds(sheet.rootTopic, oldRootIds);
+        const newRootIds = new Set<string>();
+        collectSubtreeIds(cmd.rootTopic, newRootIds);
+        const vanishedIds = new Set<string>();
+        for (const id of oldRootIds) {
+          if (!newRootIds.has(id)) vanishedIds.add(id);
+        }
         sheet.rootTopic = cmd.rootTopic;
+        cascadeCleanup(draft, sheet, vanishedIds);
         dirtyTopicIds.add(cmd.rootTopic.id);
         break;
       }
@@ -252,15 +395,30 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         const dst = findTopicLocation(sheet, cmd.newParentId);
         if (!src || !dst || src.isSummaryRoot) break;
         if (isDescendant(src.topic, cmd.newParentId)) break;
-        const [moved] = src.container.splice(src.index, 1);
-        delete moved.floatingPos;
-        delete moved.manualOffset;
-        dst.topic.collapsed = false;
+
+        if (src.parent && src.parent.id === dst.topic.id) {
+          const maxTarget = dst.topic.children.length - 1;
+          const rawIdx = cmd.index !== undefined ? cmd.index : maxTarget;
+          const targetIdx = Math.max(0, Math.min(rawIdx, maxTarget));
+          const err = reorderWithinParentWithSummaries(sheet, dst.topic, src.index, targetIdx);
+          if (err) {
+            rejected = err;
+            break;
+          }
+          dirtyTopicIds.add(dst.topic.id);
+          dirtyTopicIds.add(cmd.topicId);
+          break;
+        }
+
         const idx =
           cmd.index !== undefined
             ? Math.max(0, Math.min(cmd.index, dst.topic.children.length))
             : dst.topic.children.length;
-        dst.topic.children.splice(idx, 0, moved);
+        const err = moveAcrossParentsWithSummaries(sheet, src, dst.topic, idx);
+        if (err) {
+          rejected = err;
+          break;
+        }
         if (src.parent) dirtyTopicIds.add(src.parent.id);
         dirtyTopicIds.add(cmd.newParentId);
         dirtyTopicIds.add(cmd.topicId);
@@ -271,8 +429,11 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         if (!loc || !loc.parent) break;
         const nextIdx = loc.index + cmd.delta;
         if (nextIdx < 0 || nextIdx >= loc.container.length) break;
-        const [item] = loc.container.splice(loc.index, 1);
-        loc.container.splice(nextIdx, 0, item);
+        const err = reorderWithinParentWithSummaries(sheet, loc.parent, loc.index, nextIdx);
+        if (err) {
+          rejected = err;
+          break;
+        }
         dirtyTopicIds.add(loc.parent.id);
         break;
       }
@@ -280,9 +441,11 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         const loc = findTopicLocation(sheet, cmd.topicId);
         if (!loc || !loc.parent || loc.index === 0) break;
         const prevSibling = loc.container[loc.index - 1];
-        const [item] = loc.container.splice(loc.index, 1);
-        prevSibling.collapsed = false;
-        prevSibling.children.push(item);
+        const err = moveAcrossParentsWithSummaries(sheet, loc, prevSibling, prevSibling.children.length);
+        if (err) {
+          rejected = err;
+          break;
+        }
         dirtyTopicIds.add(loc.parent.id);
         dirtyTopicIds.add(prevSibling.id);
         break;
@@ -292,8 +455,11 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         if (!loc || !loc.parent) break;
         const parentLoc = findTopicLocation(sheet, loc.parent.id);
         if (!parentLoc || !parentLoc.parent) break;
-        const [item] = loc.container.splice(loc.index, 1);
-        parentLoc.container.splice(parentLoc.index + 1, 0, item);
+        const err = moveAcrossParentsWithSummaries(sheet, loc, parentLoc.parent, parentLoc.index + 1);
+        if (err) {
+          rejected = err;
+          break;
+        }
         dirtyTopicIds.add(parentLoc.parent.id);
         dirtyTopicIds.add(loc.parent.id);
         break;
@@ -314,11 +480,34 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         if (loc.isFloatingRoot) {
           loc.topic.floatingPos = { x: quantizeCoord(cmd.pos.x), y: quantizeCoord(cmd.pos.y) };
         } else {
+          if (loc.parent) {
+            const blocksDetach = sheet.summaries.some(
+              (s) => s.parentId === loc.parent!.id && s.startIndex === loc.index && s.endIndex === loc.index,
+            );
+            if (blocksDetach) {
+              rejected = {
+                code: "SUMMARY_CANNOT_DETACH",
+                message: "无法脱离为自由主题：该节点是独立概要的唯一成员。",
+              };
+              break;
+            }
+          }
           const [detached] = loc.container.splice(loc.index, 1);
           delete detached.manualOffset;
           detached.floatingPos = { x: quantizeCoord(cmd.pos.x), y: quantizeCoord(cmd.pos.y) };
           sheet.floatingTopics.push(detached);
-          if (loc.parent) dirtyTopicIds.add(loc.parent.id);
+          if (loc.parent) {
+            for (const s of sheet.summaries) {
+              if (s.parentId !== loc.parent.id) continue;
+              if (loc.index < s.startIndex) {
+                s.startIndex -= 1;
+                s.endIndex -= 1;
+              } else if (loc.index <= s.endIndex) {
+                s.endIndex -= 1;
+              }
+            }
+            dirtyTopicIds.add(loc.parent.id);
+          }
         }
         dirtyTopicIds.add(cmd.topicId);
         break;
@@ -582,6 +771,10 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
       }
     }
   });
+
+  if (rejected) {
+    return { nextDoc: doc, patches: [], inversePatches: [], dirtyTopicIds: new Set(), rejected };
+  }
 
   return { nextDoc, patches, inversePatches, dirtyTopicIds };
 }

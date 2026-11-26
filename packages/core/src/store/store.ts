@@ -1,6 +1,7 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { MindmapDocument, MindmapSheet, TopicShape, TopicStyleOverride } from "../model/document.js";
 import type { MindmapCommand } from "./commands.js";
+import type { CommandRejection } from "./reducer.js";
 import { LocalImmerSyncAdapter, type SyncAdapter } from "./sync-adapter.js";
 
 export interface CameraState {
@@ -31,9 +32,11 @@ export interface MindmapStoreState {
   styleClipboard: StyleClipboard | null;
   canUndo: boolean;
   canRedo: boolean;
+  lastRejection: (CommandRejection & { id: number }) | null;
   adapter: SyncAdapter;
 
-  dispatch: (cmd: MindmapCommand, options?: { coalesceKey?: string }) => void;
+  dispatch: (cmd: MindmapCommand, options?: { coalesceKey?: string }) => CommandRejection | void;
+  clearRejection: () => void;
   replaceDocument: (doc: MindmapDocument) => void;
   undo: () => void;
   redo: () => void;
@@ -77,9 +80,17 @@ export function createMindmapStore(
     styleClipboard: null,
     canUndo: adapter.canUndo(),
     canRedo: adapter.canRedo(),
+    lastRejection: null,
     adapter,
 
-    dispatch: (cmd, options) => adapter.applyCommand(cmd, options),
+    dispatch: (cmd, options) => {
+      const rejected = adapter.applyCommand(cmd, options);
+      if (rejected) {
+        set({ lastRejection: { ...rejected, id: Date.now() } });
+      }
+      return rejected;
+    },
+    clearRejection: () => set({ lastRejection: null }),
     replaceDocument: (doc) => {
       adapter.replaceDocument(doc);
       const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
