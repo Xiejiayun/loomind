@@ -10,7 +10,7 @@
     "build": "pnpm run typecheck && vite build",
     "preview": "wrangler dev --local --port 5173 --no-infer-origin-from-routes",
     "deploy": "pnpm run build && wrangler deploy",
-    "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json && tsc -p test/tsconfig.json --noEmit",
     "db:local": "wrangler d1 migrations apply DB --local",
     "types:worker": "wrangler types --include-runtime=false --strict-vars=false worker/env.d.ts"
   },
