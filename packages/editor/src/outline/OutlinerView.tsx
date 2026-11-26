@@ -83,7 +83,7 @@ export const OutlinerView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50/50 px-6 py-8">
+    <div className="editor-outline flex-1 overflow-y-auto bg-slate-50/50 px-6 py-8">
       <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200/80 bg-white px-8 py-7 shadow-xs">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 text-xs text-slate-500">
           <div className="flex flex-wrap items-center gap-1.5">

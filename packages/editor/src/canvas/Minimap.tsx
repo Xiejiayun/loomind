@@ -3,10 +3,11 @@ import { getPalette, hex8ToCss, type MindmapLayoutResult } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 
 interface MinimapProps {
+  appearance?: "dark" | "light";
   layout: MindmapLayoutResult;
 }
 
-export const Minimap: React.FC<MinimapProps> = ({ layout }) => {
+export const Minimap: React.FC<MinimapProps> = ({ layout, appearance }) => {
   const open = useMindmapStore((s) => s.minimapOpen);
   const doc = useMindmapStore((s) => s.doc);
   const camera = useMindmapStore((s) => s.camera);
@@ -16,7 +17,7 @@ export const Minimap: React.FC<MinimapProps> = ({ layout }) => {
   if (!open) return null;
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
-  const palette = getPalette({ ...doc.theme, ...sheet.theme }.paletteId);
+  const palette = getPalette({ ...doc.theme, ...sheet.theme }.paletteId, appearance);
 
   const w = 188;
   const h = 124;

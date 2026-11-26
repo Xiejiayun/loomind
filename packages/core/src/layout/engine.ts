@@ -104,13 +104,13 @@ export class LayoutEngine {
   compute(
     doc: MindmapDocument,
     sheetId?: string,
-    opts?: { drillRootId?: string | null },
+    opts?: { drillRootId?: string | null; appearance?: "dark" | "light" },
   ): MindmapLayoutResult {
     const sheet =
       doc.sheets.find((s) => s.id === (sheetId ?? doc.activeSheetId)) ?? doc.sheets[0];
     const theme: MindmapThemeConfig = { ...doc.theme, ...sheet.theme };
     const skeleton = getSkeleton(theme.skeletonId);
-    const palette = getPalette(theme.paletteId);
+    const palette = getPalette(theme.paletteId, opts?.appearance);
     const spacingScale = spacingMultiplier(sheet.spacing);
 
     const activeRoot =

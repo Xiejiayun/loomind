@@ -2,6 +2,12 @@ import type { PaletteId } from "../model/document.js";
 import type { PaletteSpec } from "./tokens.js";
 
 export const PALETTES: Record<PaletteId, PaletteSpec> = {
+  workspace: {
+    id: "workspace", name: "工作区", isDark: false, canvasBg: "#F8F9FBFF",
+    rootFill: "#FFFFFFFF", rootText: "#17191FFF", rootStroke: "#AEB5BDFF",
+    branches: ["#64748BFF", "#566778FF", "#73808EFF"], cardBg: "#FFFFFFFF",
+    cardBorder: "#D4D8DFFF", textPrimary: "#17191FFF", textMuted: "#5D6571FF",
+  },
   "xmind-rainbow": {
     id: "xmind-rainbow",
     name: "XMind 彩虹",
@@ -147,6 +153,13 @@ export const PALETTES: Record<PaletteId, PaletteSpec> = {
 
 export const PALETTE_LIST: PaletteSpec[] = Object.values(PALETTES);
 
-export function getPalette(id: PaletteId): PaletteSpec {
+const darkWorkspace: PaletteSpec = {
+  ...PALETTES.workspace, isDark: true, canvasBg: "#0D0F13FF", rootFill: "#20242CFF",
+  rootText: "#F2F3F5FF", rootStroke: "#555C69FF", branches: ["#ACB8C6FF", "#899AAFFF", "#B5B9C3FF"],
+  cardBg: "#191C22FF", cardBorder: "#484D58FF", textPrimary: "#F2F3F5FF", textMuted: "#A0A4ADFF",
+};
+
+export function getPalette(id: PaletteId, appearance?: "dark" | "light"): PaletteSpec {
+  if (id === "workspace" && appearance === "dark") return darkWorkspace;
   return PALETTES[id] ?? PALETTES["xmind-rainbow"];
 }

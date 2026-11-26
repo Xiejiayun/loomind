@@ -28,11 +28,11 @@ import {
   createTopic,
   findTopicLocation,
   generateId,
-  getPalette,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 
 interface TopToolbarProps {
+  isDark: boolean;
   accountControl?: React.ReactNode;
   onOpenTemplates: () => void;
   onOpenAi?: () => void;
@@ -40,6 +40,7 @@ interface TopToolbarProps {
 }
 
 export const TopToolbar: React.FC<TopToolbarProps> = ({
+  isDark,
   accountControl,
   onOpenTemplates,
   onOpenAi,
@@ -64,8 +65,6 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   const imgInputRef = useRef<HTMLInputElement>(null);
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
-  const palette = getPalette({ ...doc.theme, ...sheet.theme }.paletteId);
-  const isDark = palette.isDark && viewMode === "canvas";
   const primaryId = selectedTopicIds[0] ?? sheet.rootTopic.id;
   const deletedSet = new Set(doc.deletedIds);
 
@@ -222,7 +221,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
       {/* Left: Brand + View switcher + Undo/Redo + Templates */}
       <div className="flex items-center gap-2">
         {accountControl}
-        <div className="mr-0.5 hidden items-center gap-1.5 sm:flex" title="Loomind · 已本地自动保存">
+        <div className="editor-default-brand mr-0.5 hidden items-center gap-1.5 sm:flex" title="Loomind · 已本地自动保存">
           <svg viewBox="0 0 64 64" className="h-6 w-6 shrink-0" fill="none">
             <defs>
               <linearGradient id="ms-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
@@ -255,7 +254,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           </svg>
         </div>
 
-        <div className={`flex items-center rounded-lg p-0.5 ${isDark ? "bg-zinc-800" : "bg-zinc-100"}`}>
+        <div className={`editor-view-switch flex items-center rounded-lg p-0.5 ${isDark ? "bg-zinc-800" : "bg-zinc-100"}`}>
           <button
             type="button"
             onClick={() => setViewMode("canvas")}
@@ -319,7 +318,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
       </div>
 
       {/* Center: Quick Insert Group */}
-      <div className="hidden items-center gap-0.5 lg:flex">
+      <div className="editor-insert-tools hidden items-center gap-0.5 lg:flex">
         <ToolBtn icon={<Plus className="h-3.5 w-3.5" />} label="主题" onClick={handleAddSibling} isDark={isDark} />
         <ToolBtn icon={<CornerDownRight className="h-3.5 w-3.5" />} label="子主题" onClick={handleAddChild} isDark={isDark} />
         <ToolBtn icon={<Share2 className="h-3.5 w-3.5" />} label="联系" onClick={handleAddRelationship} isDark={isDark} />
@@ -470,6 +469,8 @@ const ToolBtn: React.FC<{
   isDark: boolean;
 }> = ({ icon, label, onClick, isDark }) => (
   <button
+    title={label}
+    aria-label={label}
     type="button"
     onClick={onClick}
     className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${

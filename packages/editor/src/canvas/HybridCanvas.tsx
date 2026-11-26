@@ -38,13 +38,16 @@ interface MarqueeState {
 }
 
 interface HybridCanvasProps {
+  appearance?: "dark" | "light";
+  viewportRef?: React.RefObject<HTMLDivElement | null>;
   layout: MindmapLayoutResult;
   onOpenContextMenu?: (topicId: string, pos: { x: number; y: number }) => void;
   onOpenAi?: () => void;
 }
 
-export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContextMenu, onOpenAi }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef, appearance, onOpenContextMenu, onOpenAi }) => {
+  const localRef = useRef<HTMLDivElement>(null);
+  const containerRef = viewportRef ?? localRef;
   const worldRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [cameraReady, setCameraReady] = useState(false);
@@ -91,14 +94,15 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
   const selectedSet = useMemo(() => new Set(selectedTopicIds), [selectedTopicIds]);
   const deletedSet = useMemo(() => new Set(doc.deletedIds), [doc.deletedIds]);
   const theme = { ...doc.theme, ...sheet.theme };
-  const palette = getPalette(theme.paletteId);
+  const palette = getPalette(theme.paletteId, appearance);
+  const workspaceCanvas = palette.id === "workspace" && !!appearance;
 
   const computeFitCamera = useCallback(
     (vw: number, vh: number) => {
       const pad = 72;
       const scaleX = (vw - pad) / Math.max(160, layout.bounds.width);
       const scaleY = (vh - pad) / Math.max(120, layout.bounds.height);
-      const scale = Math.max(0.35, Math.min(1.6, Math.min(scaleX, scaleY)));
+      const scale = Math.max(0.35, Math.min(workspaceCanvas ? 1 : 1.6, scaleX, scaleY));
       const cx = layout.bounds.x + layout.bounds.width / 2;
       const cy = layout.bounds.y + layout.bounds.height / 2;
       return {
@@ -107,7 +111,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
         scale,
       };
     },
-    [layout.bounds],
+    [layout.bounds, workspaceCanvas],
   );
 
   // Measure viewport container & keep auto-fitted on resize if user hasn't manually panned/zoomed
@@ -842,6 +846,9 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, onOpenContex
       </div>
 
       {/* Layer 2: Screen-Space Overlays */}
+      {workspaceCanvas && topicMap.size === 1 && !editingTopicId && (
+        <p className="editor-start-hint">双击中心主题编辑<span> · </span>选中后按 <kbd>Tab</kbd> 添加分支</p>
+      )}
       {marquee && (
         <div
           className="pointer-events-none absolute rounded border border-blue-500 bg-blue-500/10"

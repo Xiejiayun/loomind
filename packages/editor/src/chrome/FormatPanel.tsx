@@ -3,7 +3,6 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { ClipboardCopy, ClipboardPaste, Eraser, Palette, Pencil } from "lucide-react";
 import {
   collectAllTopics,
-  getPalette,
   hex8ToCss,
   PALETTE_LIST,
   SKELETON_LIST,
@@ -151,7 +150,7 @@ const STICKERS = [
   { id: "sparkles", emoji: "✨" },
 ];
 
-export const FormatPanel: React.FC = () => {
+export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   const open = useMindmapStore((s) => s.formatPanelOpen);
   const zenMode = useMindmapStore((s) => s.zenMode);
   const viewMode = useMindmapStore((s) => s.viewMode);
@@ -174,7 +173,6 @@ export const FormatPanel: React.FC = () => {
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
   const theme = { ...doc.theme, ...sheet.theme };
-  const isDark = getPalette(theme.paletteId).isDark;
   const topicMap = collectAllTopics(sheet);
   const primaryId = selectedTopicIds[0] ?? sheet.rootTopic.id;
   const primaryTopic = topicMap.get(primaryId);
