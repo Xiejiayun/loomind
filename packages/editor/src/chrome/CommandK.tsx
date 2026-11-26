@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Command } from "cmdk";
 import { GitBranch, ListTree, Palette, Play, Search, Sparkles } from "lucide-react";
 import {
@@ -12,9 +12,10 @@ import { useMindmapStore } from "../context.js";
 
 interface CommandKProps {
   open: boolean;
+  isDark?: boolean;
   onOpenChange: (open: boolean) => void;
   layout: MindmapLayoutResult;
-  onOpenAi?: () => void;
+  onOpenAi?: (initialPrompt?: string) => void;
 }
 
 const STRUCTURE_ITEMS: Array<{ id: MindmapStructure; label: string }> = [
@@ -29,7 +30,13 @@ const STRUCTURE_ITEMS: Array<{ id: MindmapStructure; label: string }> = [
   { id: "matrix", label: "矩阵图" },
 ];
 
-export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, onOpenAi }) => {
+export const CommandK: React.FC<CommandKProps> = ({
+  open,
+  isDark = false,
+  onOpenChange,
+  layout,
+  onOpenAi,
+}) => {
   const doc = useMindmapStore((s) => s.doc);
   const dispatch = useMindmapStore((s) => s.dispatch);
   const selectTopics = useMindmapStore((s) => s.selectTopics);
@@ -37,6 +44,7 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
   const setViewMode = useMindmapStore((s) => s.setViewMode);
   const setPitchMode = useMindmapStore((s) => s.setPitchMode);
   const camera = useMindmapStore((s) => s.camera);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,6 +59,10 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
 
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
   const sheet = useMemo(
     () => doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0],
     [doc],
@@ -63,7 +75,7 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
     selectTopics([topicId]);
     const node = layout.nodes.get(topicId);
     if (node) {
-      const vw = window.innerWidth - 280;
+      const vw = window.innerWidth - 360;
       const vh = window.innerHeight - 80;
       setCamera({
         x: vw / 2 - (node.contentBox.x + node.contentBox.width / 2) * camera.scale,
@@ -73,29 +85,78 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
     onOpenChange(false);
   };
 
+  const itemCls = isDark
+    ? "flex cursor-pointer items-center gap-2 rounded-[6px] px-2.5 py-2 text-[#d5d9e2] aria-selected:bg-white/[0.08] aria-selected:text-white"
+    : "flex cursor-pointer items-center gap-2 rounded-[6px] px-2.5 py-2 text-[#2c3340] aria-selected:bg-slate-900/[0.06] aria-selected:text-[#111318]";
+
+  const headingCls = isDark
+    ? "mb-1.5 px-1 text-[10px] font-medium tracking-wider text-[#646b78] uppercase"
+    : "mb-1.5 px-1 text-[10px] font-medium tracking-wider text-[#8c95a4] uppercase";
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/35 pt-20 backdrop-blur-xs"
+      className={`fixed inset-0 z-50 flex items-start justify-center pt-[14vh] backdrop-blur-[2px] ${
+        isDark ? "bg-black/60" : "bg-slate-950/35"
+      }`}
       onClick={() => onOpenChange(false)}
     >
       <div
-        className="w-[540px] max-w-[92vw] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className={`w-[540px] max-w-[92vw] overflow-hidden rounded-[10px] border shadow-2xl ${
+          isDark
+            ? "border-white/[0.12] bg-[#15171c] text-[#f4f5f8]"
+            : "border-slate-900/[0.12] bg-white text-[#111318]"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <Command label="全局命令与节点搜索">
-          <div className="flex items-center border-b border-slate-100 px-3.5">
-            <Search className="mr-2 h-4 w-4 text-slate-400" />
+          <div
+            className={`flex items-center border-b px-3.5 ${
+              isDark ? "border-white/[0.075]" : "border-slate-900/[0.08]"
+            }`}
+          >
+            <Search className="mr-2.5 h-4 w-4 shrink-0 text-[#646b78]" />
             <Command.Input
               autoFocus
-              placeholder="搜索主题、备注、标签，或输入命令 (⌘K)..."
-              className="h-11 w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+              value={search}
+              onValueChange={setSearch}
+              placeholder="搜索主题、命令，或直接向 AI 提问…"
+              className={`h-11 w-full bg-transparent text-[13px] outline-none ${
+                isDark
+                  ? "text-[#f4f5f8] placeholder:text-[#646b78]"
+                  : "text-[#111318] placeholder:text-[#8c95a4]"
+              }`}
             />
+            <kbd
+              className={`ml-2 rounded border px-1.5 py-0.5 font-mono text-[10px] ${
+                isDark
+                  ? "border-white/[0.1] bg-[#1c1f26] text-[#9ca3b0]"
+                  : "border-slate-900/[0.1] bg-[#f7f8fa] text-[#525b6b]"
+              }`}
+            >
+              ESC
+            </kbd>
           </div>
 
-          <Command.List className="max-h-80 overflow-y-auto p-2 text-xs">
-            <Command.Empty className="py-6 text-center text-slate-400">未找到匹配结果</Command.Empty>
+          <Command.List className="max-h-80 overflow-y-auto p-1.5 text-[12px]">
+            <Command.Empty className="py-6 text-center text-[#646b78]">未找到匹配结果</Command.Empty>
 
-            <Command.Group heading="跳转到主题" className="mb-2 text-[11px] font-semibold text-slate-400">
+            {onOpenAi && search.trim() && (
+              <Command.Group heading="AI 助手" className={headingCls}>
+                <Command.Item
+                  value={`ai ask ${search}`}
+                  onSelect={() => {
+                    onOpenAi(search.trim());
+                    onOpenChange(false);
+                  }}
+                  className={itemCls}
+                >
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-75" />
+                  <span className="truncate">问 AI：「{search.trim()}」</span>
+                </Command.Item>
+              </Command.Group>
+            )}
+
+            <Command.Group heading="跳转到主题" className={headingCls}>
               {topics.map((t) => {
                 const text = richTextToPlainText(t.title);
                 const extra = [t.subtitle, t.note?.text, ...(t.labels ?? [])].filter(Boolean).join(" ");
@@ -104,11 +165,15 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
                     key={t.id}
                     value={`${text} ${extra}`}
                     onSelect={() => jumpToTopic(t.id)}
-                    className="flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-slate-700 aria-selected:bg-blue-50 aria-selected:text-blue-700"
+                    className={`${itemCls} justify-between`}
                   >
                     <span className="truncate font-medium">{text}</span>
                     {t.labels && t.labels.length > 0 && (
-                      <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                      <span
+                        className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${
+                          isDark ? "bg-white/[0.07] text-[#9ca3b0]" : "bg-slate-100 text-[#525b6b]"
+                        }`}
+                      >
                         {t.labels[0]}
                       </span>
                     )}
@@ -117,39 +182,39 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
               })}
             </Command.Group>
 
-            <Command.Group heading="快捷动作" className="mb-2 text-[11px] font-semibold text-slate-400">
-              <Command.Item
-                onSelect={() => {
-                  setViewMode("outline");
-                  onOpenChange(false);
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-slate-700 aria-selected:bg-blue-50 aria-selected:text-blue-700"
-              >
-                <ListTree className="h-3.5 w-3.5" /> 切换至全屏大纲视图
-              </Command.Item>
-              <Command.Item
-                onSelect={() => {
-                  setPitchMode(true);
-                  onOpenChange(false);
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-slate-700 aria-selected:bg-blue-50 aria-selected:text-blue-700"
-              >
-                <Play className="h-3.5 w-3.5" /> 进入演说模式
-              </Command.Item>
+            <Command.Group heading="快捷动作" className={headingCls}>
               {onOpenAi && (
                 <Command.Item
                   onSelect={() => {
                     onOpenAi();
                     onOpenChange(false);
                   }}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-violet-700 aria-selected:bg-violet-50"
+                  className={itemCls}
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> 打开 AI 共创面板
+                  <Sparkles className="h-3.5 w-3.5 opacity-75" /> 打开 AI 对话面板 (⌘J)
                 </Command.Item>
               )}
+              <Command.Item
+                onSelect={() => {
+                  setViewMode("outline");
+                  onOpenChange(false);
+                }}
+                className={itemCls}
+              >
+                <ListTree className="h-3.5 w-3.5" /> 切换至大纲视图
+              </Command.Item>
+              <Command.Item
+                onSelect={() => {
+                  setPitchMode(true);
+                  onOpenChange(false);
+                }}
+                className={itemCls}
+              >
+                <Play className="h-3.5 w-3.5" /> 进入演说模式
+              </Command.Item>
             </Command.Group>
 
-            <Command.Group heading="切换画布结构" className="mb-2 text-[11px] font-semibold text-slate-400">
+            <Command.Group heading="切换画布结构" className={headingCls}>
               {STRUCTURE_ITEMS.map((st) => (
                 <Command.Item
                   key={st.id}
@@ -157,14 +222,14 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
                     dispatch({ type: "sheet/setLayout", sheetId: sheet.id, structure: st.id });
                     onOpenChange(false);
                   }}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-slate-700 aria-selected:bg-blue-50 aria-selected:text-blue-700"
+                  className={itemCls}
                 >
                   <GitBranch className="h-3.5 w-3.5" /> 切换结构：{st.label}
                 </Command.Item>
               ))}
             </Command.Group>
 
-            <Command.Group heading="切换配色主题" className="text-[11px] font-semibold text-slate-400">
+            <Command.Group heading="切换配色主题" className={headingCls}>
               {PALETTE_LIST.map((p) => (
                 <Command.Item
                   key={p.id}
@@ -172,7 +237,7 @@ export const CommandK: React.FC<CommandKProps> = ({ open, onOpenChange, layout, 
                     dispatch({ type: "theme/set", patch: { paletteId: p.id } });
                     onOpenChange(false);
                   }}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-slate-700 aria-selected:bg-blue-50 aria-selected:text-blue-700"
+                  className={itemCls}
                 >
                   <Palette className="h-3.5 w-3.5" /> 配色：{p.name}
                 </Command.Item>

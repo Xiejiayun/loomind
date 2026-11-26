@@ -1,0 +1,98 @@
+/* Loomind Linear-inspired Monochrome Design System Tokens */
+:root,
+.lm-theme {
+  /* 4-Layer Dark Surface Elevation */
+  --lm-bg-app: #0b0c0e;
+  --lm-bg-canvas: #101114;
+  --lm-bg-surface: #15171c;
+  --lm-bg-elevated: #1c1f26;
+  --lm-bg-hover: #242832;
+
+  /* Hairline Borders */
+  --lm-border-subtle: rgba(255, 255, 255, 0.08);
+  --lm-border-strong: rgba(255, 255, 255, 0.16);
+
+  /* Text Hierarchy */
+  --lm-text-primary: #f4f5f8;
+  --lm-text-secondary: #9ca3b0;
+  --lm-text-muted: #646b78;
+
+  /* Accent (Monochrome High-Contrast Neutral) */
+  --lm-accent: #e4e6eb;
+  --lm-accent-hover: #ffffff;
+  --lm-accent-soft: rgba(255, 255, 255, 0.08);
+  --lm-accent-border: rgba(255, 255, 255, 0.24);
+  --lm-accent-text: #f4f5f8;
+
+  /* Status */
+  --lm-status-ok: #46a758;
+  --lm-status-warn: #e5a000;
+  --lm-status-danger: #e5484d;
+  --lm-status-danger-soft: rgba(229, 72, 77, 0.14);
+
+  /* Button & legacy aliases */
+  --lm-bg: var(--lm-bg-app);
+  --lm-surface: var(--lm-bg-surface);
+  --lm-raised: var(--lm-bg-elevated);
+  --lm-canvas: var(--lm-bg-canvas);
+  --lm-text: var(--lm-text-primary);
+  --lm-muted: var(--lm-text-secondary);
+  --lm-subtle: var(--lm-text-muted);
+  --lm-border: var(--lm-border-subtle);
+  --lm-button: #ededef;
+  --lm-button-text: #0b0c0e;
+  --lm-button-hover: #ffffff;
+  --lm-status: var(--lm-status-ok);
+  --lm-grid: rgba(255, 255, 255, 0.035);
+
+  /* Radius & Motion */
+  --lm-radius-sm: 5px;
+  --lm-radius-md: 7px;
+  --lm-radius-lg: 10px;
+  --lm-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  color-scheme: dark;
+}
+
+:root[data-ui-theme="light"],
+.lm-theme[data-theme="light"] {
+  --lm-bg-app: #f7f8fa;
+  --lm-bg-canvas: #ffffff;
+  --lm-bg-surface: #ffffff;
+  --lm-bg-elevated: #f1f3f6;
+  --lm-bg-hover: #e7eaf0;
+
+  --lm-border-subtle: rgba(15, 23, 42, 0.08);
+  --lm-border-strong: rgba(15, 23, 42, 0.16);
+
+  --lm-text-primary: #111318;
+  --lm-text-secondary: #525b6b;
+  --lm-text-muted: #8c95a4;
+
+  --lm-accent: #181a20;
+  --lm-accent-hover: #2b2f38;
+  --lm-accent-soft: rgba(15, 23, 42, 0.07);
+  --lm-accent-border: rgba(15, 23, 42, 0.22);
+  --lm-accent-text: #111318;
+
+  --lm-status-ok: #2b9a66;
+  --lm-status-warn: #d97706;
+  --lm-status-danger: #dc2626;
+  --lm-status-danger-soft: rgba(220, 38, 38, 0.09);
+
+  --lm-bg: var(--lm-bg-app);
+  --lm-surface: var(--lm-bg-surface);
+  --lm-raised: var(--lm-bg-elevated);
+  --lm-canvas: var(--lm-bg-canvas);
+  --lm-text: var(--lm-text-primary);
+  --lm-muted: var(--lm-text-secondary);
+  --lm-subtle: var(--lm-text-muted);
+  --lm-border: var(--lm-border-subtle);
+  --lm-button: #14161b;
+  --lm-button-text: #ffffff;
+  --lm-button-hover: #282c35;
+  --lm-status: var(--lm-status-ok);
+  --lm-grid: rgba(15, 23, 42, 0.045);
+
+  color-scheme: light;
+}

@@ -1,26 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MindmapDocument } from "@mindmap/core";
-import { GitBranch, ListTree } from "lucide-react";
-import { MindmapEditor, useMindmapStore } from "@mindmap/editor";
+import { MindmapEditor } from "@mindmap/editor";
 import { DraftWorkspace } from "./drafts/workspace.js";
-import { ThemeToggle, type UiTheme } from "./ui.js";
+import { AppLink } from "./navigation.js";
+import { Brand, ThemeToggle, type UiTheme } from "./ui.js";
 
 type ThemeControls = { theme: UiTheme; toggleTheme: () => void };
-
-function GuestSidebar({ theme, toggleTheme }: ThemeControls) {
-  const mode = useMindmapStore((state) => state.viewMode);
-  const setMode = useMindmapStore((state) => state.setViewMode);
-  const zen = useMindmapStore((state) => state.zenMode);
-  if (zen) return null;
-  return <aside className="lm-sidebar lm-guest-rail" aria-label="编辑器侧栏">
-    <div className="lm-sidebar-brand"><strong>loomind</strong></div>
-    <nav className="lm-sidebar-top" aria-label="视图导航"><p className="lm-sidebar-section-title">工作区</p>
-      {([{ id: "canvas", label: "导图", Icon: GitBranch }, { id: "outline", label: "大纲", Icon: ListTree }] as const).map(({ id, label, Icon }) =>
-        <button key={id} type="button" className="lm-recent-link" aria-label={label} title={label} aria-pressed={mode === id} onClick={() => setMode(id)}><Icon size={16}/><span>{label}</span></button>)}
-    </nav>
-    <div className="lm-sidebar-bottom"><ThemeToggle theme={theme} toggle={toggleTheme}/></div>
-  </aside>;
-}
 
 export function GuestEditor({ theme, toggleTheme }: ThemeControls) {
   const [initial, setInitial] = useState<{ document: MindmapDocument; key: number }>();
@@ -36,9 +21,19 @@ export function GuestEditor({ theme, toggleTheme }: ThemeControls) {
   }, []);
   const edit = useCallback((document: MindmapDocument) => workspace.current?.edit(document), []);
   if (!initial) return <div className="lm-loading">正在打开编辑器…</div>;
-  return <div className="lm-app-shell lm-guest-editor">
+  return <div className="lm-editor-host" style={{ height: "100dvh" }}>
     {error && <div className="lm-editor-error" role="alert">{error}</div>}
-    <MindmapEditor key={initial.key} initialDoc={initial.document} onDocumentChange={edit} chromeTheme={theme} initialFormatPanelOpen={false}
-      sidebar={<GuestSidebar theme={theme} toggleTheme={toggleTheme}/>}/>
+    <MindmapEditor
+      key={initial.key}
+      initialDoc={initial.document}
+      onDocumentChange={edit}
+      chromeTheme={theme}
+      initialFormatPanelOpen={false}
+      accountControl={<div className="lm-editor-navigation">
+        <Brand to="/" compact />
+        <AppLink href="/login" className="lm-secondary-button" style={{ height: 26, fontSize: 11.5, padding: "0 8px" }}>登录保存</AppLink>
+        <ThemeToggle theme={theme} toggle={toggleTheme} />
+      </div>}
+    />
   </div>;
 }

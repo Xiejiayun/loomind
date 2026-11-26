@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, ChevronLeft, Share2 } from "lucide-react";
+import { ArrowRight, PanelLeft, Share2 } from "lucide-react";
 import { LocalImmerSyncAdapter, type MindmapDocument, type SyncAdapter } from "@mindmap/core";
 import { MindmapEditor } from "@mindmap/editor";
 import { AccountControl } from "./auth/AccountControl.js";
@@ -8,29 +8,52 @@ import { readCloud } from "./drafts/cloud.js";
 import { mapTitle, type MindmapSummary } from "./drafts/shared.js";
 import { DraftWorkspace, type SyncState } from "./drafts/workspace.js";
 import { AppLink, navigate } from "./navigation.js";
+import type { UiTheme } from "./ui.js";
 
 function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
 }
 
-export function EditorWorkspace({ map, owner, session, changeSession, onRename, onShare, listError }: {
+export function EditorWorkspace({ map, owner, session, changeSession, theme, initialAiPrompt, onConsumeAiPrompt, onToggleSidebar, onRename, onShare, listError }: {
   map: MindmapSummary;
   owner: string;
   session: Session;
   changeSession: (session: Session) => void;
+  theme: UiTheme;
+  initialAiPrompt?: string;
+  onConsumeAiPrompt?: () => void;
+  onToggleSidebar: () => void;
   onRename: (id: string, title: string) => void;
   onShare: () => void;
   listError: string;
 }) {
-  if (map.access === "viewer") return <ViewerEditor map={map} owner={owner} listError={listError}/>;
-  return <EditableEditor map={map} owner={owner} session={session} changeSession={changeSession} onRename={onRename} onShare={onShare} listError={listError}/>;
+  if (map.access === "viewer") {
+    return <ViewerEditor map={map} owner={owner} theme={theme} onToggleSidebar={onToggleSidebar} listError={listError}/>;
+  }
+  return <EditableEditor
+    map={map}
+    owner={owner}
+    session={session}
+    changeSession={changeSession}
+    theme={theme}
+    initialAiPrompt={initialAiPrompt}
+    onConsumeAiPrompt={onConsumeAiPrompt}
+    onToggleSidebar={onToggleSidebar}
+    onRename={onRename}
+    onShare={onShare}
+    listError={listError}
+  />;
 }
 
-function EditableEditor({ map, owner, session, changeSession, onRename, onShare, listError }: {
+function EditableEditor({ map, owner, session, changeSession, theme, initialAiPrompt, onConsumeAiPrompt, onToggleSidebar, onRename, onShare, listError }: {
   map: MindmapSummary;
   owner: string;
   session: Session;
   changeSession: (session: Session) => void;
+  theme: UiTheme;
+  initialAiPrompt?: string;
+  onConsumeAiPrompt?: () => void;
+  onToggleSidebar: () => void;
   onRename: (id: string, title: string) => void;
   onShare: () => void;
   listError: string;
@@ -39,6 +62,15 @@ function EditableEditor({ map, owner, session, changeSession, onRename, onShare,
   const [sync, setSync] = useState<SyncState>({ label: "待连接", detail: "正在检查云端导图。" });
   const [localError, setLocalError] = useState("");
   const workspace = useRef<DraftWorkspace | null>(null);
+  const promptOnce = useRef(initialAiPrompt);
+
+  useEffect(() => {
+    if (initialAiPrompt) {
+      promptOnce.current = initialAiPrompt;
+      onConsumeAiPrompt?.();
+    }
+  }, [initialAiPrompt, onConsumeAiPrompt]);
+
   useEffect(() => {
     const current = new DraftWorkspace(owner, map.id,
       (document) => setInitial((old) => ({ document, key: (old?.key ?? 0) + 1 })), setSync, setLocalError,
@@ -56,25 +88,52 @@ function EditableEditor({ map, owner, session, changeSession, onRename, onShare,
       window.removeEventListener("online", syncOnline);
     };
   }, [owner, map.id, map.workspaceId, map.access]);
+
   const edit = useCallback((document: MindmapDocument) => {
     workspace.current?.edit(document);
     onRename(map.id, mapTitle(document));
   }, [map.id, onRename]);
+
   if (!initial) return <div className="lm-loading">正在打开导图…</div>;
+
   return <div className="lm-editor-host">
     {(localError || listError) && <div className="lm-editor-error" role="alert">{localError || listError}</div>}
-    <MindmapEditor key={initial.key} initialDoc={initial.document} onDocumentChange={edit}
+    <MindmapEditor
+      key={initial.key}
+      initialDoc={initial.document}
+      onDocumentChange={edit}
+      chromeTheme={theme}
+      initialFormatPanelOpen={false}
+      initialAiPrompt={promptOnce.current}
       accountControl={<div className="lm-editor-navigation">
-        <button type="button" className="lm-editor-back" onClick={() => { void workspace.current?.flush(); navigate("/app"); }}><ChevronLeft size={15}/> 工作区</button>
+        <button type="button" className="lm-icon-button-sm" title="展开/收起侧栏 ([)" aria-label="切换侧栏" onClick={onToggleSidebar}>
+          <PanelLeft size={15}/>
+        </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
-        {map.access === "owner" && <button type="button" className="lm-editor-share" onClick={onShare}><Share2 size={14}/> 共享</button>}
-        <AccountControl user={session.user} onSessionChange={(next) => { changeSession(next); if (!next.user) navigate("/", true); }}
-          sync={sync} onSync={(useCloud) => void workspace.current?.sync(useCloud)} onLogin={() => navigate("/login")}/>
-      </div>}/>
+        {map.access === "owner" && (
+          <button type="button" className="lm-editor-nav-btn" onClick={onShare}>
+            <Share2 size={12}/> 共享
+          </button>
+        )}
+        <AccountControl
+          user={session.user}
+          onSessionChange={(next) => { changeSession(next); if (!next.user) navigate("/", true); }}
+          sync={sync}
+          onSync={(useCloud) => void workspace.current?.sync(useCloud)}
+          onLogin={() => navigate("/login")}
+        />
+      </div>}
+    />
   </div>;
 }
 
-function ViewerEditor({ map, owner, listError }: { map: MindmapSummary; owner: string; listError: string }) {
+function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
+  map: MindmapSummary;
+  owner: string;
+  theme: UiTheme;
+  onToggleSidebar: () => void;
+  listError: string;
+}) {
   const [document, setDocument] = useState<MindmapDocument | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -105,9 +164,18 @@ function ViewerEditor({ map, owner, listError }: { map: MindmapSummary; owner: s
   return <div className="lm-editor-host lm-viewer-editor">
     {listError && <div className="lm-editor-error" role="alert">{listError}</div>}
     <span className="lm-readonly-badge">只读共享 · 修改不会保存</span>
-    <MindmapEditor adapter={adapter} accountControl={<div className="lm-editor-navigation">
-      <button type="button" className="lm-editor-back" onClick={() => navigate("/app")}><ChevronLeft size={15}/> 工作区</button>
-      <span className="lm-editor-map-title" title={map.title}>{map.title}</span><span className="lm-editor-viewer-label">只读</span>
-    </div>}/>
+    <MindmapEditor
+      adapter={adapter}
+      chromeTheme={theme}
+      readOnly
+      initialFormatPanelOpen={false}
+      accountControl={<div className="lm-editor-navigation">
+        <button type="button" className="lm-icon-button-sm" title="展开/收起侧栏 ([)" aria-label="切换侧栏" onClick={onToggleSidebar}>
+          <PanelLeft size={15}/>
+        </button>
+        <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
+        <span className="lm-editor-viewer-label">只读</span>
+      </div>}
+    />
   </div>;
 }

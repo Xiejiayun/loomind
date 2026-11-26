@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { ArrowRight, ArrowUpRight, Boxes, GitBranch, Layers3, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Boxes, GitBranch, Sparkles } from "lucide-react";
 import { LoginForm } from "./auth/LoginForm.js";
 import { useSession } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
 import { acceptInvite, previewInvite, type InvitePreview } from "./api.js";
 import { AppLink, navigate, useRoute } from "./navigation.js";
-import { Brand, ThemeToggle, type UiTheme } from "./ui.js";
+import { Brand, LoomindMark, ThemeToggle, type UiTheme } from "./ui.js";
 
 const themeKey = "loomind-ui-theme";
 const WorkspaceApp = lazy(() => import("./WorkspaceApp.js").then(({ WorkspaceApp }) => ({ default: WorkspaceApp })));
@@ -84,7 +84,7 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         <div className="lm-hero-signals"><span>IDEA FIRST</span><span>OUTLINE READY</span><span>MANY MINDMAPS</span><span>SHAREABLE WORKSPACES</span></div>
       </section>
       <section className="lm-preview lm-container" aria-label="Loomind 工作区预览">
-        <div className="lm-preview-bar"><span className="lm-preview-command">&gt;_</span><strong>loomind</strong><span>/</span><span>workspace</span><span className="lm-preview-status"><span className="lm-live-dot"/> READY</span></div>
+        <div className="lm-preview-bar"><LoomindMark size={18}/><strong>Loomind</strong><span>/</span><span>workspace</span><span className="lm-preview-status"><span className="lm-live-dot"/> READY</span></div>
         <div className="lm-preview-body"><aside><span className="lm-preview-label">RECENT</span><span>◇ 产品发布计划</span><span>◇ 年度学习目标</span><span>◇ 系统架构</span></aside>
           <div className="lm-preview-main"><span className="lm-preview-label">WORKSPACE / 01</span><h2>今天想梳理什么？</h2>
             <div className="lm-preview-prompt"><span>新产品从调研到发布的计划…</span><b>创建导图 ↗</b></div>
@@ -107,8 +107,8 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
 
 function LoginPage({ theme, toggle, next, changeSession }: { theme: UiTheme; toggle: () => void; next: string; changeSession: (session: Session) => void }) {
   return <div className="lm-public lm-login-page"><header className="lm-site-header lm-container"><Brand to="/"/><div className="lm-header-actions"><AppLink href="/">返回首页</AppLink><ThemeToggle theme={theme} toggle={toggle}/></div></header>
-    <main className="lm-login-main"><div className="lm-login-card"><div className="lm-login-symbol"><Layers3 size={23}/></div>
-      <p className="lm-eyebrow">WELCOME TO LOOMIND</p><h1>登录，继续思考。</h1><p className="lm-login-intro">使用 Google 账号安全登录。验证后，你的导图会保存在自己的空间，也可以加入共享工作区。</p>
+    <main className="lm-login-main"><div className="lm-login-card"><div className="lm-login-symbol"><LoomindMark size={38}/></div>
+      <p className="lm-eyebrow">LOOMIND</p><h1>登录，继续思考。</h1><p className="lm-login-intro">使用 Google 账号安全登录，你的导图将自动同步到云端工作区。</p>
       <LoginForm theme={theme} onSessionChange={changeSession} onSuccess={() => navigate(next, true)}/>
       <div className="lm-login-footer">想先看看编辑器？<AppLink href="/try">以游客身份试用 <ArrowUpRight size={14}/></AppLink></div>
     </div></main>
