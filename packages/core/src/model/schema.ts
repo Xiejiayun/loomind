@@ -45,6 +45,7 @@ export const PaletteIdSchema = z.enum([
   "midnight-neon",
   "obsidian-gold",
   "minimal-ink",
+  "workspace",
   "prism-vibrant",
   "forest-calm",
   "sunset-coral",

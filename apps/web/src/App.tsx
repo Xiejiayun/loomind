@@ -61,7 +61,7 @@ export function App() {
     return <div className="lm-theme" data-theme={theme}><NotFound to="/app" /></div>;
   }
   if (route.pathname.startsWith("/app")) return <div className="lm-theme lm-loading">正在打开登录页面…</div>;
-  if (route.pathname === "/try") return <div className="lm-theme" data-theme={theme}>{notice}<Suspense fallback={<div className="lm-loading">正在打开编辑器…</div>}><GuestEditor/></Suspense></div>;
+  if (route.pathname === "/try") return <div className="lm-theme" data-theme={theme}>{notice}<Suspense fallback={<div className="lm-loading">正在打开编辑器…</div>}><GuestEditor theme={theme} toggleTheme={toggle}/></Suspense></div>;
   if (route.pathname === "/login") return <div className="lm-theme" data-theme={theme}>
     {notice}<LoginPage theme={theme} toggle={toggle} next={safeNext(route.search)} changeSession={changeSession}/>
   </div>;

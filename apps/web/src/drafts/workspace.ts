@@ -1,5 +1,6 @@
 import { canonicalJson, getTemplate, type MindmapDocument } from "@mindmap/core";
 import { loadLocal, saveLocal } from "../persistence.js";
+import { documentFromTopic } from "../outline.js";
 import { CloudError, readCloud, writeCloud } from "./cloud.js";
 import type { LocalDraft, MapAccess } from "./shared.js";
 
@@ -37,9 +38,15 @@ export class DraftWorkspace {
       if (!this.closed) this.localError("未能读取本机草稿，已暂停本机写入以免覆盖。请导出备份后重试。");
     }
     if (this.closed) return;
-    this.draft = this.withScope(local ?? { document: getTemplate("blank-organic").create(), revision: 0, dirty: false });
+    this.draft = this.withScope(local ?? { document: this.initialDocument(), revision: 0, dirty: false });
     this.show(this.draft.document);
     if (this.owner) await this.sync();
+  }
+
+  private initialDocument(): MindmapDocument {
+    if (this.owner) return getTemplate("blank-organic").create();
+    const document = documentFromTopic("未命名导图");
+    return { ...document, theme: { ...document.theme, paletteId: "workspace" } };
   }
 
   edit(document: MindmapDocument) {

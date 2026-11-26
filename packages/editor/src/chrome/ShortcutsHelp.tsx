@@ -22,7 +22,7 @@ export const ShortcutsHelp: React.FC<{ isDark: boolean }> = ({ isDark }) => (
       <button
         type="button"
         title="快捷键指南"
-        className={`fixed bottom-11 left-4 z-30 flex h-8 w-8 items-center justify-center rounded-full border shadow-md backdrop-blur transition ${
+        className={`absolute bottom-3 left-3 z-30 flex h-8 w-8 items-center justify-center rounded-md border transition ${
           isDark
             ? "border-slate-700 bg-slate-900/90 text-slate-300 hover:bg-slate-800 hover:text-white"
             : "border-slate-200 bg-white/95 text-slate-500 hover:bg-slate-50 hover:text-slate-800"

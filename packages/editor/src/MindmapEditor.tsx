@@ -30,9 +30,12 @@ export interface MindmapEditorProps {
   adapter?: SyncAdapter;
   onDocumentChange?: (doc: MindmapDocument) => void;
   accountControl?: React.ReactNode;
+  chromeTheme?: "dark" | "light";
+  sidebar?: React.ReactNode;
+  initialFormatPanelOpen?: boolean;
 }
 
-const MindmapEditorInner: React.FC<Pick<MindmapEditorProps, "accountControl">> = ({ accountControl }) => {
+const MindmapEditorInner: React.FC<Pick<MindmapEditorProps, "accountControl" | "chromeTheme">> = ({ accountControl, chromeTheme }) => {
   const doc = useMindmapStore((s) => s.doc);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
   const viewMode = useMindmapStore((s) => s.viewMode);
@@ -48,7 +51,7 @@ const MindmapEditorInner: React.FC<Pick<MindmapEditorProps, "accountControl">> =
   }, [setFormatPanelOpen]);
 
   const activeSheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
-  const isDark = getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark && viewMode === "canvas";
+  const isDark = chromeTheme ? chromeTheme === "dark" : getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark && viewMode === "canvas";
 
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [cmdkOpen, setCmdkOpen] = useState(false);
@@ -59,14 +62,19 @@ const MindmapEditorInner: React.FC<Pick<MindmapEditorProps, "accountControl">> =
   );
 
   const engineRef = useRef<LayoutEngine | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   if (!engineRef.current) {
     engineRef.current = new LayoutEngine(new DomTextMeasurer());
   }
 
   const layout = useMemo(
-    () => engineRef.current!.compute(doc, doc.activeSheetId, { drillRootId }),
-    [doc, drillRootId],
+    () => engineRef.current!.compute(doc, doc.activeSheetId, { drillRootId, appearance: chromeTheme }),
+    [doc, drillRootId, chromeTheme],
   );
+
+  const exportLayout = useMemo(() => exportOpen && chromeTheme === "dark" && (activeSheet.theme?.paletteId ?? doc.theme.paletteId) === "workspace"
+    ? engineRef.current!.compute(doc, doc.activeSheetId, { drillRootId }) : layout,
+    [exportOpen, chromeTheme, activeSheet, doc, drillRootId, layout]);
 
   // Escape exits Zen Mode
   useEffect(() => {
@@ -81,6 +89,7 @@ const MindmapEditorInner: React.FC<Pick<MindmapEditorProps, "accountControl">> =
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-50 font-sans">
       <TopToolbar
+        isDark={isDark}
         accountControl={accountControl}
         onOpenTemplates={() => setTemplatesOpen(true)}
         onOpenAi={() => setAiOpen(true)}
@@ -91,24 +100,26 @@ const MindmapEditorInner: React.FC<Pick<MindmapEditorProps, "accountControl">> =
         {viewMode === "canvas" ? (
           <>
             <HybridCanvas
+              viewportRef={viewportRef}
+              appearance={chromeTheme}
               layout={layout}
               onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
               onOpenAi={() => setAiOpen(true)}
             />
-            <Minimap layout={layout} />
+            <Minimap layout={layout} appearance={chromeTheme} />
             {!zenMode && <ShortcutsHelp isDark={isDark} />}
           </>
         ) : (
           <OutlinerView />
         )}
-        <FormatPanel />
+        <FormatPanel isDark={isDark} />
       </div>
 
-      <SheetBar layout={layout} />
+      <SheetBar layout={layout} isDark={isDark} viewportRef={viewportRef} />
 
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       <TemplateModal open={templatesOpen} onOpenChange={setTemplatesOpen} />
-      <ExportModal open={exportOpen} onOpenChange={setExportOpen} layout={layout} />
+      <ExportModal open={exportOpen} onOpenChange={setExportOpen} layout={exportLayout} />
       <AiModal open={aiOpen} onOpenChange={setAiOpen} />
       <CommandK
         open={cmdkOpen}
@@ -126,10 +137,14 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
   adapter,
   onDocumentChange,
   accountControl,
+  chromeTheme,
+  sidebar,
+  initialFormatPanelOpen,
 }) => {
   const storeRef = useRef<StoreApi<MindmapStoreState> | null>(null);
   if (!storeRef.current) {
     storeRef.current = createMindmapStore(adapter ?? initialDoc ?? getTemplate("blank-organic").create());
+    if (initialFormatPanelOpen !== undefined) storeRef.current.getState().setFormatPanelOpen(initialFormatPanelOpen);
   }
 
   useEffect(() => {
@@ -145,7 +160,8 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
 
   return (
     <MindmapStoreContext.Provider value={storeRef.current}>
-      <MindmapEditorInner accountControl={accountControl} />
+      {sidebar}
+      <MindmapEditorInner accountControl={accountControl} chromeTheme={chromeTheme} />
     </MindmapStoreContext.Provider>
   );
 };

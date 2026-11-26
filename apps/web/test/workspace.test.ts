@@ -53,6 +53,18 @@ describe("local draft storage", () => {
 });
 
 describe("local-first workspace", () => {
+  it("starts a new guest map without sample branches and preserves a returning guest's map", async () => {
+    const fresh = fixture(null);
+    await fresh.space.start();
+    expect(fresh.show.mock.calls[0][0].sheets[0].rootTopic.children).toHaveLength(0);
+    expect(fresh.show.mock.calls[0][0].theme.paletteId).toBe("workspace");
+    expect(fresh.storage.saveLocal).not.toHaveBeenCalled();
+    const saved = documentWith("我的导图");
+    const returning = fixture(null, { document: saved, revision: 0, dirty: true });
+    await returning.space.start();
+    expect(returning.show).toHaveBeenCalledWith(saved);
+    fresh.space.close(); returning.space.close();
+  });
   it("flushes guest edits during a switch without making a cloud request", async () => {
     const { space, storage } = fixture(null);
     await space.start();

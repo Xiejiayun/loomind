@@ -309,6 +309,43 @@
 .lm-share-existing button { border: 0; background: transparent; color: var(--lm-muted); font-size: 11px; text-decoration: underline; }
 .lm-share-existing button:hover { color: var(--lm-text); }
 .lm-editor-host, .lm-guest-editor { position: relative; width: 100%; height: 100dvh; overflow: hidden; }
+.lm-guest-editor > .flex { height: 100%; width: 100%; background: var(--lm-canvas); font-family: inherit; }
+.lm-guest-editor :is(header, aside, footer) { background: var(--lm-surface); border-color: var(--lm-border); color: var(--lm-text); }
+.lm-guest-editor { grid-template-columns: 184px minmax(0, 1fr); }
+.lm-guest-editor > .flex { container-type: inline-size; }
+.lm-guest-editor header { height: 48px; gap: 8px; padding-inline: 12px; overflow-x: auto; scrollbar-width: thin; }
+.lm-guest-rail .lm-sidebar-brand { height: 48px; }
+.lm-guest-editor .editor-start-hint { position: absolute; bottom: 19px; inset-inline: 52px; margin: 0; text-align: center; color: var(--lm-muted); font-size: 11px; line-height: 1.6; pointer-events: none; }
+.editor-start-hint kbd { padding: 1px 4px; border: 1px solid var(--lm-border); border-radius: 4px; background: var(--lm-surface); }
+@container (max-width: 1100px) {
+  .lm-guest-editor .editor-insert-tools button[aria-label] span { display: none; }
+}
+.lm-guest-editor header > div { flex-shrink: 0; white-space: nowrap; }
+.lm-guest-editor :is(.editor-default-brand, .editor-view-switch, .editor-view-switch + div) { display: none; }
+.lm-guest-editor:not(:has(> .lm-guest-rail)) { grid-template-columns: minmax(0, 1fr); }
+.lm-guest-rail .lm-sidebar-brand strong { font-size: 18px; letter-spacing: -.06em; }
+.lm-guest-rail .lm-recent-link { width: 100%; border: 0; background: transparent; }
+.lm-guest-rail .lm-recent-link[aria-pressed="true"] { background: var(--lm-raised); color: var(--lm-text) !important; }
+.lm-guest-editor :is(header, aside, footer, .editor-outline) {
+  --color-blue-50: var(--lm-raised); --color-blue-500: var(--lm-border-strong); --color-blue-600: var(--lm-accent); --color-blue-700: var(--lm-text);
+  --color-sky-50: var(--lm-raised); --color-sky-300: var(--lm-text); --color-sky-400: var(--lm-accent); --color-sky-500: var(--lm-accent); --color-sky-700: var(--lm-muted); --color-sky-800: var(--lm-text);
+}
+.lm-guest-editor aside [role="tablist"] { background: var(--lm-canvas); border-color: var(--lm-border); }
+.lm-guest-editor aside [role="tab"][data-state="active"] { background: var(--lm-raised); color: var(--lm-text); }
+.lm-guest-editor .dark-panel :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-slate-50\/70, .bg-blue-50, .bg-blue-50\/90) { background-color: var(--lm-raised); }
+.lm-guest-editor .dark-panel :is(.text-blue-600, .text-blue-700, .text-slate-800, .text-slate-700, .text-slate-600) { color: var(--lm-text); }
+.lm-guest-editor .dark-panel .text-slate-500 { color: var(--lm-muted); }
+.lm-guest-editor .dark-panel :is(.border-slate-100, .border-slate-200) { border-color: var(--lm-border); }
+.lm-guest-editor .dark-panel button:hover { border-color: var(--lm-border-strong); }
+.lm-guest-editor .editor-outline { background: var(--lm-canvas); --color-white: var(--lm-surface); --color-slate-50: var(--lm-canvas); --color-slate-100: var(--lm-raised); --color-slate-200: var(--lm-border); --color-slate-500: var(--lm-muted); --color-slate-600: var(--lm-muted); --color-slate-700: var(--lm-text); --color-slate-800: var(--lm-text); --color-slate-900: var(--lm-text); }
+.lm-guest-editor button.bg-violet-50 { background: var(--lm-raised); color: var(--lm-text); }
+@media (max-width: 800px) {
+  .lm-app-shell.lm-guest-editor:has(> .lm-guest-rail) { grid-template-columns: 48px minmax(0, 1fr); }
+  .lm-guest-editor .lm-guest-rail { position: static; width: auto; transform: none; box-shadow: none; }
+  .lm-guest-rail :is(.lm-sidebar-brand, .lm-sidebar-section-title, .lm-recent-link span) { display: none; }
+  .lm-guest-rail :is(.lm-sidebar-top, .lm-sidebar-bottom) { padding: 6px; }
+  .lm-guest-rail .lm-recent-link { justify-content: center; padding: 0; }
+}
 .lm-editor-navigation { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .lm-editor-navigation button { display: inline-flex; align-items: center; gap: 3px; flex: none; min-height: 25px; padding: 0 7px; border: 1px solid #d5d9df; border-radius: 5px; background: #fff; color: #394150; font-size: 10px; font-weight: 550; }
 .lm-editor-navigation button:hover { background: #f4f5f7; }

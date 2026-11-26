@@ -1,19 +1,20 @@
 import React, { useState } from "react";
 import { Map, Maximize, Minus, Plus, X } from "lucide-react";
-import { createSheet, generateId, getPalette, type MindmapLayoutResult } from "@mindmap/core";
+import { createSheet, generateId, type MindmapLayoutResult } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 
 interface SheetBarProps {
+  viewportRef: React.RefObject<HTMLDivElement | null>;
+  isDark: boolean;
   layout: MindmapLayoutResult;
 }
 
-export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
+export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef }) => {
   const doc = useMindmapStore((s) => s.doc);
   const viewMode = useMindmapStore((s) => s.viewMode);
   const camera = useMindmapStore((s) => s.camera);
   const setCamera = useMindmapStore((s) => s.setCamera);
   const zenMode = useMindmapStore((s) => s.zenMode);
-  const formatPanelOpen = useMindmapStore((s) => s.formatPanelOpen);
   const minimapOpen = useMindmapStore((s) => s.minimapOpen);
   const setMinimapOpen = useMindmapStore((s) => s.setMinimapOpen);
   const dispatch = useMindmapStore((s) => s.dispatch);
@@ -22,9 +23,6 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
 
   if (zenMode) return null;
 
-  const activeSheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
-  const isDark = getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark && viewMode === "canvas";
-
   const handleAddSheet = () => {
     const id = generateId("sheet", new Set(doc.deletedIds));
     const idx = doc.sheets.length + 1;
@@ -32,8 +30,9 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout }) => {
   };
 
   const handleFitView = () => {
-    const vw = window.innerWidth - (formatPanelOpen ? 280 : 0);
-    const vh = window.innerHeight - 76;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const { width: vw, height: vh } = viewport.getBoundingClientRect();
     const scaleX = (vw - 72) / Math.max(160, layout.bounds.width);
     const scaleY = (vh - 72) / Math.max(120, layout.bounds.height);
     const scale = Math.max(0.25, Math.min(1.6, Math.min(scaleX, scaleY)));
