@@ -78,7 +78,6 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
       <div className="lm-container lm-site-header-inner">
         <Brand to="/"/>
         <nav aria-label={t.landing.navAria}>
-          <a href="#features">{t.landing.featuresLink}</a>
           <AppLink href="/login" className="lm-primary-button lm-header-cta">{t.landing.startCta} <ArrowRight size={13}/></AppLink>
           <LanguageToggle/>
           <ThemeToggle theme={theme} toggle={toggle}/>
@@ -184,10 +183,6 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         <AppLink href="/login" className="lm-primary-button">{t.landing.closingCta} <ArrowRight size={15}/></AppLink>
       </section>
     </main>
-    <footer className="lm-public-footer lm-container">
-      <Brand to="/" compact/>
-      <span>© {new Date().getFullYear()} Loomind</span>
-    </footer>
   </div>;
 }
 
