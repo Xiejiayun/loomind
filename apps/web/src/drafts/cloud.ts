@@ -6,15 +6,20 @@ export class CloudError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
-async function request(owner: string, id?: string, init?: RequestInit) {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+async function request(owner: string, id?: string, init?: RequestInit): Promise<unknown> {
   const err = getWebMessages().errors;
   if (id && !MAP_ID.test(id)) throw new CloudError(400, err.invalidMapId);
   const response = await fetch(`/api/mindmaps${id ? `/${id}` : ""}`, {
     ...init, headers: { [OWNER_HEADER]: owner, ...init?.headers }, credentials: "same-origin", cache: "no-store",
     signal: AbortSignal.timeout(12_000),
   }).catch(() => { throw new CloudError(0, err.cloudConnect); });
-  const data = await response.json().catch(() => { throw new CloudError(503, err.cloudUnavailable); });
-  if (!response.ok) throw new CloudError(response.status, typeof data?.error === "string" ? data.error : err.cloudSyncFailed);
+  const data: unknown = await response.json().catch(() => { throw new CloudError(503, err.cloudUnavailable); });
+  const record = asRecord(data);
+  if (!response.ok) throw new CloudError(response.status, typeof record?.error === "string" ? record.error : err.cloudSyncFailed);
   return data;
 }
 
@@ -25,16 +30,17 @@ export async function listCloud(owner: string): Promise<MindmapSummary[]> {
       ["owner", "editor", "viewer"].includes(item.access))) {
     throw new CloudError(502, getWebMessages().errors.cloudListInvalid);
   }
-  return data;
+  return data as MindmapSummary[];
 }
 
 export async function readCloud(owner: string, id: string): Promise<CloudDraft> {
   const data = await request(owner, id);
-  if (data?.revision === 0 && data.document === null) return data;
-  if (!Number.isSafeInteger(data?.revision) || data.revision < 1 || !MindmapDocumentSchema.safeParse(data.document).success) {
+  const record = asRecord(data);
+  if (record?.revision === 0 && record.document === null) return data as CloudDraft;
+  if (!record || typeof record.revision !== "number" || !Number.isSafeInteger(record.revision) || record.revision < 1 || !MindmapDocumentSchema.safeParse(record.document).success) {
     throw new CloudError(502, getWebMessages().errors.cloudDraftInvalid);
   }
-  return data;
+  return data as CloudDraft;
 }
 
 export async function writeCloud(owner: string, id: string, revision: number, document: MindmapDocument, workspaceId?: string | null): Promise<number> {
@@ -43,8 +49,9 @@ export async function writeCloud(owner: string, id: string, revision: number, do
   const headers: Record<string, string> = { "Content-Type": "application/json", "If-Match": `"${revision}"` };
   if (revision === 0 && workspaceId) headers["X-Loomind-Workspace"] = workspaceId;
   const data = await request(owner, id, { method: "PUT", headers, body });
-  if (data?.revision !== revision + 1) throw new CloudError(502, getWebMessages().errors.cloudNoAck);
-  return data.revision;
+  const record = asRecord(data);
+  if (!record || record.revision !== revision + 1) throw new CloudError(502, getWebMessages().errors.cloudNoAck);
+  return record.revision;
 }
 
 export async function deleteCloud(owner: string, id: string): Promise<void> {

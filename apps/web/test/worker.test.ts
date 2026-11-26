@@ -25,7 +25,7 @@ async function request(path: string, method = "GET", cookie = "", body?: unknown
 async function challenge() {
   const response = await request("auth/challenge", "POST");
   expect(response.status).toBe(200);
-  return { nonce: (await response.json()).nonce as string, cookie: response.headers.getSetCookie()[0].split(";")[0] };
+  return { nonce: (await response.json() as { nonce: string }).nonce, cookie: response.headers.getSetCookie()[0].split(";")[0] };
 }
 
 function googleToken(nonce: string, sub: string, overrides = {}) {
@@ -93,12 +93,12 @@ describe("Worker login (fixture Google JWKS and mock Siteverify)", () => {
     expect(session).toMatch(/__Host-loomind-session=.*HttpOnly; Secure; SameSite=Strict/);
     expect(clearedChallenge).toContain("Max-Age=0");
     const pair = session.split(";")[0];
-    expect((await (await request("auth/session", "GET", pair)).json()).user.id).toBe("alice");
-    expect((await (await request("auth/session", "GET", pair + "broken")).json()).user).toBeNull();
+    expect((await (await request("auth/session", "GET", pair)).json() as { user: { id: string } | null }).user?.id).toBe("alice");
+    expect((await (await request("auth/session", "GET", pair + "broken")).json() as { user: unknown }).user).toBeNull();
     expect((await request("auth/google", "POST", item.cookie, body)).status).toBe(403);
     const logout = await request("auth/logout", "POST", pair);
     expect(logout.headers.getSetCookie().filter(value => value.includes("Max-Age=0"))).toHaveLength(2);
-    expect((await (await request("auth/session")).json()).user).toBeNull();
+    expect((await (await request("auth/session")).json() as { user: unknown }).user).toBeNull();
   });
   it.each(["wrong-host", "wrong-action", "expired"])("rejects Siteverify result: %s", async token => {
     const item = await challenge();
@@ -285,7 +285,7 @@ describe("mindmaps API (local workerd D1)", () => {
     expect(await (await request(`mindmaps/${first}`, "PUT", alice, doc, create)).json()).toEqual({ revision: 1 });
     expect((await request(`mindmaps/${first}`, "PUT", alice, doc, create)).status).toBe(409);
     expect(await (await request(`mindmaps/${second}`, "PUT", alice, { ...doc, sheets: [{ ...doc.sheets[0], title: "第二张" }] }, create)).json()).toEqual({ revision: 1 });
-    expect((await (await request("mindmaps", "GET", alice, undefined, owner)).json()).map((item: { id: string }) => item.id).sort()).toEqual([first, second]);
+    expect((await (await request("mindmaps", "GET", alice, undefined, owner)).json() as { id: string }[]).map((item) => item.id).sort()).toEqual([first, second]);
     const variants = ["laptop", "phone"].map(title => ({ ...doc, sheets: [{ ...doc.sheets[0], title }] }));
     const responses = await Promise.all(variants.map(draft => request(`mindmaps/${first}`, "PUT", alice, draft, { ...owner, "If-Match": '"1"' })));
     expect(responses.map(value => value.status).sort()).toEqual([200, 409]);
