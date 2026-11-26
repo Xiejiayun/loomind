@@ -36,6 +36,7 @@ export interface MindmapStoreState {
   adapter: SyncAdapter;
 
   dispatch: (cmd: MindmapCommand, options?: { coalesceKey?: string }) => CommandRejection | void;
+  reportRejection: (rejection: CommandRejection) => void;
   clearRejection: () => void;
   replaceDocument: (doc: MindmapDocument) => void;
   undo: () => void;
@@ -90,6 +91,7 @@ export function createMindmapStore(
       }
       return rejected;
     },
+    reportRejection: (rejection) => set({ lastRejection: { ...rejection, id: Date.now() } }),
     clearRejection: () => set({ lastRejection: null }),
     replaceDocument: (doc) => {
       adapter.replaceDocument(doc);

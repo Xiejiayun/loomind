@@ -19,6 +19,7 @@ import {
   createTopic,
   findTopicLocation,
   generateId,
+  isAllowedImageMimeType,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
@@ -35,6 +36,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
   const selectTopics = useMindmapStore((s) => s.selectTopics);
   const setEditingTopicId = useMindmapStore((s) => s.setEditingTopicId);
   const dispatch = useMindmapStore((s) => s.dispatch);
+  const reportRejection = useMindmapStore((s) => s.reportRejection);
   const { t } = useEditorI18n();
   const imgInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,6 +131,15 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
   const handleUploadImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!isAllowedImageMimeType(file.type)) {
+      reportRejection({
+        code: "UNSUPPORTED_IMAGE_MIME",
+        message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
+      });
+      e.target.value = "";
+      return;
+    }
+    const mimeType = file.type;
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result ?? "");
@@ -142,7 +153,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
         image: { resourceId, width: 180, height: 120, pos: "top" },
         asset: {
           resourceId,
-          mimeType: (file.type as "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml") || "image/png",
+          mimeType,
           width: 180,
           height: 120,
           sha256: resourceId,
