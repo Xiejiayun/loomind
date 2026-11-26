@@ -13,8 +13,21 @@ import type { MindmapCommand } from "./commands.js";
 
 enablePatches();
 
+export const ALLOWED_IMAGE_MIME_TYPES = new Set<string>([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/svg+xml",
+]);
+
+export function isAllowedImageMimeType(
+  mime: string,
+): mime is "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml" {
+  return ALLOWED_IMAGE_MIME_TYPES.has(mime);
+}
+
 export interface CommandRejection {
-  code: "SUMMARY_RANGE_BROKEN" | "SUMMARY_CANNOT_DETACH";
+  code: "SUMMARY_RANGE_BROKEN" | "SUMMARY_CANNOT_DETACH" | "UNSUPPORTED_IMAGE_MIME";
   message: string;
 }
 
@@ -249,6 +262,29 @@ function moveAcrossParentsWithSummaries(
   return null;
 }
 
+function gcUnreferencedAssets(doc: MindmapDocument): void {
+  const assetKeys = Object.keys(doc.assets);
+  if (assetKeys.length === 0) return;
+
+  const referenced = new Set<string>();
+  const walkTopic = (topic: MindmapTopic) => {
+    if (topic.image?.resourceId) referenced.add(topic.image.resourceId);
+    for (const c of topic.children) walkTopic(c);
+  };
+
+  for (const s of doc.sheets) {
+    walkTopic(s.rootTopic);
+    for (const f of s.floatingTopics) walkTopic(f);
+    for (const sum of s.summaries) walkTopic(sum.topic);
+  }
+
+  for (const key of assetKeys) {
+    if (!referenced.has(key)) {
+      delete doc.assets[key];
+    }
+  }
+}
+
 export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): ReduceResult {
   const dirtyTopicIds = new Set<string>();
   let rejected: CommandRejection | undefined;
@@ -279,6 +315,7 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
       if (draft.activeSheetId === cmd.sheetId) {
         draft.activeSheetId = draft.sheets[Math.max(0, idx - 1)].id;
       }
+      gcUnreferencedAssets(draft);
       return;
     }
     if (cmd.type === "theme/set") {
@@ -313,6 +350,7 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         }
         sheet.rootTopic = cmd.rootTopic;
         cascadeCleanup(draft, sheet, vanishedIds);
+        gcUnreferencedAssets(draft);
         dirtyTopicIds.add(cmd.rootTopic.id);
         break;
       }
@@ -387,6 +425,7 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
           }
         }
         cascadeCleanup(draft, sheet, removed);
+        gcUnreferencedAssets(draft);
         break;
       }
       case "topic/reparent": {
@@ -680,9 +719,17 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
       case "topic/setImage": {
         const loc = findTopicLocation(sheet, cmd.topicId);
         if (loc) {
+          if (cmd.asset && !isAllowedImageMimeType(cmd.asset.mimeType)) {
+            rejected = {
+              code: "UNSUPPORTED_IMAGE_MIME",
+              message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
+            };
+            break;
+          }
           if (cmd.asset) draft.assets[cmd.asset.resourceId] = cmd.asset;
           if (cmd.image) loc.topic.image = cmd.image;
           else delete loc.topic.image;
+          gcUnreferencedAssets(draft);
           dirtyTopicIds.add(cmd.topicId);
         }
         break;
@@ -729,6 +776,7 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
           collectSubtreeIds(sheet.summaries[idx].topic, removed);
           sheet.summaries.splice(idx, 1);
           cascadeCleanup(draft, sheet, removed);
+          gcUnreferencedAssets(draft);
         }
         break;
       }

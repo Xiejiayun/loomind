@@ -9,6 +9,7 @@ import {
   generateId,
   getPalette,
   hex8ToCss,
+  isAllowedImageMimeType,
   richTextToPlainText,
   type LayoutBox,
   type MindmapLayoutResult,
@@ -79,6 +80,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
   const editingTopicId = useMindmapStore((s) => s.editingTopicId);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
   const dispatch = useMindmapStore((s) => s.dispatch);
+  const reportRejection = useMindmapStore((s) => s.reportRejection);
   const undo = useMindmapStore((s) => s.undo);
   const redo = useMindmapStore((s) => s.redo);
   const selectTopics = useMindmapStore((s) => s.selectTopics);
@@ -460,6 +462,14 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
       if (!file) return;
       e.preventDefault();
+      if (!isAllowedImageMimeType(file.type)) {
+        reportRejection({
+          code: "UNSUPPORTED_IMAGE_MIME",
+          message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
+        });
+        return;
+      }
+      const mimeType = file.type;
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = String(reader.result ?? "");
@@ -473,7 +483,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
           image: { resourceId, width: 180, height: 120, pos: "top" },
           asset: {
             resourceId,
-            mimeType: (file.type as "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml") || "image/png",
+            mimeType,
             width: 180,
             height: 120,
             sha256: resourceId,
@@ -485,7 +495,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [editingTopicId, selectedTopicIds, deletedSet, dispatch, sheet.id]);
+  }, [editingTopicId, selectedTopicIds, deletedSet, dispatch, reportRejection, sheet.id]);
 
   // Global keyboard matrix (with strict IME guard)
   useEffect(() => {
