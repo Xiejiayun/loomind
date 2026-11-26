@@ -83,9 +83,9 @@ const zh = {
     emptyTitle: "边聊边构建你的导图",
     emptyDesc: "选中画布任意节点自动带入上下文；发送指令后画布实时更新，随时可一键撤销。",
     starterIdeas: [
-      "帮我规划一个 AI 产品的 MVP 发布计划",
-      "拆解高并发后端系统的核心技术架构",
-      "制定 Q3 季度团队 OKR 与关键里程碑",
+      "帮我拆解「设计一套安静的软件」最核心的四个原则",
+      "梳理一套个人知识编织系统的核心结构",
+      "拆解系统设计中的关键权衡与心智模型",
     ],
     quickActions: {
       expand: { label: "扩展子节点", prompt: "为当前节点扩展 4 个关键子主题" },
@@ -400,9 +400,9 @@ const en: typeof zh = {
     emptyTitle: "Build your map as you chat",
     emptyDesc: "Select any node to attach context automatically. Updates stream live to the canvas and can be undone anytime.",
     starterIdeas: [
-      "Plan an MVP launch roadmap for an AI product",
-      "Break down a high-concurrency backend architecture",
-      "Create Q3 team OKRs and key milestones",
+      "Help me unpack the four core principles of designing calm software",
+      "Map out a personal knowledge-weaving architecture",
+      "Break down key mental models and trade-offs in system design",
     ],
     quickActions: {
       expand: { label: "Expand", prompt: "Expand 4 key subtopics for this node" },
