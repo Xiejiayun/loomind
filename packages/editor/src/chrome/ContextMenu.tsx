@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { createRichText, createTopic, findTopicLocation, generateId } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface ContextMenuProps {
   menu: { topicId: string; x: number; y: number } | null;
@@ -30,6 +31,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   const selectTopics = useMindmapStore((s) => s.selectTopics);
   const setEditingTopicId = useMindmapStore((s) => s.setEditingTopicId);
   const setDrillRootId = useMindmapStore((s) => s.setDrillRootId);
+  const { t } = useEditorI18n();
 
   useEffect(() => {
     if (!menu) return;
@@ -65,7 +67,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         <>
           <MenuItem
             icon={<Sparkles className="h-3.5 w-3.5 opacity-80" />}
-            label="AI 快捷指令 (⌘J)"
+            label={t.contextMenu.aiQuick}
             isDark={isDark}
             onClick={() =>
               run(() => {
@@ -79,7 +81,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       )}
       <MenuItem
         icon={<CornerDownRight className="h-3.5 w-3.5" />}
-        label="插入子主题 (Tab)"
+        label={t.contextMenu.addChild}
         isDark={isDark}
         onClick={() =>
           run(() => {
@@ -93,7 +95,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       {!isRoot && (
         <MenuItem
           icon={<Plus className="h-3.5 w-3.5" />}
-          label="插入同级主题 (Enter)"
+          label={t.contextMenu.addSibling}
           isDark={isDark}
           onClick={() =>
             run(() => {
@@ -114,7 +116,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       <div className={sepCls} />
       <MenuItem
         icon={<MessageSquare className="h-3.5 w-3.5" />}
-        label="添加批注 (Callout)"
+        label={t.contextMenu.addCallout}
         isDark={isDark}
         onClick={() =>
           run(() =>
@@ -122,14 +124,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               type: "topic/setCallout",
               sheetId: sheet.id,
               topicId: menu.topicId,
-              callout: { id: generateId("co", deletedSet), title: createRichText("批注") },
+              callout: { id: generateId("co", deletedSet), title: createRichText(t.contextMenu.defaultCallout) },
             }),
           )
         }
       />
       <MenuItem
         icon={<SquareDashedBottom className="h-3.5 w-3.5" />}
-        label="添加外框 (Boundary)"
+        label={t.contextMenu.addBoundary}
         isDark={isDark}
         onClick={() =>
           run(() =>
@@ -140,7 +142,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                 id: generateId("bnd", deletedSet),
                 target: { kind: "subtree", topicId: menu.topicId },
                 shape: "rounded",
-                title: "外框",
+                title: t.contextMenu.defaultBoundary,
               },
             }),
           )
@@ -149,7 +151,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       {!isRoot && (
         <MenuItem
           icon={<Braces className="h-3.5 w-3.5" />}
-          label="添加概要 (Summary)"
+          label={t.contextMenu.addSummary}
           isDark={isDark}
           onClick={() =>
             run(() => {
@@ -164,7 +166,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                   startIndex: loc.index,
                   endIndex: loc.index,
                   brace: "curly",
-                  topic: createTopic(generateId("sumt", deletedSet), "概要"),
+                  topic: createTopic(generateId("sumt", deletedSet), t.contextMenu.defaultSummary),
                 },
               });
             })
@@ -174,7 +176,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       {!isRoot && (
         <MenuItem
           icon={<Focus className="h-3.5 w-3.5" />}
-          label="聚焦下钻 (F6)"
+          label={t.contextMenu.drillDown}
           isDark={isDark}
           onClick={() => run(() => setDrillRootId(menu.topicId))}
         />
@@ -184,7 +186,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           <div className={sepCls} />
           <MenuItem
             icon={<Trash2 className="h-3.5 w-3.5 text-red-400" />}
-            label="删除主题"
+            label={t.contextMenu.deleteTopic}
             danger
             isDark={isDark}
             onClick={() =>

@@ -5,6 +5,7 @@ import {
   Command,
   FolderOpen,
   GitBranch,
+  Languages,
   LogOut,
   Menu,
   PanelLeft,
@@ -15,20 +16,21 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { MindmapDocument } from "@mindmap/core";
+import { getIntlLocale, type MindmapDocument } from "@mindmap/core";
 import { authRequest } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
 import { createWorkspace, listWorkspaces, moveMindmap, type WorkspaceSummary } from "./api.js";
 import { CreateView } from "./CreateView.js";
 import { deleteCloud, listCloud } from "./drafts/cloud.js";
 import { mapTitle, MAP_ID, type MindmapSummary } from "./drafts/shared.js";
+import { useI18n } from "./i18n.js";
 import { formatRelativeTime, LibraryView } from "./LibraryView.js";
 import { AppLink, navigate } from "./navigation.js";
 import { documentFromOutline, documentFromTopic, outlineNodeCount, parseOutline } from "./outline.js";
 import { OutlineTree } from "./OutlineTree.js";
 import { deleteLocal, listLocalMaps, loadLocal, saveLocal } from "./persistence.js";
 import { ShareDialog, type ShareTarget } from "./ShareDialog.js";
-import { ThemeToggle, type UiTheme } from "./ui.js";
+import { LanguageToggle, ThemeToggle, type UiTheme } from "./ui.js";
 
 const EditorWorkspace = lazy(() => import("./EditorWorkspace.js").then(({ EditorWorkspace }) => ({ default: EditorWorkspace })));
 
@@ -40,12 +42,7 @@ interface Props {
   toggleTheme: () => void;
 }
 
-const TEMPLATE_OPTIONS = [
-  { id: "blank-organic", label: "自由导图" },
-  { id: "quarterly-okr", label: "逻辑树" },
-  { id: "annual-roadmap", label: "时间轴" },
-  { id: "root-cause-fishbone", label: "鱼骨图" },
-];
+const TEMPLATE_IDS = ["blank-organic", "quarterly-okr", "annual-roadmap", "root-cause-fishbone"] as const;
 
 function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -56,6 +53,7 @@ function sortMaps(items: MindmapSummary[]) {
 }
 
 export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme }: Props) {
+  const { t, toggleLocale } = useI18n();
   const owner = session.user!.id;
   const [maps, setMaps] = useState<MindmapSummary[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
@@ -102,13 +100,13 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           await saveLocal(owner, { ...legacy, workspaceId: null, access: "owner" }, id);
           local = [{ id, title: mapTitle(legacy.document), updatedAt: "", workspaceId: null, access: "owner" }];
         }
-      } catch (reason) { failures.push(errorText(reason, "无法读取本机导图。")); }
+      } catch (reason) { failures.push(errorText(reason, t.workspace.readLocalError)); }
       let remote: MindmapSummary[] | null = null;
       try { remote = await listCloud(owner); }
-      catch (reason) { failures.push(errorText(reason, "无法读取云端导图。")); }
+      catch (reason) { failures.push(errorText(reason, t.workspace.readCloudError)); }
       let spaces: WorkspaceSummary[] = [];
       try { spaces = await listWorkspaces(); }
-      catch (reason) { failures.push(errorText(reason, "无法读取工作区。")); }
+      catch (reason) { failures.push(errorText(reason, t.workspace.readSpacesError)); }
       if (!active) return;
       const merged = remote ? [...remote, ...local.filter((item) => !remote!.some((cloud) => cloud.id === item.id))] : local;
       setMaps(sortMaps(merged));
@@ -192,16 +190,16 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
       const next = await authRequest<Session>("logout");
       changeSession(next);
       navigate("/", true);
-    } catch (reason) { setActionError(errorText(reason, "退出失败，请重试。")); }
+    } catch (reason) { setActionError(errorText(reason, t.workspace.logoutFailed)); }
   }
 
-  if (loading) return <div className="lm-loading">正在打开工作区…</div>;
+  if (loading) return <div className="lm-loading">{t.common.openingWorkspace}</div>;
 
   const isLibrary = route.pathname === "/app/library";
   const isShared = route.pathname === "/app/shared";
   const isCreate = route.pathname === "/app/create";
   const createMode = new URLSearchParams(route.search).get("mode") === "outline" ? "outline" : "idea";
-  const crumb = isLibrary ? "全部导图" : isShared ? "共享给我" : isCreate ? "新建导图" : "对话新建";
+  const crumb = isLibrary ? t.workspace.navLibrary : isShared ? t.workspace.navShared : isCreate ? t.workspace.navCreate : t.workspace.navHome;
   const chooseSpace = (id: string | null) => {
     setActiveWorkspaceId(id);
     picker.current && (picker.current.open = false);
@@ -220,53 +218,53 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   };
 
   return <div className={`lm-app-shell ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
-    <aside className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label="工作区侧栏">
+    <aside className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label={t.workspace.sidebarAria}>
       <div className="lm-sidebar-head">
         <details ref={picker} className="lm-space-picker">
-          <summary aria-label="选择工作区">
+          <summary aria-label={t.workspace.selectSpaceAria}>
             <span className="lm-space-avatar">{(activeSpace?.name ?? "L").slice(0, 1).toUpperCase()}</span>
-            <strong>{activeSpace?.name ?? "我的导图"}</strong>
+            <strong>{activeSpace?.name ?? t.common.myMaps}</strong>
             <ChevronDown size={13}/>
           </summary>
           <div className="lm-space-menu">
-            <span className="lm-eyebrow">工作区</span>
-            <button type="button" aria-current={!activeWorkspaceId ? "page" : undefined} onClick={() => chooseSpace(null)}>我的导图</button>
+            <span className="lm-eyebrow">{t.workspace.spacesEyebrow}</span>
+            <button type="button" aria-current={!activeWorkspaceId ? "page" : undefined} onClick={() => chooseSpace(null)}>{t.common.myMaps}</button>
             {workspaces.map((space) => (
               <button key={space.id} type="button" aria-current={activeWorkspaceId === space.id ? "page" : undefined} onClick={() => chooseSpace(space.id)}>
-                {space.name}<small>{space.role === "owner" ? "所有者" : space.role === "editor" ? "编辑" : "查看"}</small>
+                {space.name}<small>{space.role === "owner" ? t.common.owner : space.role === "editor" ? t.common.editor : t.common.viewer}</small>
               </button>
             ))}
             <div className="lm-space-menu-actions">
-              <button type="button" onClick={() => { picker.current && (picker.current.open = false); setWorkspaceDialogOpen(true); }}><Plus size={13}/> 新建工作区</button>
+              <button type="button" onClick={() => { picker.current && (picker.current.open = false); setWorkspaceDialogOpen(true); }}><Plus size={13}/> {t.workspace.newSpace}</button>
               {activeSpace?.role === "owner" && (
-                <button type="button" onClick={() => { picker.current && (picker.current.open = false); setShareTarget({ type: "workspace", id: activeSpace.id, name: activeSpace.name }); }}><Share2 size={13}/> 共享此工作区</button>
+                <button type="button" onClick={() => { picker.current && (picker.current.open = false); setShareTarget({ type: "workspace", id: activeSpace.id, name: activeSpace.name }); }}><Share2 size={13}/> {t.workspace.shareSpace}</button>
               )}
             </div>
           </div>
         </details>
 
         <div className="lm-sidebar-head-actions">
-          <button type="button" className="lm-icon-button-sm" title="全局搜索 (⌘K)" aria-label="搜索" onClick={() => setCmdkOpen(true)}><Search size={14}/></button>
-          <AppLink href="/app" className="lm-icon-button-sm" title="新建导图 (N)" aria-label="新建导图" onClick={() => setMobileOpen(false)}><Plus size={15}/></AppLink>
-          <button type="button" className="lm-mobile-close" aria-label="关闭侧栏" onClick={() => setMobileOpen(false)}><X size={15}/></button>
+          <button type="button" className="lm-icon-button-sm" title={t.workspace.searchTitle} aria-label={t.workspace.searchAria} onClick={() => setCmdkOpen(true)}><Search size={14}/></button>
+          <AppLink href="/app" className="lm-icon-button-sm" title={t.workspace.newMapTitle} aria-label={t.workspace.newMapAria} onClick={() => setMobileOpen(false)}><Plus size={15}/></AppLink>
+          <button type="button" className="lm-mobile-close" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}><X size={15}/></button>
         </div>
       </div>
 
-      <nav className="lm-sidebar-nav" aria-label="主导航">
+      <nav className="lm-sidebar-nav" aria-label={t.workspace.mainNavAria}>
         <AppLink href="/app" className={`lm-nav-item ${route.pathname === "/app" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
-          <Sparkles size={14}/><span>对话新建</span><kbd>N</kbd>
+          <Sparkles size={14}/><span>{t.workspace.navHome}</span><kbd>N</kbd>
         </AppLink>
         <AppLink href="/app/library" className={`lm-nav-item ${isLibrary ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
-          <FolderOpen size={14}/><span>全部导图</span>
+          <FolderOpen size={14}/><span>{t.workspace.navLibrary}</span>
         </AppLink>
         <AppLink href="/app/shared" className={`lm-nav-item ${isShared ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
-          <Users size={14}/><span>共享给我</span>
+          <Users size={14}/><span>{t.workspace.navShared}</span>
         </AppLink>
       </nav>
 
-      <nav className="lm-recent-nav" aria-label="最近导图">
+      <nav className="lm-recent-nav" aria-label={t.workspace.recentNavAria}>
         <div className="lm-sidebar-section-title">
-          <span>最近导图</span>
+          <span>{t.workspace.recentHeading}</span>
         </div>
         {recent.map((map) => (
           <AppLink
@@ -279,7 +277,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             <span>{map.title}</span>
           </AppLink>
         ))}
-        {!recent.length && <p className="lm-sidebar-empty">暂无最近导图。</p>}
+        {!recent.length && <p className="lm-sidebar-empty">{t.workspace.noRecent}</p>}
       </nav>
 
       <div className="lm-sidebar-bottom">
@@ -290,19 +288,20 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             <small>{session.user!.email}</small>
           </div>
         </div>
+        <LanguageToggle compact/>
         <ThemeToggle theme={theme} toggle={toggleTheme}/>
-        <button type="button" className="lm-icon-button-sm" title="退出登录" aria-label="退出登录" onClick={() => void logout()}>
+        <button type="button" className="lm-icon-button-sm" title={t.workspace.logoutTitle} aria-label={t.workspace.logoutTitle} onClick={() => void logout()}>
           <LogOut size={14}/>
         </button>
       </div>
     </aside>
 
-    {mobileOpen && <button type="button" className="lm-sidebar-scrim" aria-label="关闭侧栏" onClick={() => setMobileOpen(false)}/>}
+    {mobileOpen && <button type="button" className="lm-sidebar-scrim" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}/>}
 
     <div className="lm-app-column">
       {mapId ? (
         activeMap ? (
-          <Suspense fallback={<div className="lm-loading">正在打开导图…</div>}>
+          <Suspense fallback={<div className="lm-loading">{t.common.openingMap}</div>}>
             <EditorWorkspace
               key={activeMap.id}
               map={activeMap}
@@ -320,26 +319,26 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           </Suspense>
         ) : (
           <div className="lm-not-found">
-            <span className="lm-eyebrow">404 / NOT FOUND</span>
-            <h1>找不到这张导图</h1>
-            <p>它可能已被删除，或者你没有访问权限。</p>
-            <AppLink href="/app/library" className="lm-primary-button">返回导图库 <ArrowRight size={15}/></AppLink>
+            <span className="lm-eyebrow">{t.notFound.eyebrow}</span>
+            <h1>{t.notFound.mapTitle}</h1>
+            <p>{t.notFound.mapDesc}</p>
+            <AppLink href="/app/library" className="lm-primary-button">{t.notFound.backToLibrary} <ArrowRight size={15}/></AppLink>
           </div>
         )
       ) : (
         <>
           <header className="lm-app-topbar">
-            <button type="button" className="lm-mobile-menu" aria-label="打开侧栏" onClick={() => setMobileOpen(true)}><Menu size={16}/></button>
-            <button type="button" className="lm-icon-button-sm" title="展开/收起侧栏 ([)" aria-label="切换侧栏" onClick={() => setSidebarCollapsed((v) => !v)}><PanelLeft size={15}/></button>
+            <button type="button" className="lm-mobile-menu" aria-label={t.workspace.openSidebarAria} onClick={() => setMobileOpen(true)}><Menu size={16}/></button>
+            <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={() => setSidebarCollapsed((v) => !v)}><PanelLeft size={15}/></button>
             <div className="lm-breadcrumb">
-              <AppLink href="/app">{activeSpace?.name ?? "我的导图"}</AppLink>
+              <AppLink href="/app">{activeSpace?.name ?? t.common.myMaps}</AppLink>
               <span>/</span>
               <strong>{crumb}</strong>
             </div>
             <div className="lm-topbar-actions">
               <button type="button" className="lm-search-button" onClick={() => setCmdkOpen(true)}>
                 <Search size={13}/>
-                <span>搜索或输入指令…</span>
+                <span>{t.workspace.searchPlaceholder}</span>
                 <kbd><Command size={10}/>K</kbd>
               </button>
             </div>
@@ -349,7 +348,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             {(listError || actionError) && (
               <div className="lm-app-alert" role="alert">
                 {actionError || listError}
-                <button type="button" onClick={() => { setActionError(""); setListError(""); }}>关闭</button>
+                <button type="button" onClick={() => { setActionError(""); setListError(""); }}>{t.common.close}</button>
               </div>
             )}
 
@@ -375,8 +374,8 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
               />
             ) : (
               <div className="lm-content lm-not-found-inline">
-                <h1>找不到这个页面</h1>
-                <AppLink href="/app" className="lm-primary-button">返回工作区 <ArrowRight size={15}/></AppLink>
+                <h1>{t.notFound.pageTitle}</h1>
+                <AppLink href="/app" className="lm-primary-button">{t.notFound.backToWorkspace} <ArrowRight size={15}/></AppLink>
               </div>
             )}
           </main>
@@ -393,6 +392,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
       onClose={() => setCmdkOpen(false)}
       onSelectSpace={chooseSpace}
       onToggleTheme={toggleTheme}
+      onToggleLocale={() => { toggleLocale(); }}
       onQuickAiCreate={async (prompt) => {
         const doc = documentFromTopic(prompt, "blank-organic");
         await createMap(doc, activeWorkspaceId, prompt);
@@ -407,6 +407,7 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
   recentMaps: MindmapSummary[];
   onCreate: (document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) => Promise<void>;
 }) {
+  const { locale, t } = useI18n();
   const writable = workspaces.filter((space) => space.role !== "viewer");
   const [text, setText] = useState("");
   const [templateId, setTemplateId] = useState("blank-organic");
@@ -447,7 +448,7 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
         await onCreate(doc, workspaceId, clean);
       }
     } catch (reason) {
-      setError(errorText(reason, "创建导图失败，请重试。"));
+      setError(errorText(reason, t.home.createError));
     } finally {
       setBusy(false);
     }
@@ -455,12 +456,12 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
 
   return <div className="lm-content lm-home">
     <div className="lm-home-heading">
-      <h1>今天想梳理什么？</h1>
-      <p>输入一个想法让 AI 流式生成导图，或直接粘贴 Markdown / 缩进大纲。</p>
+      <h1>{t.home.heading}</h1>
+      <p>{t.home.subtitle}</p>
     </div>
 
     <form className="lm-composer" onSubmit={(e) => void handleSubmit(e)}>
-      <label className="lm-sr-only" htmlFor="lm-home-prompt">想法或大纲</label>
+      <label className="lm-sr-only" htmlFor="lm-home-prompt">{t.home.promptLabel}</label>
       <textarea
         id="lm-home-prompt"
         value={text}
@@ -471,15 +472,15 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
             void handleSubmit();
           }
         }}
-        placeholder="例如：帮我梳理一个新产品从用户调研到发布的计划…（或直接粘贴 Markdown 大纲）"
+        placeholder={t.home.promptPlaceholder}
       />
 
       {parsedOutline && (
         <>
           <div className="lm-composer-outline-pill">
-            <span>已自动识别为大纲：<strong>{outlineNodeCount(parsedOutline)} 个节点</strong> · {parsedOutline.children.length} 个一级分支</span>
+            <span>{t.home.outlineDetected(outlineNodeCount(parsedOutline), parsedOutline.children.length)}</span>
             <button type="button" className="lm-text-button" style={{ marginTop: 0 }} onClick={() => setShowPreview((v) => !v)}>
-              {showPreview ? "收起预览" : "预览层级"}
+              {showPreview ? t.home.hidePreview : t.home.showPreview}
             </button>
           </div>
           {showPreview && (
@@ -492,16 +493,16 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
 
       <div className="lm-composer-bar">
         <div className="lm-composer-controls">
-          <label className="lm-chip-select" title="选择布局模板">
+          <label className="lm-chip-select" title={t.home.templateTitle}>
             <GitBranch size={12}/>
-            <select aria-label="布局模板" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-              {TEMPLATE_OPTIONS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            <select aria-label={t.home.templateAria} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+              {TEMPLATE_IDS.map((id) => <option key={id} value={id}>{t.workspace.templates[id] ?? id}</option>)}
             </select>
           </label>
-          <label className="lm-chip-select" title="保存到空间">
+          <label className="lm-chip-select" title={t.home.spaceTitle}>
             <FolderOpen size={12}/>
-            <select aria-label="保存空间" value={workspaceId ?? ""} onChange={(e) => setWorkspaceId(e.target.value || null)}>
-              <option value="">我的导图</option>
+            <select aria-label={t.home.spaceAria} value={workspaceId ?? ""} onChange={(e) => setWorkspaceId(e.target.value || null)}>
+              <option value="">{t.common.myMaps}</option>
               {writable.map((space) => <option key={space.id} value={space.id}>{space.name}</option>)}
             </select>
           </label>
@@ -509,7 +510,7 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
 
         <button type="submit" className="lm-primary-button" disabled={busy || !text.trim()}>
           <Sparkles size={13}/>
-          {busy ? "正在创建…" : parsedOutline ? "从大纲创建" : "AI 生成导图"}
+          {busy ? t.home.creating : parsedOutline ? t.home.createFromOutline : t.home.createWithAi}
         </button>
       </div>
     </form>
@@ -517,7 +518,7 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
     {error && <p className="lm-form-error" role="alert">{error}</p>}
 
     <div className="lm-suggestion-row">
-      {["产品发布计划", "系统架构拆解", "年度学习目标", "问题根因复盘"].map((idea) => (
+      {t.home.suggestions.map((idea) => (
         <button key={idea} type="button" onClick={() => setText(idea)}>
           <Sparkles size={11}/> {idea}
         </button>
@@ -525,10 +526,10 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
     </div>
 
     {recentMaps.length > 0 && (
-      <section className="lm-home-recent" aria-label="最近导图">
+      <section className="lm-home-recent" aria-label={t.home.recentAria}>
         <div className="lm-home-recent-head">
-          <h2>最近编辑</h2>
-          <AppLink href="/app/library">查看全部 <ArrowRight size={12}/></AppLink>
+          <h2>{t.home.recentHeading}</h2>
+          <AppLink href="/app/library">{t.home.viewAll} <ArrowRight size={12}/></AppLink>
         </div>
         <div className="lm-library-list" role="list">
           {recentMaps.map((map) => (
@@ -536,7 +537,7 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
               <span className="lm-map-icon" aria-hidden="true"><GitBranch size={14}/></span>
               <AppLink href={`/app/mindmaps/${map.id}`} className="lm-library-title">{map.title}</AppLink>
               <div className="lm-library-meta">
-                <span>{formatRelativeTime(map.updatedAt)}</span>
+                <span>{formatRelativeTime(map.updatedAt, locale)}</span>
               </div>
             </div>
           ))}
@@ -546,15 +547,18 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
   </div>;
 }
 
-function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onToggleTheme, onQuickAiCreate }: {
+function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onToggleTheme, onToggleLocale, onQuickAiCreate }: {
   open: boolean;
   maps: MindmapSummary[];
   workspaces: WorkspaceSummary[];
   onClose: () => void;
   onSelectSpace: (id: string | null) => void;
   onToggleTheme: () => void;
+  onToggleLocale: () => void;
   onQuickAiCreate: (prompt: string) => Promise<void>;
 }) {
+  const { locale, t } = useI18n();
+  const intlLocale = getIntlLocale(locale);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -567,21 +571,21 @@ function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onT
   }, [open, onClose]);
 
   const filteredMaps = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("zh-CN");
-    return (q ? maps.filter((m) => m.title.toLocaleLowerCase("zh-CN").includes(q)) : maps).slice(0, 6);
-  }, [maps, query]);
+    const q = query.trim().toLocaleLowerCase(intlLocale);
+    return (q ? maps.filter((m) => m.title.toLocaleLowerCase(intlLocale).includes(q)) : maps).slice(0, 6);
+  }, [maps, query, intlLocale]);
 
   if (!open) return null;
 
   return <div className="lm-cmdk-overlay" onClick={onClose}>
-    <div className="lm-cmdk-box" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="全局命令面板">
+    <div className="lm-cmdk-box" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={t.cmdk.dialogAria}>
       <div className="lm-cmdk-input-row">
         <Search size={15}/>
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索导图、切换空间，或直接输入想法让 AI 生成…"
+          placeholder={t.cmdk.placeholder}
           onKeyDown={(e) => {
             if (e.key === "Enter" && query.trim() && filteredMaps.length === 0) {
               e.preventDefault();
@@ -594,21 +598,21 @@ function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onT
       <div className="lm-cmdk-list">
         {query.trim() && (
           <>
-            <div className="lm-cmdk-group-title">AI 快速新建</div>
+            <div className="lm-cmdk-group-title">{t.cmdk.groupAi}</div>
             <button
               type="button"
               className="lm-cmdk-item is-accent"
               onClick={() => { onClose(); void onQuickAiCreate(query.trim()); }}
             >
               <Sparkles size={14}/>
-              <span>用 AI 生成导图：「{query.trim()}」</span>
+              <span>{t.cmdk.createWithAi(query.trim())}</span>
             </button>
           </>
         )}
 
         {filteredMaps.length > 0 && (
           <>
-            <div className="lm-cmdk-group-title">导图</div>
+            <div className="lm-cmdk-group-title">{t.cmdk.groupMaps}</div>
             {filteredMaps.map((m) => (
               <button
                 key={m.id}
@@ -618,25 +622,28 @@ function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onT
               >
                 <GitBranch size={13}/>
                 <span>{m.title}</span>
-                <small>{formatRelativeTime(m.updatedAt)}</small>
+                <small>{formatRelativeTime(m.updatedAt, locale)}</small>
               </button>
             ))}
           </>
         )}
 
-        <div className="lm-cmdk-group-title">快捷操作</div>
+        <div className="lm-cmdk-group-title">{t.cmdk.groupActions}</div>
         <button type="button" className="lm-cmdk-item" onClick={() => { onClose(); navigate("/app"); }}>
-          <Plus size={13}/><span>新建导图</span>
+          <Plus size={13}/><span>{t.cmdk.newMap}</span>
         </button>
         <button type="button" className="lm-cmdk-item" onClick={() => { onClose(); navigate("/app/library"); }}>
-          <FolderOpen size={13}/><span>打开全部导图</span>
+          <FolderOpen size={13}/><span>{t.cmdk.openLibrary}</span>
         </button>
         <button type="button" className="lm-cmdk-item" onClick={() => { onToggleTheme(); onClose(); }}>
-          <Sparkles size={13}/><span>切换暗色 / 亮色主题</span>
+          <Sparkles size={13}/><span>{t.cmdk.toggleTheme}</span>
+        </button>
+        <button type="button" className="lm-cmdk-item" onClick={() => { onToggleLocale(); onClose(); }}>
+          <Languages size={13}/><span>{t.cmdk.toggleLang}</span>
         </button>
         {workspaces.map((ws) => (
           <button key={ws.id} type="button" className="lm-cmdk-item" onClick={() => { onSelectSpace(ws.id); onClose(); }}>
-            <Users size={13}/><span>切换到空间：{ws.name}</span>
+            <Users size={13}/><span>{t.cmdk.switchSpace(ws.name)}</span>
           </button>
         ))}
       </div>
@@ -645,6 +652,7 @@ function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onT
 }
 
 function CreateWorkspaceDialog({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (name: string) => Promise<void> }) {
+  const { t } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -657,14 +665,14 @@ function CreateWorkspaceDialog({ open, onClose, onCreate }: { open: boolean; onC
     setBusy(true);
     setError("");
     try { await onCreate(clean); dialog.current?.close(); setName(""); }
-    catch (reason) { setError(errorText(reason, "无法创建工作区。")); }
+    catch (reason) { setError(errorText(reason, t.createSpaceDialog.failed)); }
     finally { setBusy(false); }
   }
   return <dialog ref={dialog} className="lm-modal" aria-labelledby="lm-create-space-title" onClose={onClose}><form className="lm-modal-inner" onSubmit={(event) => void submit(event)}>
-    <div className="lm-modal-heading"><div><span className="lm-eyebrow">WORKSPACE / NEW</span><h2 id="lm-create-space-title">新建共享工作区</h2></div><button type="button" className="lm-icon-button-sm" aria-label="关闭" onClick={() => dialog.current?.close()}><X size={15}/></button></div>
-    <p className="lm-modal-description">工作区可以容纳多张导图。创建后，你可以生成邀请链接让其他账号加入。</p>
-    <label htmlFor="lm-space-name">工作区名称</label><input id="lm-space-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} placeholder="例如：产品团队" autoFocus/>
+    <div className="lm-modal-heading"><div><span className="lm-eyebrow">{t.createSpaceDialog.eyebrow}</span><h2 id="lm-create-space-title">{t.createSpaceDialog.title}</h2></div><button type="button" className="lm-icon-button-sm" aria-label={t.common.close} onClick={() => dialog.current?.close()}><X size={15}/></button></div>
+    <p className="lm-modal-description">{t.createSpaceDialog.desc}</p>
+    <label htmlFor="lm-space-name">{t.createSpaceDialog.nameLabel}</label><input id="lm-space-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} placeholder={t.createSpaceDialog.namePlaceholder} autoFocus/>
     {error && <p className="lm-form-error" role="alert">{error}</p>}
-    <div className="lm-modal-actions"><button type="button" className="lm-secondary-button" onClick={() => dialog.current?.close()}>取消</button><button type="submit" className="lm-primary-button" disabled={busy || !name.trim()}>{busy ? "正在创建…" : "创建工作区"}</button></div>
+    <div className="lm-modal-actions"><button type="button" className="lm-secondary-button" onClick={() => dialog.current?.close()}>{t.common.cancel}</button><button type="submit" className="lm-primary-button" disabled={busy || !name.trim()}>{busy ? t.createSpaceDialog.creating : t.createSpaceDialog.submit}</button></div>
   </form></dialog>;
 }

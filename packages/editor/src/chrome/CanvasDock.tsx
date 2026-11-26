@@ -21,6 +21,7 @@ import {
   generateId,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface CanvasDockProps {
   isDark: boolean;
@@ -34,6 +35,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
   const selectTopics = useMindmapStore((s) => s.selectTopics);
   const setEditingTopicId = useMindmapStore((s) => s.setEditingTopicId);
   const dispatch = useMindmapStore((s) => s.dispatch);
+  const { t } = useEditorI18n();
   const imgInputRef = useRef<HTMLInputElement>(null);
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
@@ -75,7 +77,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
         id: generateId("bnd", deletedSet),
         target: { kind: "subtree", topicId: primaryId },
         shape: "rounded",
-        title: "外框",
+        title: t.dock.defaultBoundary,
       },
     });
   };
@@ -92,7 +94,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
         startIndex: loc.index,
         endIndex: loc.index,
         brace: "curly",
-        topic: createTopic(generateId("sumt", deletedSet), "概要"),
+        topic: createTopic(generateId("sumt", deletedSet), t.dock.defaultSummary),
       },
     });
   };
@@ -102,7 +104,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
       type: "topic/setCallout",
       sheetId: sheet.id,
       topicId: primaryId,
-      callout: { id: generateId("co", deletedSet), title: createRichText("批注说明") },
+      callout: { id: generateId("co", deletedSet), title: createRichText(t.dock.defaultCallout) },
     });
   };
 
@@ -119,7 +121,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
         id: generateId("rel", deletedSet),
         fromId,
         toId,
-        title: "关联",
+        title: t.dock.defaultRelationship,
       },
     });
   };
@@ -169,7 +171,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
           : "border-slate-900/[0.1] bg-white/95 text-[#111318]"
       }`}
       role="toolbar"
-      aria-label="画布快捷操作"
+      aria-label={t.dock.toolbarAria}
     >
       <input
         ref={imgInputRef}
@@ -181,23 +183,23 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
 
       <button
         type="button"
-        title="插入子主题 (Tab)"
+        title={t.dock.addChildTitle}
         onClick={handleAddChild}
         className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 py-1 font-medium transition ${hoverCls}`}
       >
         <CornerDownRight className="h-3.5 w-3.5 shrink-0" />
-        <span>子主题</span>
+        <span>{t.dock.subtopic}</span>
         <kbd className={`hidden rounded px-1 font-mono text-[10px] opacity-55 sm:inline`}>Tab</kbd>
       </button>
 
       <button
         type="button"
-        title="插入同级主题 (Enter)"
+        title={t.dock.addSiblingTitle}
         onClick={handleAddSibling}
         className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 py-1 font-medium transition ${hoverCls}`}
       >
         <Plus className="h-3.5 w-3.5 shrink-0" />
-        <span>同级</span>
+        <span>{t.dock.sibling}</span>
       </button>
 
       <div className={sepCls} />
@@ -208,7 +210,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
             type="button"
             className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-[6px] px-2.5 py-1 font-medium transition ${hoverCls}`}
           >
-            <span>添加元素</span>
+            <span>{t.dock.insertElement}</span>
             <ChevronDown className="h-3 w-3 opacity-65" />
           </button>
         </Popover.Trigger>
@@ -222,32 +224,32 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
                 : "border-slate-900/[0.1] bg-white text-[#111318]"
             }`}
           >
-            <div className={groupTitleCls}>结构标注</div>
-            <PopItem icon={<Share2 className="h-3.5 w-3.5" />} label="节点联系" onClick={handleAddRelationship} hoverCls={hoverCls} />
-            <PopItem icon={<SquareDashedBottom className="h-3.5 w-3.5" />} label="分支外框" onClick={handleAddBoundary} hoverCls={hoverCls} />
-            <PopItem icon={<Braces className="h-3.5 w-3.5" />} label="分支概要" onClick={handleAddSummary} hoverCls={hoverCls} />
-            <PopItem icon={<MessageSquare className="h-3.5 w-3.5" />} label="节点批注" onClick={handleAddCallout} hoverCls={hoverCls} />
+            <div className={groupTitleCls}>{t.dock.structureGroup}</div>
+            <PopItem icon={<Share2 className="h-3.5 w-3.5" />} label={t.dock.relationship} onClick={handleAddRelationship} hoverCls={hoverCls} />
+            <PopItem icon={<SquareDashedBottom className="h-3.5 w-3.5" />} label={t.dock.boundary} onClick={handleAddBoundary} hoverCls={hoverCls} />
+            <PopItem icon={<Braces className="h-3.5 w-3.5" />} label={t.dock.summary} onClick={handleAddSummary} hoverCls={hoverCls} />
+            <PopItem icon={<MessageSquare className="h-3.5 w-3.5" />} label={t.dock.callout} onClick={handleAddCallout} hoverCls={hoverCls} />
 
             <div className={`my-1 h-px ${isDark ? "bg-white/[0.075]" : "bg-slate-900/[0.08]"}`} />
-            <div className={groupTitleCls}>富媒体内容</div>
-            <PopItem icon={<ImagePlus className="h-3.5 w-3.5" />} label="上传图片" onClick={() => imgInputRef.current?.click()} hoverCls={hoverCls} />
+            <div className={groupTitleCls}>{t.dock.richMediaGroup}</div>
+            <PopItem icon={<ImagePlus className="h-3.5 w-3.5" />} label={t.dock.uploadImage} onClick={() => imgInputRef.current?.click()} hoverCls={hoverCls} />
             <PopItem
               icon={<Sigma className="h-3.5 w-3.5" />}
-              label="数学公式"
+              label={t.dock.equation}
               onClick={() => dispatch({ type: "topic/setEquation", sheetId: sheet.id, topicId: primaryId, latex: "E = mc^2" })}
               hoverCls={hoverCls}
             />
             <PopItem
               icon={<FileText className="h-3.5 w-3.5" />}
-              label="长备注"
-              onClick={() => dispatch({ type: "topic/setNote", sheetId: sheet.id, topicId: primaryId, text: "在此补充节点的详细说明..." })}
+              label={t.dock.note}
+              onClick={() => dispatch({ type: "topic/setNote", sheetId: sheet.id, topicId: primaryId, text: t.dock.defaultNote })}
               hoverCls={hoverCls}
             />
             <PopItem
               icon={<Link2 className="h-3.5 w-3.5" />}
-              label="超链接"
+              label={t.dock.hyperlink}
               onClick={() => {
-                const url = window.prompt("输入链接地址 (https://...)", "https://");
+                const url = window.prompt(t.dock.linkPrompt, "https://");
                 if (url && url.trim().length > 8) {
                   dispatch({ type: "topic/setHref", sheetId: sheet.id, topicId: primaryId, href: { kind: "url", target: url.trim() } });
                 }
@@ -264,7 +266,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
           <button
             type="button"
             onClick={onOpenInlineAi}
-            title="节点 AI 快捷指令 (⇧⌘J)"
+            title={t.dock.inlineAiTitle}
             className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-[6px] px-2.5 py-1 font-medium transition ${
               isDark
                 ? "bg-white/[0.08] text-[#f4f5f8] hover:bg-white/[0.14]"
@@ -272,7 +274,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
             }`}
           >
             <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-80" />
-            <span>AI 扩展</span>
+            <span>{t.dock.aiExpand}</span>
           </button>
         </>
       )}

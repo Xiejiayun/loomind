@@ -12,6 +12,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface TopToolbarProps {
   isDark: boolean;
@@ -45,6 +46,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   const canRedo = useMindmapStore((s) => s.canRedo);
   const undo = useMindmapStore((s) => s.undo);
   const redo = useMindmapStore((s) => s.redo);
+  const { t } = useEditorI18n();
 
   const focusCls = isDark
     ? "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0b0c0e]"
@@ -61,7 +63,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             : "border-slate-900/[0.12] bg-white/95 text-[#111318] hover:bg-slate-50"
         }`}
       >
-        退出禅模式 (Esc)
+        {t.toolbar.exitZen}
       </button>
     );
   }
@@ -89,7 +91,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             type="button"
             onClick={onToggleAi}
-            title="展开/收起左侧 AI 对话 (⌘J)"
+            title={t.toolbar.toggleAiTitle}
             className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
               aiOpen
                 ? isDark
@@ -99,7 +101,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             }`}
           >
             <Sparkles className="h-3 w-3 opacity-80" />
-            <span>对话</span>
+            <span>{t.toolbar.chat}</span>
           </button>
         )}
       </div>
@@ -124,7 +126,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                   : "text-[#525b6b] hover:text-[#111318]"
             }`}
           >
-            <GitBranch className="h-3 w-3" /> 导图
+            <GitBranch className="h-3 w-3" /> {t.toolbar.mapView}
           </button>
           <button
             type="button"
@@ -139,7 +141,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                   : "text-[#525b6b] hover:text-[#111318]"
             }`}
           >
-            <ListTree className="h-3 w-3" /> 大纲
+            <ListTree className="h-3 w-3" /> {t.toolbar.outlineView}
           </button>
         </div>
 
@@ -151,7 +153,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               disabled={!canUndo}
               onClick={undo}
               className={`rounded-[5px] p-1.5 disabled:opacity-30 ${hoverCls} ${focusCls}`}
-              title="撤销 (Ctrl+Z)"
+              title={t.toolbar.undo}
             >
               <Undo2 className="h-3.5 w-3.5" />
             </button>
@@ -160,7 +162,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               disabled={!canRedo}
               onClick={redo}
               className={`rounded-[5px] p-1.5 disabled:opacity-30 ${hoverCls} ${focusCls}`}
-              title="重做 (Ctrl+Shift+Z)"
+              title={t.toolbar.redo}
             >
               <Redo2 className="h-3.5 w-3.5" />
             </button>
@@ -169,7 +171,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               onClick={onOpenTemplates}
               className={`hidden items-center gap-1 rounded-[5px] border px-2 py-1 text-[11.5px] font-medium sm:inline-flex ${borderBtnCls} ${focusCls}`}
             >
-              <LayoutGrid className="h-3 w-3 opacity-75" /> 模板
+              <LayoutGrid className="h-3 w-3 opacity-75" /> {t.toolbar.templates}
             </button>
           </>
         )}
@@ -181,16 +183,16 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           type="button"
           onClick={() => setPitchMode(true)}
           className={`hidden items-center gap-1 rounded-[5px] px-2 py-1 text-[11.5px] font-medium md:inline-flex ${hoverCls} ${focusCls}`}
-          title="演说模式"
+          title={t.toolbar.pitchTitle}
         >
-          <Play className="h-3 w-3" /> 演说
+          <Play className="h-3 w-3" /> {t.toolbar.pitch}
         </button>
 
         <button
           type="button"
           onClick={() => setZenMode(true)}
           className={`hidden rounded-[5px] p-1.5 sm:inline-flex ${hoverCls} ${focusCls}`}
-          title="禅模式"
+          title={t.toolbar.zenTitle}
         >
           <Maximize2 className="h-3.5 w-3.5" />
         </button>
@@ -202,7 +204,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             className={`flex items-center gap-1 rounded-[5px] border px-2 py-1 text-[11.5px] font-medium ${borderBtnCls} ${focusCls}`}
           >
             <Download className="h-3 w-3" />
-            <span className="hidden sm:inline">导出</span>
+            <span className="hidden sm:inline">{t.toolbar.export}</span>
           </button>
         )}
 
@@ -217,10 +219,10 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                   : "bg-slate-900/[0.08] text-[#111318]"
                 : hoverCls
             }`}
-            title="格式面板 (⌘I)"
+            title={t.toolbar.formatTitle}
           >
             <PanelRight className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">格式</span>
+            <span className="hidden sm:inline">{t.toolbar.format}</span>
           </button>
         )}
       </div>

@@ -12,6 +12,7 @@ import {
   type RichTextDoc,
 } from "@mindmap/core";
 import { MARKER_BY_ID, STICKER_BY_ID } from "../chrome/markers-catalog.js";
+import { useEditorI18n } from "../i18n.js";
 import { EquationView } from "./EquationView.js";
 import { TopicEditor } from "./TopicEditor.js";
 
@@ -120,6 +121,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
   }) => {
     const [editingCallout, setEditingCallout] = useState(false);
     const [calloutDraft, setCalloutDraft] = useState("");
+    const { t } = useEditorI18n();
     const isTransparentFill = layoutNode.fillColor.toUpperCase().endsWith("00");
     const darkBg =
       layoutNode.isDarkBg ??
@@ -232,7 +234,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
               setCalloutDraft(richTextToPlainText(topic.callout!.title));
               setEditingCallout(true);
             }}
-            title="双击编辑批注"
+            title={t.topic.editCalloutTitle}
           >
             {editingCallout ? (
               <input
@@ -266,7 +268,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                   onUpdateCallout(topic.id, null);
                 }}
                 className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-amber-950 opacity-0 shadow-xs transition group-hover/co:opacity-100 hover:bg-amber-500"
-                title="删除批注"
+                title={t.topic.deleteCalloutTitle}
               >
                 <X className="h-2.5 w-2.5" />
               </button>
@@ -387,7 +389,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                   e.stopPropagation();
                   onToggleTask(topic.id);
                 }}
-                title="切换任务状态"
+                title={t.topic.toggleTaskTitle}
               >
                 {topic.task.status === "done" && <Check className="h-3 w-3" strokeWidth={3} />}
               </button>
@@ -510,7 +512,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 e.stopPropagation();
                 onStartResizeWidth(topic.id, e);
               }}
-              title="拖动调整宽度"
+              title={t.topic.resizeWidthTitle}
             />
           )}
 
@@ -540,7 +542,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 color: darkBg ? "#F8FAFC" : accentCss,
                 border: `1.5px solid ${accentCss}`,
               }}
-              title={topic.collapsed ? "展开子分支" : "折叠子分支"}
+              title={topic.collapsed ? t.topic.expandBranchTitle : t.topic.collapseBranchTitle}
             >
               {topic.collapsed ? (
                 <span>+{layoutNode.hiddenCount}</span>

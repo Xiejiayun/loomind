@@ -1,13 +1,28 @@
 import { canonicalJson, getTemplate, type MindmapDocument } from "@mindmap/core";
+import { getWebMessages } from "../i18n.js";
 import { loadLocal, saveLocal } from "../persistence.js";
 import { documentFromTopic } from "../outline.js";
 import { CloudError, readCloud, writeCloud } from "./cloud.js";
 import type { LocalDraft, MapAccess } from "./shared.js";
 
-export type SyncState = { label: string; detail: string; conflict?: boolean };
-const conflict: SyncState = { label: "版本冲突", detail: "云端也有修改，已暂停上传。可先导出本机版本，再决定是否打开云端版本。", conflict: true };
-const pending: SyncState = { label: "待同步", detail: "有修改尚未保存到云端。" };
-const synced: SyncState = { label: "已同步", detail: "当前草稿已保存到云端。" };
+export type SyncStatus = "connecting" | "conflict" | "pending" | "synced" | "syncing" | "ready" | "unsynced";
+export type SyncState = { label: string; detail: string; conflict?: boolean; status?: SyncStatus };
+
+function syncMessages() {
+  return getWebMessages().sync;
+}
+function conflictState(): SyncState {
+  const s = syncMessages();
+  return { label: s.conflictLabel, detail: s.conflictDetail, conflict: true, status: "conflict" };
+}
+function pendingState(): SyncState {
+  const s = syncMessages();
+  return { label: s.pendingLabel, detail: s.pendingDetail, status: "pending" };
+}
+function syncedState(): SyncState {
+  const s = syncMessages();
+  return { label: s.syncedLabel, detail: s.syncedDetail, status: "synced" };
+}
 
 export class DraftWorkspace {
   private draft?: LocalDraft;
@@ -35,7 +50,7 @@ export class DraftWorkspace {
     try { local = await this.storage.loadLocal(this.owner, this.id ?? undefined); }
     catch {
       this.cacheReadable = false;
-      if (!this.closed) this.localError("未能读取本机草稿，已暂停本机写入以免覆盖。请导出备份后重试。");
+      if (!this.closed) this.localError(syncMessages().localReadError);
     }
     if (this.closed) return;
     this.draft = this.withScope(local ?? { document: this.initialDocument(), revision: 0, dirty: false });
@@ -45,7 +60,7 @@ export class DraftWorkspace {
 
   private initialDocument(): MindmapDocument {
     if (this.owner) return getTemplate("blank-organic").create();
-    const document = documentFromTopic("未命名导图");
+    const document = documentFromTopic(getWebMessages().common.untitledMap);
     return { ...document, theme: { ...document.theme, paletteId: "workspace" } };
   }
 
@@ -55,7 +70,7 @@ export class DraftWorkspace {
     this.needsLocalSave = true;
     clearTimeout(this.localTimer);
     this.localTimer = setTimeout(() => void this.flush(), 250);
-    if (this.owner && !this.conflicted) { this.status(pending); this.scheduleCloud(); }
+    if (this.owner && !this.conflicted) { this.status(pendingState()); this.scheduleCloud(); }
   }
 
   private scheduleCloud() {
@@ -71,22 +86,23 @@ export class DraftWorkspace {
       if (!this.closed) this.localError("");
     } catch {
       this.needsLocalSave = true;
-      if (!this.closed) this.localError("本机保存失败，请检查浏览器空间并导出 .xmind 备份。");
+      if (!this.closed) this.localError(syncMessages().localSaveError);
     }
   }
 
   async sync(useCloud = false) {
     if (!this.owner || !this.id || !this.draft || this.closed || this.running || (this.conflicted && !useCloud)) return;
     this.running = true;
-    this.status({ label: "同步中", detail: "正在连接云端草稿。" });
+    const s = syncMessages();
+    this.status({ label: s.syncingLabel, detail: s.syncingDetail, status: "syncing" });
     try {
       if (this.pullingRequired || !this.draft.dirty || useCloud) {
         const before = this.draft.document;
         const remote = await this.storage.readCloud(this.owner, this.id);
         if (this.closed) return;
-        if (useCloud && (!remote.document || this.draft.document !== before)) throw new CloudError(409, conflict.detail);
+        if (useCloud && (!remote.document || this.draft.document !== before)) throw new CloudError(409, conflictState().detail);
         if (!useCloud && this.draft.dirty && remote.revision !== this.draft.revision) {
-          if (!remote.document || canonicalJson(remote.document) !== canonicalJson(this.draft.document)) throw new CloudError(409, conflict.detail);
+          if (!remote.document || canonicalJson(remote.document) !== canonicalJson(this.draft.document)) throw new CloudError(409, conflictState().detail);
           this.draft = { ...this.draft, revision: remote.revision, dirty: false };
           this.needsLocalSave = true;
         } else if (remote.document && (useCloud || (!this.draft.dirty && remote.revision !== this.draft.revision))) {
@@ -108,13 +124,15 @@ export class DraftWorkspace {
       }
       await this.flush();
       if (this.closed) return;
-      this.status(this.draft.dirty ? pending : this.draft.revision ? synced : { label: "云端就绪", detail: "首次编辑后会保存到云端。" });
+      const doneMsg = syncMessages();
+      this.status(this.draft.dirty ? pendingState() : this.draft.revision ? syncedState() : { label: doneMsg.readyLabel, detail: doneMsg.readyDetail, status: "ready" });
       if (this.draft.dirty) this.scheduleCloud();
     } catch (error) {
       if (this.closed) return;
       this.pullingRequired = true;
       this.conflicted ||= error instanceof CloudError && error.status === 409;
-      this.status(this.conflicted ? conflict : { label: "未同步", detail: error instanceof Error ? error.message : "无法同步，请重试。" });
+      const errMsg = syncMessages();
+      this.status(this.conflicted ? conflictState() : { label: errMsg.unsyncedLabel, detail: error instanceof Error ? error.message : errMsg.unsyncedDetail, status: "unsynced" });
     } finally { this.running = false; }
   }
 

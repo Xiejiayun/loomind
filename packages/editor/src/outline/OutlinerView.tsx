@@ -18,6 +18,7 @@ import {
   type MindmapTopic,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface FlatOutlineRow {
   topic: MindmapTopic;
@@ -42,6 +43,7 @@ export const OutlinerView: React.FC = () => {
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
   const selectTopics = useMindmapStore((s) => s.selectTopics);
   const dispatch = useMindmapStore((s) => s.dispatch);
+  const { t } = useEditorI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
 
@@ -87,17 +89,17 @@ export const OutlinerView: React.FC = () => {
       <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200/80 bg-white px-8 py-7 shadow-xs">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 text-xs text-slate-500">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-semibold text-slate-700">全屏大纲</span>
+            <span className="font-semibold text-slate-700">{t.outliner.title}</span>
             <span className="text-slate-300">·</span>
             <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">Tab</kbd>
-            <span>缩进</span>
+            <span>{t.outliner.indent}</span>
             <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">Shift+Tab</kbd>
-            <span>升级</span>
+            <span>{t.outliner.outdent}</span>
             <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">Alt+↑↓</kbd>
-            <span>排序</span>
+            <span>{t.outliner.reorder}</span>
           </div>
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-            共 {rows.length} 个主题
+            {t.outliner.totalTopics(rows.length)}
           </span>
         </div>
 
@@ -138,7 +140,7 @@ export const OutlinerView: React.FC = () => {
                     dispatch({ type: "topic/addChild", sheetId: sheet.id, parentId: row.topic.id, newId });
                     selectTopics([newId]);
                     setEditingId(newId);
-                    setDraftText("子主题");
+                    setDraftText(t.outliner.defaultSubtopic);
                   }}
                   onKeyAction={(action) => {
                     if (action === "indent") {
@@ -164,9 +166,10 @@ export const OutlinerView: React.FC = () => {
                       }
                       selectTopics([newId]);
                       setEditingId(newId);
-                      setDraftText("新主题");
+                      setDraftText(t.outliner.defaultNewTopic);
                     }
                   }}
+                  addSubtopicTitle={t.outliner.addSubtopicTitle}
                 />
               ))}
             </div>
@@ -191,6 +194,7 @@ interface OutlineItemProps {
   onToggleTask: () => void;
   onAddChild: () => void;
   onKeyAction: (action: "indent" | "outdent" | "up" | "down" | "sibling") => void;
+  addSubtopicTitle: string;
 }
 
 const OutlineItem: React.FC<OutlineItemProps> = ({
@@ -207,6 +211,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
   onToggleTask,
   onAddChild,
   onKeyAction,
+  addSubtopicTitle,
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: row.topic.id,
@@ -330,7 +335,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
           onAddChild();
         }}
         className="rounded p-1 text-slate-400 opacity-0 hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100"
-        title="添加子主题"
+        title={addSubtopicTitle}
       >
         <Plus className="h-3.5 w-3.5" />
       </button>

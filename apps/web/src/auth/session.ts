@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getWebMessages } from "../i18n.js";
 import type { Session } from "./shared.js";
 
 export async function authRequest<T>(route: string, method: "POST" | "GET" = "POST", body?: unknown): Promise<T> {
+  const t = getWebMessages().login;
   let response: Response;
   try {
     response = await fetch(`/api/auth/${route}`, {
@@ -9,10 +11,10 @@ export async function authRequest<T>(route: string, method: "POST" | "GET" = "PO
       ...(body !== undefined && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
     });
   } catch {
-    throw new Error("无法连接登录服务，请检查网络后重试。");
+    throw new Error(t.authConnectError);
   }
-  const data = await response.json().catch(() => { throw new Error("登录服务暂不可用，仍可使用游客编辑。"); });
-  if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : "登录请求失败，请重试。");
+  const data = await response.json().catch(() => { throw new Error(t.authUnavailableError); });
+  if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : t.authFailedError);
   return data;
 }
 
@@ -29,7 +31,7 @@ export function useSession() {
       if (requestVersion === version.current) { setSession(next); setSessionError(""); }
     } catch {
       if (requestVersion !== version.current) return;
-      setSessionError("暂时无法确认登录状态。");
+      setSessionError(getWebMessages().login.sessionCheckError);
       setSession((previous) => previous && (!previous.expiresAt || previous.expiresAt > Date.now()) ? previous : { user: null, expiresAt: null });
     }
   }, []);

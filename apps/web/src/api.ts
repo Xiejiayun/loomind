@@ -1,3 +1,5 @@
+import { getWebMessages } from "./i18n.js";
+
 export type Access = "owner" | "editor" | "viewer";
 export interface WorkspaceSummary { id: string; name: string; role: Access; createdAt: string }
 export interface ShareSummary { id: string; role: "editor" | "viewer"; expiresAt: string }
@@ -18,10 +20,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
-    throw new ApiError(0, "无法连接 Loomind 服务，请检查网络后重试。");
+    throw new ApiError(0, getWebMessages().errors.apiConnect);
   }
-  const body = await response.json().catch(() => { throw new ApiError(502, "服务返回了无法识别的内容。"); });
-  if (!response.ok) throw new ApiError(response.status, typeof body?.error === "string" ? body.error : "操作失败，请重试。");
+  const body = await response.json().catch(() => { throw new ApiError(502, getWebMessages().errors.apiParse); });
+  if (!response.ok) throw new ApiError(response.status, typeof body?.error === "string" ? body.error : getWebMessages().errors.apiFailed);
   return body as T;
 }
 

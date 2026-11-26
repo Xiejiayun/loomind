@@ -1,21 +1,10 @@
 import React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { getPalette, hex8ToCss, TEMPLATES, type MindmapStructure } from "@mindmap/core";
+import { getPalette, getTemplateInfo, hex8ToCss, TEMPLATES } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 import { StructureIcon } from "./structure-icons.js";
-
-const STRUCTURE_CN: Record<MindmapStructure, string> = {
-  mindmap: "思维导图",
-  logic: "逻辑图",
-  org: "组织结构",
-  brace: "括号图",
-  indented: "缩进目录",
-  timeline: "时间轴",
-  fishbone: "鱼骨图",
-  treeTable: "树型表格",
-  matrix: "矩阵图",
-};
 
 interface TemplateModalProps {
   open: boolean;
@@ -24,6 +13,7 @@ interface TemplateModalProps {
 
 export const TemplateModal: React.FC<TemplateModalProps> = ({ open, onOpenChange }) => {
   const replaceDocument = useMindmapStore((s) => s.replaceDocument);
+  const { locale, t } = useEditorI18n();
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -32,9 +22,9 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({ open, onOpenChange
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[760px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <Dialog.Title className="text-base font-bold text-slate-900">新建思维导图模板</Dialog.Title>
+              <Dialog.Title className="text-base font-bold text-slate-900">{t.templateModal.title}</Dialog.Title>
               <Dialog.Description className="mt-0.5 text-xs text-slate-500">
-                精选 8 套结构与配色组合，点击即可一键生成专业导图
+                {t.templateModal.desc}
               </Dialog.Description>
             </div>
             <Dialog.Close className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
@@ -45,6 +35,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({ open, onOpenChange
           <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
             {TEMPLATES.map((tpl) => {
               const pal = getPalette(tpl.paletteId);
+              const info = getTemplateInfo(tpl.id, locale, tpl);
               return (
                 <button
                   key={tpl.id}
@@ -73,15 +64,15 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({ open, onOpenChange
                         color: pal.isDark ? "#F8FAFC" : "#334155",
                       }}
                     >
-                      {STRUCTURE_CN[tpl.structure]}
+                      {t.structures[tpl.structure]}
                     </span>
                   </div>
                   <div className="flex flex-1 flex-col bg-white p-3">
                     <div className="text-xs font-semibold text-slate-800 group-hover:text-blue-600">
-                      {tpl.name}
+                      {info.name}
                     </div>
                     <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500">
-                      {tpl.description}
+                      {info.description}
                     </div>
                   </div>
                 </button>
