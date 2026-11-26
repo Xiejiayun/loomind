@@ -559,6 +559,14 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
                 dy: quantizeCoord(cmd.relationship.control2Offset.dy),
               }
             : undefined,
+          style: cmd.relationship.style
+            ? {
+                ...cmd.relationship.style,
+                strokeColor: cmd.relationship.style.strokeColor
+                  ? normalizeHexColor(cmd.relationship.style.strokeColor)
+                  : undefined,
+              }
+            : undefined,
         };
         if (idx >= 0) sheet.relationships[idx] = rel;
         else sheet.relationships.push(rel);

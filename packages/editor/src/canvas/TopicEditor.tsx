@@ -8,6 +8,11 @@ import Link from "@tiptap/extension-link";
 import { Bold, Highlighter, Italic, Strikethrough } from "lucide-react";
 import type { RichTextDoc } from "@mindmap/core";
 import { useEditorI18n } from "../i18n.js";
+import {
+  DEFAULT_HIGHLIGHT_HEX8,
+  normalizeTipTapJson,
+  richTextDocToTipTapJson,
+} from "./rich-text-tiptap.js";
 
 interface TopicEditorProps {
   initialDoc: RichTextDoc;
@@ -17,32 +22,6 @@ interface TopicEditorProps {
   textColor: string;
   onCommit: (doc: RichTextDoc) => void;
   onCancel: () => void;
-}
-
-function normalizeTipTapJson(json: Record<string, unknown>): RichTextDoc {
-  const rawContent = Array.isArray(json.content) ? json.content : [];
-  const paragraphs = rawContent
-    .filter((n: Record<string, unknown>) => n.type === "paragraph")
-    .map((p: Record<string, unknown>) => {
-      const nodes = Array.isArray(p.content)
-        ? p.content
-            .filter((t: Record<string, unknown>) => t.type === "text" && typeof t.text === "string")
-            .map((t: Record<string, unknown>) => ({
-              type: "text" as const,
-              text: t.text as string,
-              ...(Array.isArray(t.marks) && t.marks.length > 0 ? { marks: t.marks } : {}),
-            }))
-        : undefined;
-      return {
-        type: "paragraph" as const,
-        ...(nodes && nodes.length > 0 ? { content: nodes } : {}),
-      };
-    });
-
-  return {
-    type: "doc",
-    content: paragraphs.length > 0 ? paragraphs : [{ type: "paragraph" }],
-  };
 }
 
 export const TopicEditor: React.FC<TopicEditorProps> = ({
@@ -75,7 +54,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
     ],
     content: initialChar
       ? { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: initialChar }] }] }
-      : initialDoc,
+      : richTextDocToTipTapJson(initialDoc),
     autofocus: "end",
     onSelectionUpdate: ({ editor: ed }) => {
       setHasSelection(!ed.state.selection.empty);
@@ -157,7 +136,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
           <button
             type="button"
             className={`rounded p-1 text-slate-700 hover:bg-slate-100 ${editor.isActive("highlight") ? "bg-amber-100 text-amber-700" : ""}`}
-            onClick={() => editor.chain().focus().toggleHighlight({ color: "#FEF08A" }).run()}
+            onClick={() => editor.chain().focus().toggleHighlight({ color: DEFAULT_HIGHLIGHT_HEX8 }).run()}
             title={t.topic.highlight}
           >
             <Highlighter className="h-3.5 w-3.5" />
