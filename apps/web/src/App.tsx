@@ -70,7 +70,7 @@ export function App() {
 }
 
 function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const featureIcons = [Sparkles, GitBranch, Boxes];
   return <div className="lm-public">
     <div className="lm-ambient-glow" aria-hidden="true" />
@@ -88,7 +88,7 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
     <main>
       <section className="lm-hero lm-container">
         <div className="lm-hero-pill"><span className="lm-live-dot"/>{t.landing.heroPill}</div>
-        <h1>{t.landing.heroTitleLine1}<br/><span>{t.landing.heroTitleLine2}</span></h1>
+        <h1>{t.landing.heroTitleLine1}{locale === "en" ? " " : ""}<span>{t.landing.heroTitleLine2}</span></h1>
         <p className="lm-hero-subtitle">{t.landing.heroSubtitle}</p>
         <div className="lm-hero-actions">
           <AppLink href="/login" className="lm-primary-button">{t.landing.heroPrimaryCta} <ArrowRight size={15}/></AppLink>
