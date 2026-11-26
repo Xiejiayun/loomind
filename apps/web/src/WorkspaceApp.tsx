@@ -108,7 +108,14 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
       try { spaces = await listWorkspaces(); }
       catch (reason) { failures.push(errorText(reason, t.workspace.readSpacesError)); }
       if (!active) return;
-      const merged = remote ? [...remote, ...local.filter((item) => !remote!.some((cloud) => cloud.id === item.id))] : local;
+      const merged = remote
+        ? [
+            ...remote,
+            ...local
+              .filter((item) => !remote!.some((cloud) => cloud.id === item.id))
+              .map((item) => ({ ...item, localOnly: true })),
+          ]
+        : local;
       setMaps(sortMaps(merged));
       setWorkspaces(spaces);
       setActiveWorkspaceId((current) => current && spaces.some((space) => space.id === current) ? current : null);

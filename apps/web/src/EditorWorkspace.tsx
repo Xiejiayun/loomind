@@ -96,6 +96,17 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
     onRename(map.id, mapTitle(document));
   }, [map.id, onRename]);
 
+  const downloadJson = useCallback((filename: string, json: string | null) => {
+    if (!json) return;
+    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   if (!initial) return <div className="lm-loading">{t.common.openingMap}</div>;
 
   return <div className="lm-editor-host">
@@ -123,6 +134,17 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
           sync={sync}
           onSync={(useCloud) => void workspace.current?.sync(useCloud)}
           onLogin={() => navigate("/login")}
+          onSaveAsNew={() => void workspace.current?.saveAsNewMap().then((newId) => { if (newId) navigate(`/app/mindmaps/${newId}`); })}
+          onExportBackup={() => downloadJson(`loomind-backup-${map.id}.json`, workspace.current?.exportCurrentJson() ?? null)}
+          onExportCorrupt={() => {
+            const first = workspace.current?.getCorruptRecords()[0];
+            if (first) downloadJson(`loomind-corrupt-${map.id}.json`, workspace.current?.exportCorruptRecordJson(first.corruptKey) ?? null);
+          }}
+          onDiscardCorrupt={() => {
+            const first = workspace.current?.getCorruptRecords()[0];
+            if (first) void workspace.current?.discardCorrupt(first.corruptKey);
+          }}
+          onRemoveLocalCache={() => void workspace.current?.removeCleanCache().then((res) => { if (res.removed) navigate("/app"); })}
         />
       </div>}
     />
