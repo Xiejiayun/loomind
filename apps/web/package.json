@@ -9,7 +9,7 @@
     "dev:auth": "wrangler dev --local --ip 127.0.0.1 --port 8787 --no-infer-origin-from-routes --assets ./public",
     "build": "pnpm run typecheck && vite build",
     "preview": "wrangler dev --local --port 5173 --no-infer-origin-from-routes",
-    "deploy": "pnpm run build && wrangler deploy",
+    "deploy": "node -e \"console.error('Direct local production deploy is disabled. Use GitHub Actions workflow \\\"Deploy production\\\" (.github/workflows/deploy-production.yml) or follow the approved emergency procedure in docs/DEPLOYMENT.md.'); process.exit(1)\"",
     "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json && tsc -p test/tsconfig.json --noEmit",
     "db:local": "wrangler d1 migrations apply DB --local",
     "types:worker": "wrangler types --include-runtime=false --strict-vars=false worker/env.d.ts"

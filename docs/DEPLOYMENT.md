@@ -22,13 +22,15 @@
 
 ## 发布顺序
 
-1. 完成 PR 审查与 CI，合并后等待 `main` 的 CI 通过。按该提交的实际功能完成端到端验收，并保存记录。至少检查游客打开编辑器、Google + Turnstile 登录、创建和切换多张导图、保存后重开、退出登录；合入 AI、大纲或共享功能后，把相应路径加入同一份验收记录。
+1. 完成 PR 审查与 CI，合并后等待 `main` 的 CI 通过。按该提交的实际功能完成端到端验收，并保存记录。至少检查首页（`/`）加载与交互预览、登录页（`/login`）Google + Turnstile 登录、工作区（`/app`）创建和切换多张导图、保存后重开、退出登录；合入 AI、大纲或共享功能后，把相应路径加入同一份验收记录。
 2. 在 **Actions → Deploy production → Run workflow** 选择 `main`，填写已验收的完整 40 位 SHA 和 E2E 记录链接或编号。工作流拒绝其他分支、SHA 不匹配或空记录；它会为该提交重新运行与 CI 相同的检查。
 3. `production` 审批通过后，发布作业再次构建并检查 `main` 仍指向已验收提交。它将仓库变量与 Wrangler 配置逐一核对，执行 `wrangler deploy --dry-run`，远端确认 Worker、所需 secret 名称及 D1 Time Travel 可用。任一检查失败都会在数据变更前停止。
 4. 作业把**发布前 Worker 版本 ID**和**迁移前 D1 bookmark**写入本次 Actions 的 Job summary，列出待应用的远端迁移，然后运行 `wrangler d1 migrations apply DB --remote`。Wrangler 在迁移时也会自动捕获备份；工作流随后核对远端 `mindmaps` 表存在。
 5. 迁移通过后才运行 `wrangler deploy`。部署成功后自动检查生产首页、构建的 JS 静态资源、游客会话、登录 challenge 与未授权导图访问，并记录新 Worker 版本。绿色工作流表示这些自动检查通过；真实 Google 登录和跨设备导图同步仍须按第 1 步的验收清单在生产域名人工复核。
 
 CD **没有** `push`、`workflow_run` 或 PR 自动发布触发器。审批前不会运行远端迁移或切换生产流量。工作流不会自动恢复 D1 或自动回滚 Worker，因为两者的兼容性需要现场判断。
+
+> **本地脚本边界说明**：`apps/web/package.json` 的 `deploy` 脚本已禁用直接本地 `wrangler deploy`，仅用于消除误操作入口，**不等于撤销已持有者的 Cloudflare 访问权限**。常规发布必须通过 GitHub Actions 的 `Deploy production` 工作流执行；经批准的应急回滚与数据恢复仍按下方「失败与回退」流程在受信任终端操作。
 
 ## 失败与回退
 
