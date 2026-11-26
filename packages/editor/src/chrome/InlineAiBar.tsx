@@ -3,6 +3,7 @@ import { ArrowUpRight, Braces, FileText, ListChecks, Sparkles, X } from "lucide-
 import { collectAllTopics, richTextToPlainText } from "@mindmap/core";
 import { runNodeAiAction, type NodeAiActionKind } from "@mindmap/ai";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface InlineAiBarProps {
   open: boolean;
@@ -20,6 +21,7 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
   const doc = useMindmapStore((s) => s.doc);
   const adapter = useMindmapStore((s) => s.adapter);
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
+  const { locale, t } = useEditorI18n();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,13 +48,13 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
   const topicMap = collectAllTopics(sheet);
   const targetId = selectedTopicIds[0] ?? sheet.rootTopic.id;
   const targetTopic = topicMap.get(targetId);
-  const targetTitle = targetTopic ? richTextToPlainText(targetTopic.title) : "当前节点";
+  const targetTitle = targetTopic ? richTextToPlainText(targetTopic.title) : t.inlineAi.currentNodeFallback;
 
   const triggerQuick = async (action: NodeAiActionKind) => {
     if (busy) return;
     setBusy(true);
     try {
-      await runNodeAiAction(adapter, sheet.id, targetId, action);
+      await runNodeAiAction(adapter, sheet.id, targetId, action, locale);
       onClose();
     } finally {
       setBusy(false);
@@ -90,13 +92,13 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="输入对当前节点的 AI 指令，回车发送…"
+          placeholder={t.inlineAi.placeholder}
           className="h-7 min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-[#646b78]"
         />
         <button
           type="button"
           onClick={onClose}
-          aria-label="关闭"
+          aria-label={t.inlineAi.closeAria}
           className={`inline-grid h-6 w-6 place-items-center rounded-[5px] ${
             isDark ? "text-[#9ca3b0] hover:bg-white/[0.08]" : "text-[#525b6b] hover:bg-slate-100"
           }`}
@@ -113,10 +115,10 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
         <div className="flex items-center gap-1">
           {(
             [
-              ["expand", "扩展子节点", <Sparkles key="e" className="h-3 w-3" />],
-              ["tasks", "拆任务", <ListChecks key="t" className="h-3 w-3" />],
-              ["summarize", "概要", <Braces key="s" className="h-3 w-3" />],
-              ["elaborateNote", "备注", <FileText key="n" className="h-3 w-3" />],
+              ["expand", t.inlineAi.expand, <Sparkles key="e" className="h-3 w-3" />],
+              ["tasks", t.inlineAi.tasks, <ListChecks key="t" className="h-3 w-3" />],
+              ["summarize", t.inlineAi.summarize, <Braces key="s" className="h-3 w-3" />],
+              ["elaborateNote", t.inlineAi.note, <FileText key="n" className="h-3 w-3" />],
             ] as const
           ).map(([kind, label, icon]) => (
             <button
@@ -145,7 +147,7 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
             isDark ? "text-[#d5d9e2] hover:text-white hover:underline" : "text-[#2c3340] hover:text-[#111318] hover:underline"
           }`}
         >
-          侧栏继续聊 <ArrowUpRight className="h-3 w-3" />
+          {t.inlineAi.continueInPanel} <ArrowUpRight className="h-3 w-3" />
         </button>
       </div>
     </div>

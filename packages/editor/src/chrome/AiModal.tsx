@@ -3,6 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Sparkles, X } from "lucide-react";
 import { getPalette } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface AiModalProps {
   open: boolean;
@@ -12,6 +13,7 @@ interface AiModalProps {
 export const AiModal: React.FC<AiModalProps> = ({ open, onOpenChange }) => {
   const doc = useMindmapStore((s) => s.doc);
   const viewMode = useMindmapStore((s) => s.viewMode);
+  const { t } = useEditorI18n();
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
   const isDark = getPalette({ ...doc.theme, ...sheet.theme }.paletteId).isDark && viewMode === "canvas";
@@ -32,13 +34,13 @@ export const AiModal: React.FC<AiModalProps> = ({ open, onOpenChange }) => {
                 <Sparkles className="h-4 w-4" />
               </span>
               <div>
-                <Dialog.Title className={`text-base font-semibold ${isDark ? "text-zinc-100" : "text-zinc-950"}`}>AI 共创即将开放</Dialog.Title>
+                <Dialog.Title className={`text-base font-semibold ${isDark ? "text-zinc-100" : "text-zinc-950"}`}>{t.aiModal.title}</Dialog.Title>
                 <Dialog.Description className={`text-xs ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
-                  从主题或大纲生成导图、扩展节点等功能尚未开放。
+                  {t.aiModal.desc}
                 </Dialog.Description>
               </div>
             </div>
-            <Dialog.Close aria-label="关闭提示" className={`rounded-lg p-1.5 transition ${focusCls} ${
+            <Dialog.Close aria-label={t.aiModal.closeAria} className={`rounded-lg p-1.5 transition ${focusCls} ${
               isDark ? "text-zinc-400 hover:bg-zinc-800 hover:text-white" : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
             }`}>
               <X className="h-4 w-4" />
@@ -49,13 +51,13 @@ export const AiModal: React.FC<AiModalProps> = ({ open, onOpenChange }) => {
             isDark ? "border-zinc-800 bg-[#181b20]" : "border-zinc-200 bg-zinc-50"
           }`}>
             <p className={`font-mono text-[10px] font-semibold tracking-[0.12em] ${isDark ? "text-sky-300" : "text-sky-700"}`}>
-              COMING SOON
+              {t.aiModal.badge}
             </p>
             <p className={`mt-2 text-sm font-medium ${isDark ? "text-zinc-100" : "text-zinc-900"}`}>
-              现在可以继续编辑导图
+              {t.aiModal.heading}
             </p>
             <p className={`mt-1 text-xs leading-5 ${isDark ? "text-zinc-400" : "text-zinc-600"}`}>
-              使用顶部的「导图 / 大纲」视图整理内容。AI 功能开放后将在这里使用。
+              {t.aiModal.body}
             </p>
           </div>
 
@@ -67,7 +69,7 @@ export const AiModal: React.FC<AiModalProps> = ({ open, onOpenChange }) => {
                   isDark ? "bg-zinc-100 text-zinc-950 hover:bg-white" : "bg-zinc-950 text-white hover:bg-zinc-800"
                 }`}
               >
-                继续编辑
+                {t.aiModal.continueBtn}
               </button>
             </Dialog.Close>
           </div>

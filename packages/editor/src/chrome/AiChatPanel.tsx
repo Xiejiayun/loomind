@@ -24,6 +24,7 @@ import {
   type NodeAiActionKind,
 } from "@mindmap/ai";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 export interface AiChatMessage {
   id: string;
@@ -46,18 +47,13 @@ interface AiChatPanelProps {
   onClose: () => void;
 }
 
-const QUICK_ACTIONS: Array<{
-  kind: NodeAiActionKind;
-  label: string;
-  prompt: string;
-  icon: React.ReactNode;
-}> = [
-  { kind: "expand", label: "扩展子节点", prompt: "为当前节点扩展 4 个关键子主题", icon: <Sparkles className="h-3 w-3" /> },
-  { kind: "tasks", label: "拆解任务", prompt: "将当前节点拆解为可执行待办任务", icon: <ListChecks className="h-3 w-3" /> },
-  { kind: "summarize", label: "生成概要", prompt: "为当前节点的子分支生成概要结论", icon: <Braces className="h-3 w-3" /> },
-  { kind: "elaborateNote", label: "补充备注", prompt: "为当前节点生成结构化 Markdown 长备注", icon: <FileText className="h-3 w-3" /> },
-  { kind: "cluster", label: "聚类外框", prompt: "为当前分支添加语义聚类外框", icon: <SquareDashedBottom className="h-3 w-3" /> },
-  { kind: "restyle", label: "智能排版", prompt: "根据主题内容智能推荐最适合的结构与配色", icon: <Palette className="h-3 w-3" /> },
+const QUICK_ACTION_ICONS: Array<{ kind: NodeAiActionKind; icon: React.ReactNode }> = [
+  { kind: "expand", icon: <Sparkles className="h-3 w-3" /> },
+  { kind: "tasks", icon: <ListChecks className="h-3 w-3" /> },
+  { kind: "summarize", icon: <Braces className="h-3 w-3" /> },
+  { kind: "elaborateNote", icon: <FileText className="h-3 w-3" /> },
+  { kind: "cluster", icon: <SquareDashedBottom className="h-3 w-3" /> },
+  { kind: "restyle", icon: <Palette className="h-3 w-3" /> },
 ];
 
 export const AiChatPanel: React.FC<AiChatPanelProps> = ({
@@ -76,6 +72,18 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const camera = useMindmapStore((s) => s.camera);
   const undo = useMindmapStore((s) => s.undo);
   const canUndo = useMindmapStore((s) => s.canUndo);
+  const { locale, t } = useEditorI18n();
+
+  const quickActions = useMemo(
+    () =>
+      QUICK_ACTION_ICONS.map(({ kind, icon }) => ({
+        kind,
+        icon,
+        label: t.aiChat.quickActions[kind].label,
+        prompt: t.aiChat.quickActions[kind].prompt,
+      })),
+    [t],
+  );
 
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -134,9 +142,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     const targetId = forceFullMap ? sheet.rootTopic.id : activeTopicId ?? sheet.rootTopic.id;
     const contextLabel = !forceFullMap && activeTopicTitle
       ? selectedTopicIds.length > 1
-        ? `${activeTopicTitle} 等 ${selectedTopicIds.length} 个节点`
+        ? t.aiChat.multiContext(activeTopicTitle, selectedTopicIds.length)
         : activeTopicTitle
-      : "全图上下文";
+      : t.aiChat.fullMapContext;
 
     const userMsgId = `u-${Date.now()}`;
     const assistantMsgId = `a-${Date.now() + 1}`;
@@ -144,7 +152,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     setMessages((prev) => [
       ...prev,
       { id: userMsgId, role: "user", content: text, contextLabel },
-      { id: assistantMsgId, role: "assistant", content: "正在分析并更新导图…", pending: true },
+      { id: assistantMsgId, role: "assistant", content: t.aiChat.pending, pending: true },
     ]);
     setInput("");
     setBusy(true);
@@ -152,16 +160,16 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     try {
       let inferredAction: NodeAiActionKind | undefined = explicitAction;
       if (!inferredAction && !forceFullMap) {
-        if (/任务|todo|待办|步骤/.test(text)) inferredAction = "tasks";
-        else if (/概要|总结|归纳/.test(text)) inferredAction = "summarize";
-        else if (/外框|聚类|分组/.test(text)) inferredAction = "cluster";
-        else if (/备注|说明|详情|笔记/.test(text)) inferredAction = "elaborateNote";
-        else if (/风格|配色|布局|排版|结构/.test(text)) inferredAction = "restyle";
+        if (/任务|todo|待办|步骤|task|step/i.test(text)) inferredAction = "tasks";
+        else if (/概要|总结|归纳|summar/i.test(text)) inferredAction = "summarize";
+        else if (/外框|聚类|分组|cluster|boundary|group/i.test(text)) inferredAction = "cluster";
+        else if (/备注|说明|详情|笔记|note|elaborate/i.test(text)) inferredAction = "elaborateNote";
+        else if (/风格|配色|布局|排版|结构|style|palette|layout/i.test(text)) inferredAction = "restyle";
         else if (activeTopicId && activeTopicId !== sheet.rootTopic.id) inferredAction = "expand";
       }
 
       if (inferredAction) {
-        const resultText = await runNodeAiAction(adapter, sheet.id, targetId, inferredAction);
+        const resultText = await runNodeAiAction(adapter, sheet.id, targetId, inferredAction, locale);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
@@ -170,7 +178,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   pending: false,
                   content: resultText,
                   mutation: {
-                    summary: `画布已更新 · ${resultText}`,
+                    summary: t.aiChat.canvasUpdated(resultText),
                     targetTopicId: targetId,
                   },
                 }
@@ -182,6 +190,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           adapter,
           sheetId: sheet.id,
           prompt: text,
+          locale,
         });
         setMessages((prev) =>
           prev.map((m) =>
@@ -189,9 +198,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               ? {
                   ...m,
                   pending: false,
-                  content: `已围绕「${text}」生成结构化导图。你可以选中任意节点继续追问，或让我拆解任务、补充备注。`,
+                  content: t.aiChat.generatedFull(text),
                   mutation: {
-                    summary: "已流式生成整张导图结构",
+                    summary: t.aiChat.generatedFullMutation,
                     targetTopicId: sheet.rootTopic.id,
                   },
                 }
@@ -200,10 +209,10 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "生成失败，请稍后重试。";
+      const msg = err instanceof Error ? err.message : t.aiChat.errorFallback;
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantMsgId ? { ...m, pending: false, content: `执行遇到问题：${msg}` } : m,
+          m.id === assistantMsgId ? { ...m, pending: false, content: t.aiChat.errorPrefix(msg) } : m,
         ),
       );
     } finally {
@@ -233,7 +242,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           ? "border-white/[0.075] bg-[#121419] text-[#f4f5f8]"
           : "border-slate-900/[0.08] bg-[#fafbfc] text-[#111318]"
       }`}
-      aria-label="AI 对话助手"
+      aria-label={t.aiChat.ariaLabel}
     >
       {/* Header */}
       <div className={`flex h-10 shrink-0 items-center justify-between border-b px-3 ${borderCls}`}>
@@ -247,22 +256,22 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           >
             <Sparkles className="h-3 w-3" />
           </span>
-          <span className="font-medium">对话</span>
+          <span className="font-medium">{t.aiChat.title}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
-            title="新对话"
+            title={t.aiChat.newChat}
             onClick={() => setMessages([])}
             className={`inline-flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[11px] transition ${
               isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
             }`}
           >
-            <Plus className="h-3 w-3" /> 新对话
+            <Plus className="h-3 w-3" /> {t.aiChat.newChat}
           </button>
           <button
             type="button"
-            aria-label="关闭 AI 面板"
+            aria-label={t.aiChat.closeAria}
             onClick={onClose}
             className={`inline-grid h-6 w-6 place-items-center rounded-[5px] transition ${
               isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
@@ -286,17 +295,13 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             >
               <Sparkles className="h-4 w-4" />
             </div>
-            <p className="text-[13.5px] font-semibold">边聊边构建你的导图</p>
+            <p className="text-[13.5px] font-semibold">{t.aiChat.emptyTitle}</p>
             <p className={`mt-1 text-[12px] leading-relaxed ${subtleTextCls}`}>
-              选中画布任意节点自动带入上下文；发送指令后画布实时更新，随时可一键撤销。
+              {t.aiChat.emptyDesc}
             </p>
             <div className="mt-4 grid grid-cols-1 gap-1.5">
               {topicMap.size <= 1 ? (
-                [
-                  "帮我规划一个 AI 产品的 MVP 发布计划",
-                  "拆解高并发后端系统的核心技术架构",
-                  "制定 Q3 季度团队 OKR 与关键里程碑",
-                ].map((idea) => (
+                t.aiChat.starterIdeas.map((idea) => (
                   <button
                     key={idea}
                     type="button"
@@ -316,7 +321,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   </button>
                 ))
               ) : (
-                QUICK_ACTIONS.slice(0, 4).map((act) => (
+                quickActions.slice(0, 4).map((act) => (
                   <button
                     key={act.kind}
                     type="button"
@@ -387,7 +392,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                                 : "border-slate-900/[0.1] bg-white text-[#2c3340] hover:bg-slate-50"
                             }`}
                           >
-                            <Crosshair className="h-3 w-3" /> 定位节点
+                            <Crosshair className="h-3 w-3" /> {t.aiChat.locateNode}
                           </button>
                         )}
                         {canUndo && (
@@ -398,7 +403,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                               isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-200/70"
                             }`}
                           >
-                            <RotateCcw className="h-3 w-3" /> 撤销修改
+                            <RotateCcw className="h-3 w-3" /> {t.aiChat.undoChange}
                           </button>
                         )}
                       </div>
@@ -429,7 +434,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               </span>
               <button
                 type="button"
-                aria-label="切回全图上下文"
+                aria-label={t.aiChat.resetContextAria}
                 onClick={() => setIgnoreSelection(true)}
                 className="ml-0.5 opacity-70 hover:opacity-100"
               >
@@ -442,7 +447,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 isDark ? "bg-white/[0.06] text-[#9ca3b0]" : "bg-slate-100 text-[#525b6b]"
               }`}
             >
-              全图上下文
+              {t.aiChat.fullMapContext}
             </span>
           )}
         </div>
@@ -468,14 +473,14 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             }}
             placeholder={
               activeTopicTitle
-                ? `针对「${activeTopicTitle}」输入指令…`
-                : "描述想生成的导图主题，或输入修改指令…"
+                ? t.aiChat.inputPlaceholderTopic(activeTopicTitle)
+                : t.aiChat.inputPlaceholderFull
             }
             className="block w-full resize-none bg-transparent px-2.5 pt-2 text-[12.5px] leading-relaxed outline-none placeholder:text-[#646b78]"
           />
           <div className="flex items-center justify-between gap-1.5 px-2 pb-2 pt-1">
             <div className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {QUICK_ACTIONS.slice(0, 3).map((act) => (
+              {quickActions.slice(0, 3).map((act) => (
                 <button
                   key={act.kind}
                   type="button"
@@ -495,7 +500,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               type="button"
               disabled={busy || !input.trim()}
               onClick={() => void executePrompt(input)}
-              aria-label="发送"
+              aria-label={t.aiChat.sendAria}
               className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition disabled:opacity-35 ${
                 isDark
                   ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"

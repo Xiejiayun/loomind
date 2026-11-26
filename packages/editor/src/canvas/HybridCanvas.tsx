@@ -15,6 +15,7 @@ import {
   type RichTextDoc,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 import { NodeLayer } from "./NodeLayer.js";
 import { SvgLayer } from "./SvgLayer.js";
 
@@ -85,6 +86,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
   const selectBoundary = useMindmapStore((s) => s.selectBoundary);
   const setEditingTopicId = useMindmapStore((s) => s.setEditingTopicId);
   const setDrillRootId = useMindmapStore((s) => s.setDrillRootId);
+  const { t } = useEditorI18n();
 
   const sheet = useMemo(
     () => doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0],
@@ -675,7 +677,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
         id: generateId("bnd", deletedSet),
         target,
         shape: "rounded",
-        title: "分组外框",
+        title: t.canvas.defaultGroupBoundary,
       },
     });
   };
@@ -699,7 +701,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
         startIndex,
         endIndex,
         brace: "curly",
-        topic: createTopic(generateId("sumt", deletedSet), "概要总结"),
+        topic: createTopic(generateId("sumt", deletedSet), t.canvas.defaultGroupSummary),
       },
     });
   };
@@ -847,7 +849,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
 
       {/* Layer 2: Screen-Space Overlays */}
       {workspaceCanvas && topicMap.size === 1 && !editingTopicId && (
-        <p className="editor-start-hint">双击中心主题编辑<span> · </span>选中后按 <kbd>Tab</kbd> 添加分支</p>
+        <p className="editor-start-hint">{t.canvas.startHintPrefix}<span> · </span>{t.canvas.startHintMiddle} <kbd>Tab</kbd> {t.canvas.startHintSuffix}</p>
       )}
       {marquee && (
         <div
@@ -870,11 +872,11 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
             className="flex items-center gap-1 text-blue-600 hover:underline"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            返回完整导图
+            {t.canvas.backToFullMap}
           </button>
           <span className="text-slate-400">/</span>
           <span>
-            {topicMap.get(drillRootId) ? richTextToPlainText(topicMap.get(drillRootId)!.title) : "当前下钻分支"}
+            {topicMap.get(drillRootId) ? richTextToPlainText(topicMap.get(drillRootId)!.title) : t.canvas.drilledFallback}
           </span>
         </div>
       )}
@@ -882,20 +884,20 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       {/* Multi-selection Floating Action Bar */}
       {selectedTopicIds.length > 1 && (
         <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur">
-          <span className="px-1 text-slate-400">已选 {selectedTopicIds.length} 项</span>
+          <span className="px-1 text-slate-400">{t.canvas.selectedCount(selectedTopicIds.length)}</span>
           <button
             type="button"
             onClick={addBoundaryForSelection}
             className="flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-slate-100"
           >
-            <SquareDashedBottom className="h-3.5 w-3.5" /> 加外框
+            <SquareDashedBottom className="h-3.5 w-3.5" /> {t.canvas.addBoundary}
           </button>
           <button
             type="button"
             onClick={addSummaryForSelection}
             className="flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-slate-100"
           >
-            <BoxSelect className="h-3.5 w-3.5" /> 加概要
+            <BoxSelect className="h-3.5 w-3.5" /> {t.canvas.addSummary}
           </button>
           <button
             type="button"
@@ -909,7 +911,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
             }
             className="flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-slate-100"
           >
-            <Palette className="h-3.5 w-3.5" /> 统一改色
+            <Palette className="h-3.5 w-3.5" /> {t.canvas.recolor}
           </button>
           {onOpenAi && (
             <button
@@ -917,7 +919,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
               onClick={onOpenAi}
               className="flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-violet-700 hover:bg-violet-100"
             >
-              <Sparkles className="h-3.5 w-3.5" /> AI 共创
+              <Sparkles className="h-3.5 w-3.5" /> {t.canvas.aiCoCreate}
             </button>
           )}
         </div>

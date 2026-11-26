@@ -1,4 +1,5 @@
 /// <reference path="./types/d3-flextree.d.ts" />
+export * from "./i18n.js";
 export * from "./model/document.js";
 export * from "./model/schema.js";
 export * from "./model/invariants.js";

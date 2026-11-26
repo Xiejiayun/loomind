@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
+import { useI18n } from "../i18n.js";
 import { authRequest } from "./session.js";
 import { LOGIN_ACTION, type LoginChallenge, type Session } from "./shared.js";
 
@@ -21,6 +22,7 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
   onSessionChange: (session: Session) => void;
   onSuccess: () => void;
 }) {
+  const { locale, t } = useI18n();
   const widget = useRef<TurnstileInstance>(null);
   const attempt = useRef(0);
   const [stage, setStage] = useState<"idle" | "verify" | "google">("idle");
@@ -38,9 +40,9 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
       const next = await authRequest<LoginChallenge>("challenge");
       if (current === attempt.current) setChallenge(next);
     } catch (reason) {
-      if (current === attempt.current) setError(reason instanceof Error ? reason.message : "无法准备登录。");
+      if (current === attempt.current) setError(reason instanceof Error ? reason.message : t.login.prepareError);
     }
-  }, []);
+  }, [t.login.prepareError]);
 
   useEffect(() => {
     return () => { ++attempt.current; };
@@ -56,7 +58,7 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
   async function submit(credential?: string) {
     if (busy) return;
     if (!credential || !token) {
-      setError("请重新完成人机验证和 Google 登录。");
+      setError(t.login.reverifyError);
       setStage("verify");
       return;
     }
@@ -71,7 +73,7 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
       setToken("");
       setChallenge(null);
       setStage("verify");
-      setError(reason instanceof Error ? reason.message : "登录失败，请重试。");
+      setError(reason instanceof Error ? reason.message : t.login.loginFailed);
     } finally {
       setBusy(false);
     }
@@ -86,7 +88,7 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
           onClick={handleStartGoogle}
         >
           <GoogleGlyph />
-          <span>使用 Google 账号继续</span>
+          <span>{t.login.continueWithGoogle}</span>
         </button>
       )}
 
@@ -94,7 +96,7 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
         <div className="lm-login-panel">
           <div className="lm-login-panel-head">
             <span className="lm-login-panel-title">
-              <ShieldCheck size={14} /> 人机安全验证
+              <ShieldCheck size={14} /> {t.login.verifyTitle}
             </span>
             <button
               type="button"
@@ -104,17 +106,17 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
                 setError("");
               }}
             >
-              <ArrowLeft size={12} /> 返回
+              <ArrowLeft size={12} /> {t.common.back}
             </button>
           </div>
-          <p className="lm-login-panel-desc">通过验证后将自动进入 Google 账号登录。</p>
+          <p className="lm-login-panel-desc">{t.login.verifyDesc}</p>
           <div className="lm-turnstile-box">
             {challenge ? (
               <Turnstile
                 key={challenge.nonce}
                 ref={widget}
                 siteKey={challenge.turnstileSiteKey}
-                options={{ action: LOGIN_ACTION, size: "flexible", theme }}
+                options={{ action: LOGIN_ACTION, size: "flexible", theme, language: locale === "zh" ? "zh-cn" : "en" }}
                 onSuccess={(value) => {
                   setToken(value);
                   setError("");
@@ -123,16 +125,16 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
                 onExpire={() => setToken("")}
                 onTimeout={() => {
                   setToken("");
-                  setError("验证已超时，请重试。");
+                  setError(t.login.turnstileTimeout);
                 }}
                 onError={() => {
                   setToken("");
-                  setError("人机验证未完成，请重试。");
+                  setError(t.login.turnstileError);
                 }}
-                scriptOptions={{ onError: () => setError("未能加载人机验证，请检查网络后重试。") }}
+                scriptOptions={{ onError: () => setError(t.login.turnstileScriptError) }}
               />
             ) : (
-              <span className="lm-muted">{error || "正在准备安全验证…"}</span>
+              <span className="lm-muted">{error || t.login.preparingVerify}</span>
             )}
           </div>
         </div>
@@ -142,7 +144,7 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
         <div className="lm-login-panel">
           <div className="lm-login-panel-head">
             <span className="lm-login-verified-pill">
-              <CheckCircle2 size={13} /> 安全验证已通过
+              <CheckCircle2 size={13} /> {t.login.verifiedPill}
             </span>
             <button
               type="button"
@@ -154,16 +156,16 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
                 setError("");
               }}
             >
-              <ArrowLeft size={12} /> 返回
+              <ArrowLeft size={12} /> {t.common.back}
             </button>
           </div>
-          <p className="lm-login-panel-desc">点击下方按钮完成 Google 正式登录。</p>
+          <p className="lm-login-panel-desc">{t.login.googleDesc}</p>
           <div className="lm-google-wrap">
             {!busy ? (
               <GoogleOAuthProvider
                 clientId={challenge.googleClientId}
-                locale="zh_CN"
-                onScriptLoadError={() => setError("未能加载 Google 登录，请检查网络后重试。")}
+                locale={locale === "zh" ? "zh_CN" : "en"}
+                onScriptLoadError={() => setError(t.login.googleScriptError)}
               >
                 <GoogleLogin
                   nonce={challenge.nonce}
@@ -172,11 +174,11 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
                   theme={theme === "dark" ? "filled_black" : "outline"}
                   width="320"
                   onSuccess={({ credential }) => void submit(credential)}
-                  onError={() => setError("Google 登录未完成，请重试。")}
+                  onError={() => setError(t.login.googleError)}
                 />
               </GoogleOAuthProvider>
             ) : (
-              <span className="lm-muted">正在登录…</span>
+              <span className="lm-muted">{t.login.signingIn}</span>
             )}
           </div>
         </div>
@@ -193,7 +195,7 @@ export function LoginForm({ theme, onSessionChange, onSuccess }: {
             }}
             disabled={busy}
           >
-            重试
+            {t.common.retry}
           </button>
         </div>
       )}

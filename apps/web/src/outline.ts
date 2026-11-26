@@ -1,4 +1,5 @@
 import { createTopic, generateId, getTemplate, MindmapDocumentSchema, validateDocumentInvariants, type MindmapDocument, type MindmapTopic } from "@mindmap/core";
+import { getWebMessages } from "./i18n.js";
 
 export interface OutlineNode {
   title: string;
@@ -13,21 +14,23 @@ export function outlineNodeCount(node: OutlineNode): number {
 }
 
 export function validateOutline(value: unknown): OutlineNode {
+  const err = getWebMessages().errors;
   let count = 0;
   const walk = (item: unknown, depth: number): OutlineNode => {
-    if (!item || typeof item !== "object" || depth > MAX_OUTLINE_DEPTH) throw new Error("大纲层级不能超过 6 层。");
+    if (!item || typeof item !== "object" || depth > MAX_OUTLINE_DEPTH) throw new Error(err.outlineMaxDepth);
     const node = item as { title?: unknown; children?: unknown };
     if (typeof node.title !== "string" || !node.title.trim() || node.title.length > 120 || !Array.isArray(node.children)) {
-      throw new Error("大纲包含无效或过长的节点。");
+      throw new Error(err.outlineInvalidNode);
     }
-    if (++count > MAX_OUTLINE_NODES) throw new Error("一张导图最多支持 120 个大纲节点。");
+    if (++count > MAX_OUTLINE_NODES) throw new Error(err.outlineMaxNodes);
     return { title: node.title.trim(), children: node.children.map((child) => walk(child, depth + 1)) };
   };
   return walk(value, 0);
 }
 
 export function parseOutline(raw: string): OutlineNode {
-  if (raw.length > 16_000) throw new Error("大纲文本超过 16,000 字，请拆成多张导图。");
+  const err = getWebMessages().errors;
+  if (raw.length > 16_000) throw new Error(err.outlineMaxChars);
   const lines = raw.split(/\r?\n/).map((source) => {
     const line = source.replace(/\t/g, "  ");
     const heading = /^(\s*)(#{1,6})\s+(.+)$/.exec(line);
@@ -39,10 +42,10 @@ export function parseOutline(raw: string): OutlineNode {
       bullet: !!bullet,
     };
   }).filter((line) => line.title);
-  if (!lines.length) throw new Error("请先粘贴大纲内容。");
+  if (!lines.length) throw new Error(err.outlineEmpty);
 
   const listOnly = lines[0].bullet;
-  const root: OutlineNode = { title: listOnly ? "新导图" : lines[0].title, children: [] };
+  const root: OutlineNode = { title: listOnly ? err.outlineDefaultRoot : lines[0].title, children: [] };
   const rootHeading = lines[0].heading || 1;
   const stack: Array<{ level: number; node: OutlineNode }> = [{ level: 0, node: root }];
   let activeHeadingLevel = 0;
@@ -66,8 +69,9 @@ export function parseOutline(raw: string): OutlineNode {
 }
 
 export function documentFromOutline(outline: OutlineNode, templateId: string): MindmapDocument {
+  const err = getWebMessages().errors;
   const tree = validateOutline(outline);
-  if (!tree.children.length) throw new Error("大纲至少需要一个一级分支。");
+  if (!tree.children.length) throw new Error(err.outlineNeedsBranch);
   const template = getTemplate(templateId).create();
   const topic = (node: OutlineNode): MindmapTopic => createTopic(generateId("topic"), node.title, {
     children: node.children.map(topic),
@@ -89,13 +93,13 @@ export function documentFromOutline(outline: OutlineNode, templateId: string): M
     assets: {},
     deletedIds: [],
   });
-  if (validateDocumentInvariants(document).length) throw new Error("大纲无法生成有效导图，请检查层级。");
+  if (validateDocumentInvariants(document).length) throw new Error(err.outlineInvalidTree);
   return document;
 }
 
 export function documentFromTopic(title: string, templateId = "blank-organic"): MindmapDocument {
   const clean = title.trim();
-  if (!clean || clean.length > 120) throw new Error("主题需在 1 到 120 字之间。");
+  if (!clean || clean.length > 120) throw new Error(getWebMessages().errors.topicLength);
   const template = getTemplate(templateId).create();
   const sheet = {
     ...template.sheets[0],

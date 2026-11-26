@@ -5,6 +5,8 @@ import {
   getPalette,
   getTemplate,
   LayoutEngine,
+  setLocale,
+  type Locale,
   type MindmapDocument,
   type MindmapStoreState,
   type SyncAdapter,
@@ -38,6 +40,7 @@ export interface MindmapEditorProps {
   initialAiPrompt?: string;
   initialRightPanel?: "none" | "ai" | "format";
   readOnly?: boolean;
+  locale?: Locale;
 }
 
 const MindmapEditorInner: React.FC<
@@ -238,7 +241,12 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
   initialAiPrompt,
   initialRightPanel,
   readOnly = false,
+  locale,
 }) => {
+  useEffect(() => {
+    if (locale) setLocale(locale);
+  }, [locale]);
+
   const storeRef = useRef<StoreApi<MindmapStoreState> | null>(null);
   if (!storeRef.current) {
     storeRef.current = createMindmapStore(adapter ?? initialDoc ?? getTemplate("blank-organic").create());

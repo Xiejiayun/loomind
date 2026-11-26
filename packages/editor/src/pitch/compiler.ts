@@ -1,10 +1,13 @@
 import {
+  getLocale,
   richTextToPlainText,
   type InlineAsset,
+  type Locale,
   type MindmapDocument,
   type MindmapSheet,
   type MindmapTopic,
 } from "@mindmap/core";
+import { getEditorMessages } from "../i18n.js";
 
 export type PitchSlideLayout = "cover" | "toc-grid" | "bullet-list" | "split-media";
 
@@ -28,7 +31,8 @@ export interface PitchSlide {
 
 const MAX_BULLETS_PER_SLIDE = 6;
 
-export function compilePitchDeck(doc: MindmapDocument, sheetId?: string): PitchSlide[] {
+export function compilePitchDeck(doc: MindmapDocument, sheetId?: string, locale: Locale = getLocale()): PitchSlide[] {
+  const t = getEditorMessages(locale);
   const sheet: MindmapSheet =
     doc.sheets.find((s) => s.id === (sheetId ?? doc.activeSheetId)) ?? doc.sheets[0];
   const root = sheet.rootTopic;
@@ -43,8 +47,8 @@ export function compilePitchDeck(doc: MindmapDocument, sheetId?: string): PitchS
     subtitle:
       root.subtitle ??
       (sheet.title !== rootTitle
-        ? `${sheet.title} · 共 ${root.children.length} 个核心章节`
-        : `共 ${root.children.length} 个核心章节`),
+        ? t.pitch.coverWithSheet(sheet.title, root.children.length)
+        : t.pitch.coverSections(root.children.length)),
     bullets: root.children.slice(0, 6).map((c) => ({
       id: c.id,
       text: richTextToPlainText(c.title),
@@ -59,7 +63,7 @@ export function compilePitchDeck(doc: MindmapDocument, sheetId?: string): PitchS
     slides.push({
       id: `slide-toc-${sheet.id}`,
       layout: "toc-grid",
-      title: "目录概览",
+      title: t.pitch.tocTitle,
       subtitle: richTextToPlainText(root.title),
       bullets: root.children.map((c) => ({
         id: c.id,

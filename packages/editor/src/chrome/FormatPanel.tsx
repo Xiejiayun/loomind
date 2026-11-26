@@ -3,6 +3,8 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { ClipboardCopy, ClipboardPaste, Eraser, Palette, Pencil } from "lucide-react";
 import {
   collectAllTopics,
+  getPaletteLabel,
+  getSkeletonInfo,
   hex8ToCss,
   PALETTE_LIST,
   SKELETON_LIST,
@@ -11,6 +13,7 @@ import {
   type TopicShape,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 import { MARKER_CATALOG, STICKER_CATALOG } from "./markers-catalog.js";
 import { StructureIcon } from "./structure-icons.js";
 
@@ -86,27 +89,27 @@ const ShapeIcon: React.FC<{ shape: TopicShape }> = ({ shape }) => {
   }
 };
 
-const STRUCTURES: Array<{ id: MindmapStructure; label: string }> = [
-  { id: "mindmap", label: "思维导图" },
-  { id: "logic", label: "逻辑图" },
-  { id: "org", label: "组织结构" },
-  { id: "brace", label: "括号图" },
-  { id: "indented", label: "缩进目录" },
-  { id: "timeline", label: "时间轴" },
-  { id: "fishbone", label: "鱼骨图" },
-  { id: "treeTable", label: "树型表格" },
-  { id: "matrix", label: "矩阵图" },
+const STRUCTURE_IDS: MindmapStructure[] = [
+  "mindmap",
+  "logic",
+  "org",
+  "brace",
+  "indented",
+  "timeline",
+  "fishbone",
+  "treeTable",
+  "matrix",
 ];
 
-const SHAPES: Array<{ id: TopicShape; label: string }> = [
-  { id: "auto", label: "自动" },
-  { id: "rounded", label: "圆角" },
-  { id: "pill", label: "药丸" },
-  { id: "capsule", label: "胶囊" },
-  { id: "underline", label: "下划线" },
-  { id: "diamond", label: "菱形" },
-  { id: "hexagon", label: "六边形" },
-  { id: "cloud", label: "云朵" },
+const SHAPE_IDS: TopicShape[] = [
+  "auto",
+  "rounded",
+  "pill",
+  "capsule",
+  "underline",
+  "diamond",
+  "hexagon",
+  "cloud",
 ];
 
 const SWATCHES = [
@@ -159,6 +162,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   const styleClipboard = useMindmapStore((s) => s.styleClipboard);
   const setStyleClipboard = useMindmapStore((s) => s.setStyleClipboard);
   const dispatch = useMindmapStore((s) => s.dispatch);
+  const { locale, t } = useEditorI18n();
 
   const [manualScope, setManualScope] = useState<"selected" | "level" | "all" | null>(null);
   const selKey = selectedTopicIds.join(",");
@@ -208,7 +212,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 : "text-[#525b6b] data-[state=active]:bg-white data-[state=active]:text-[#111318] data-[state=active]:shadow-2xs"
             }`}
           >
-            样式
+            {t.format.tabStyle}
           </Tabs.Trigger>
           <Tabs.Trigger
             value="canvas"
@@ -218,7 +222,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 : "text-[#525b6b] data-[state=active]:bg-white data-[state=active]:text-[#111318] data-[state=active]:shadow-2xs"
             }`}
           >
-            画布
+            {t.format.tabCanvas}
           </Tabs.Trigger>
           <Tabs.Trigger
             value="markers"
@@ -228,20 +232,20 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 : "text-[#525b6b] data-[state=active]:bg-white data-[state=active]:text-[#111318] data-[state=active]:shadow-2xs"
             }`}
           >
-            图标贴纸
+            {t.format.tabMarkers}
           </Tabs.Trigger>
         </Tabs.List>
 
         {/* TAB 1: Node Style */}
         <Tabs.Content value="style" className="flex-1 space-y-4 overflow-y-auto p-3">
           {/* Apply Scope Selector */}
-          <Section title={`作用范围（当前将修改 ${targetIds.length} 个节点）`}>
+          <Section title={t.format.scopeTitle(targetIds.length)}>
             <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-0.5 text-[11px]">
               {(
                 [
-                  ["selected", "当前选中"],
-                  ["level", "同级节点"],
-                  ["all", "全部节点"],
+                  ["selected", t.format.scopeSelected],
+                  ["level", t.format.scopeLevel],
+                  ["all", t.format.scopeAll],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -270,7 +274,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               }
               className="flex flex-1 items-center justify-center gap-1 rounded border border-slate-200 py-1.5 hover:bg-slate-50"
             >
-              <ClipboardCopy className="h-3.5 w-3.5" /> 复制样式
+              <ClipboardCopy className="h-3.5 w-3.5" /> {t.format.copyStyle}
             </button>
             <button
               type="button"
@@ -287,7 +291,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               }
               className="flex flex-1 items-center justify-center gap-1 rounded border border-slate-200 py-1.5 hover:bg-slate-50 disabled:opacity-40"
             >
-              <ClipboardPaste className="h-3.5 w-3.5" /> 粘贴样式
+              <ClipboardPaste className="h-3.5 w-3.5" /> {t.format.pasteStyle}
             </button>
             <button
               type="button"
@@ -295,27 +299,27 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 dispatch({ type: "topic/setStyle", sheetId: sheet.id, topicIds: targetIds, clear: true })
               }
               className="rounded border border-slate-200 p-1.5 hover:bg-slate-50"
-              title="清除样式"
+              title={t.format.clearStyle}
             >
               <Eraser className="h-3.5 w-3.5" />
             </button>
           </div>
 
           {/* Shape Grid */}
-          <Section title="节点形状">
+          <Section title={t.format.nodeShape}>
             <div className="grid grid-cols-4 gap-1.5">
-              {SHAPES.map((sh) => {
-                const active = (primaryTopic?.shape ?? "auto") === sh.id;
+              {SHAPE_IDS.map((shapeId) => {
+                const active = (primaryTopic?.shape ?? "auto") === shapeId;
                 return (
                   <button
-                    key={sh.id}
+                    key={shapeId}
                     type="button"
                     onClick={() =>
                       dispatch({
                         type: "topic/setStyle",
                         sheetId: sheet.id,
                         topicIds: targetIds,
-                        shape: sh.id,
+                        shape: shapeId,
                       })
                     }
                     className={`flex flex-col items-center gap-1 rounded-lg border py-1.5 text-[10px] transition ${
@@ -324,8 +328,8 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
                   >
-                    <ShapeIcon shape={sh.id} />
-                    <span>{sh.label}</span>
+                    <ShapeIcon shape={shapeId} />
+                    <span>{t.shapes[shapeId]}</span>
                   </button>
                 );
               })}
@@ -333,7 +337,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           </Section>
 
           {/* Fill Color */}
-          <Section title="填充色">
+          <Section title={t.format.fillColor}>
             <div className="grid grid-cols-6 gap-1.5">
               {SWATCHES.map((c) => (
                 <button
@@ -355,7 +359,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           </Section>
 
           {/* Text Color */}
-          <Section title="文字颜色">
+          <Section title={t.format.textColor}>
             <div className="grid grid-cols-6 gap-1.5">
               {SWATCHES.slice(0, 6)
                 .concat(["#FFFFFFFF", "#64748BFF"])
@@ -379,7 +383,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           </Section>
 
           {/* Font Size */}
-          <Section title="字号与粗细">
+          <Section title={t.format.fontSize}>
             <div className="flex items-center gap-1.5">
               {[12, 14, 16, 20, 24].map((sz) => (
                 <button
@@ -402,7 +406,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           </Section>
 
           {/* Per-branch Structure Override */}
-          <Section title="分支独立结构（混排）">
+          <Section title={t.format.branchStructure}>
             <select
               value={primaryTopic?.structure ?? ""}
               onChange={(e) =>
@@ -415,10 +419,10 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               }
               className="w-full rounded border border-slate-200 bg-white px-2 py-1.5"
             >
-              <option value="">继承画布默认结构</option>
-              {STRUCTURES.map((st) => (
-                <option key={st.id} value={st.id}>
-                  {st.label}
+              <option value="">{t.format.inheritStructure}</option>
+              {STRUCTURE_IDS.map((structureId) => (
+                <option key={structureId} value={structureId}>
+                  {t.structures[structureId]}
                 </option>
               ))}
             </select>
@@ -427,16 +431,16 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
         {/* TAB 2: Canvas Structure & Theme */}
         <Tabs.Content value="canvas" className="flex-1 space-y-4 overflow-y-auto p-3">
-          <Section title="画布结构">
+          <Section title={t.format.canvasStructure}>
             <div className="grid grid-cols-3 gap-1.5">
-              {STRUCTURES.map((st) => {
-                const active = sheet.structure === st.id;
+              {STRUCTURE_IDS.map((structureId) => {
+                const active = sheet.structure === structureId;
                 return (
                   <button
-                    key={st.id}
+                    key={structureId}
                     type="button"
                     onClick={() =>
-                      dispatch({ type: "sheet/setLayout", sheetId: sheet.id, structure: st.id })
+                      dispatch({ type: "sheet/setLayout", sheetId: sheet.id, structure: structureId })
                     }
                     className={`flex flex-col items-center gap-1 rounded-xl border px-1.5 py-2 text-[11px] transition ${
                       active
@@ -445,26 +449,26 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                     }`}
                   >
                     <StructureIcon
-                      structure={st.id}
+                      structure={structureId}
                       rootColor={active ? "#1D4ED8" : "#334155"}
                       accentColor={active ? "#3B82F6" : "#64748B"}
                       secondaryColor={active ? "#10B981" : "#94A3B8"}
                       className="h-6 w-10"
                     />
-                    <span>{st.label}</span>
+                    <span>{t.structures[structureId]}</span>
                   </button>
                 );
               })}
             </div>
           </Section>
 
-          <Section title="布局间距">
+          <Section title={t.format.spacing}>
             <div className="grid grid-cols-3 gap-1.5">
               {(
                 [
-                  ["compact", "紧凑"],
-                  ["balanced", "均衡"],
-                  ["spacious", "宽松"],
+                  ["compact", t.format.spacingCompact],
+                  ["balanced", t.format.spacingBalanced],
+                  ["spacious", t.format.spacingSpacious],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -485,27 +489,30 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             </div>
           </Section>
 
-          <Section title="视觉骨架 (Skeleton)">
+          <Section title={t.format.skeleton}>
             <div className="space-y-1.5">
-              {SKELETON_LIST.map((sk) => (
-                <button
-                  key={sk.id}
-                  type="button"
-                  onClick={() => dispatch({ type: "theme/set", patch: { skeletonId: sk.id } })}
-                  className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
-                    theme.skeletonId === sk.id
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="font-semibold text-slate-800">{sk.name}</div>
-                  <div className="text-[10px] text-slate-500">{sk.description}</div>
-                </button>
-              ))}
+              {SKELETON_LIST.map((sk) => {
+                const info = getSkeletonInfo(sk.id, locale);
+                return (
+                  <button
+                    key={sk.id}
+                    type="button"
+                    onClick={() => dispatch({ type: "theme/set", patch: { skeletonId: sk.id } })}
+                    className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
+                      theme.skeletonId === sk.id
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="font-semibold text-slate-800">{info.name}</div>
+                    <div className="text-[10px] text-slate-500">{info.description}</div>
+                  </button>
+                );
+              })}
             </div>
           </Section>
 
-          <Section title="配色方案 (Palette)">
+          <Section title={t.format.palette}>
             <div className="grid grid-cols-2 gap-1.5">
               {PALETTE_LIST.map((pal) => (
                 <button
@@ -531,17 +538,17 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                       style={{ backgroundColor: hex8ToCss(pal.branches[0]) }}
                     />
                   </span>
-                  <span className="truncate text-[11px] font-medium">{pal.name}</span>
+                  <span className="truncate text-[11px] font-medium">{getPaletteLabel(pal.id, locale)}</span>
                 </button>
               ))}
             </div>
           </Section>
 
-          <Section title="风格开关">
+          <Section title={t.format.styleSwitches}>
             <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/70 p-2.5">
               <label className="flex cursor-pointer items-center justify-between">
                 <span className="flex items-center gap-2 font-medium text-slate-700">
-                  <Palette className="h-3.5 w-3.5 text-slate-500" /> 彩虹分支配色
+                  <Palette className="h-3.5 w-3.5 text-slate-500" /> {t.format.rainbowBranches}
                 </span>
                 <button
                   type="button"
@@ -563,7 +570,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               </label>
               <label className="flex cursor-pointer items-center justify-between">
                 <span className="flex items-center gap-2 font-medium text-slate-700">
-                  <Pencil className="h-3.5 w-3.5 text-slate-500" /> 手绘草图风格
+                  <Pencil className="h-3.5 w-3.5 text-slate-500" /> {t.format.handdrawn}
                 </span>
                 <button
                   type="button"
@@ -589,7 +596,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
         {/* TAB 3: Markers, Stickers & Rich Content */}
         <Tabs.Content value="markers" className="flex-1 space-y-4 overflow-y-auto p-3">
-          <Section title={`矢量标记 (${MARKER_CATALOG.length})`}>
+          <Section title={t.format.vectorMarkers(MARKER_CATALOG.length)}>
             <div className="grid grid-cols-7 gap-1.5">
               {MARKER_CATALOG.map((m) => (
                 <button
@@ -605,7 +612,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                   }
                   className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold shadow-xs transition hover:scale-110"
                   style={{ backgroundColor: m.bg, color: m.fg }}
-                  title={`${m.group}: ${m.id}`}
+                  title={`${t.markerGroups[m.group] ?? m.group}: ${m.id}`}
                 >
                   {m.label}
                 </button>
@@ -613,7 +620,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             </div>
           </Section>
 
-          <Section title="贴纸 (Stickers)">
+          <Section title={t.format.stickers}>
             <div className="grid grid-cols-4 gap-1.5">
               {STICKER_CATALOG.map((st) => (
                 <button
@@ -632,7 +639,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                       ? "border-blue-500 bg-blue-50"
                       : "border-slate-200 hover:bg-slate-50"
                   }`}
-                  title={st.label}
+                  title={t.stickers[st.id] ?? st.label}
                 >
                   {st.emoji}
                 </button>
@@ -640,7 +647,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             </div>
           </Section>
 
-          <Section title="任务状态">
+          <Section title={t.format.taskStatus}>
             <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
@@ -649,7 +656,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 }
                 className="rounded border border-slate-200 py-1.5 hover:bg-slate-50"
               >
-                待办
+                {t.format.taskTodo}
               </button>
               <button
                 type="button"
@@ -658,7 +665,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 }
                 className="rounded border border-slate-200 py-1.5 hover:bg-slate-50"
               >
-                已完成
+                {t.format.taskDone}
               </button>
               <button
                 type="button"
@@ -667,15 +674,15 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 }
                 className="rounded border border-slate-200 py-1.5 hover:bg-slate-50"
               >
-                移除
+                {t.format.taskRemove}
               </button>
             </div>
           </Section>
 
-          <Section title="数学公式 (LaTeX)">
+          <Section title={t.format.equation}>
             <input
               type="text"
-              placeholder="例如: E = mc^2"
+              placeholder={t.format.equationPlaceholder}
               value={primaryTopic?.equation?.latex ?? ""}
               onChange={(e) =>
                 dispatch({
@@ -689,10 +696,10 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             />
           </Section>
 
-          <Section title="标签 (逗号分隔)">
+          <Section title={t.format.labels}>
             <input
               type="text"
-              placeholder="例如: 核心, Q3, 高优"
+              placeholder={t.format.labelsPlaceholder}
               value={(primaryTopic?.labels ?? []).join(", ")}
               onChange={(e) =>
                 dispatch({
@@ -706,10 +713,10 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             />
           </Section>
 
-          <Section title="备注 (Markdown)">
+          <Section title={t.format.note}>
             <textarea
               rows={3}
-              placeholder="输入节点详细备注..."
+              placeholder={t.format.notePlaceholder}
               value={primaryTopic?.note?.text ?? ""}
               onChange={(e) =>
                 dispatch({

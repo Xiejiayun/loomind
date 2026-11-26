@@ -7,6 +7,7 @@ import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import { Bold, Highlighter, Italic, Strikethrough } from "lucide-react";
 import type { RichTextDoc } from "@mindmap/core";
+import { useEditorI18n } from "../i18n.js";
 
 interface TopicEditorProps {
   initialDoc: RichTextDoc;
@@ -55,6 +56,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
 }) => {
   const committedRef = useRef(false);
   const [hasSelection, setHasSelection] = useState(false);
+  const { t } = useEditorI18n();
 
   const editor = useEditor({
     extensions: [
@@ -132,7 +134,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
             type="button"
             className={`rounded p-1 text-slate-700 hover:bg-slate-100 ${editor.isActive("bold") ? "bg-blue-50 text-blue-600" : ""}`}
             onClick={() => editor.chain().focus().toggleBold().run()}
-            title="加粗"
+            title={t.topic.bold}
           >
             <Bold className="h-3.5 w-3.5" />
           </button>
@@ -140,7 +142,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
             type="button"
             className={`rounded p-1 text-slate-700 hover:bg-slate-100 ${editor.isActive("italic") ? "bg-blue-50 text-blue-600" : ""}`}
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            title="斜体"
+            title={t.topic.italic}
           >
             <Italic className="h-3.5 w-3.5" />
           </button>
@@ -148,7 +150,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
             type="button"
             className={`rounded p-1 text-slate-700 hover:bg-slate-100 ${editor.isActive("strike") ? "bg-blue-50 text-blue-600" : ""}`}
             onClick={() => editor.chain().focus().toggleStrike().run()}
-            title="删除线"
+            title={t.topic.strike}
           >
             <Strikethrough className="h-3.5 w-3.5" />
           </button>
@@ -156,7 +158,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
             type="button"
             className={`rounded p-1 text-slate-700 hover:bg-slate-100 ${editor.isActive("highlight") ? "bg-amber-100 text-amber-700" : ""}`}
             onClick={() => editor.chain().focus().toggleHighlight({ color: "#FEF08A" }).run()}
-            title="高亮"
+            title={t.topic.highlight}
           >
             <Highlighter className="h-3.5 w-3.5" />
           </button>

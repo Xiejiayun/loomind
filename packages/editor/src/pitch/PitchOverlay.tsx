@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Download, FileText, X } from "lucide-react";
 import { getPalette, hex8ToCss } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 import { compilePitchDeck } from "./compiler.js";
 import { exportPitchToPptx } from "./pptx-export.js";
 
@@ -10,12 +11,13 @@ export const PitchOverlay: React.FC = () => {
   const pitchMode = useMindmapStore((s) => s.pitchMode);
   const setPitchMode = useMindmapStore((s) => s.setPitchMode);
   const doc = useMindmapStore((s) => s.doc);
+  const { locale, t } = useEditorI18n();
 
   const [slideIdx, setSlideIdx] = useState(0);
   const [revealStep, setRevealStep] = useState(1);
   const [notesOpen, setNotesOpen] = useState(false);
 
-  const slides = useMemo(() => (pitchMode ? compilePitchDeck(doc) : []), [doc, pitchMode]);
+  const slides = useMemo(() => (pitchMode ? compilePitchDeck(doc, undefined, locale) : []), [doc, pitchMode, locale]);
   const palette = getPalette(doc.theme.paletteId);
 
   useEffect(() => {
@@ -89,20 +91,20 @@ export const PitchOverlay: React.FC = () => {
             onClick={() => setNotesOpen((v) => !v)}
             className="flex items-center gap-1 rounded-full border border-current/20 px-3 py-1 hover:bg-black/5"
           >
-            <FileText className="h-3.5 w-3.5" /> 备注 (N)
+            <FileText className="h-3.5 w-3.5" /> {t.pitch.notesBtn}
           </button>
           <button
             type="button"
             onClick={() => void exportPitchToPptx(doc, `${doc.sheets[0].title}.pptx`, slides)}
             className="flex items-center gap-1 rounded-full border border-current/20 px-3 py-1 hover:bg-black/5"
           >
-            <Download className="h-3.5 w-3.5" /> 导出 .pptx
+            <Download className="h-3.5 w-3.5" /> {t.pitch.exportPptx}
           </button>
           <button
             type="button"
             onClick={() => setPitchMode(false)}
             className="rounded-full p-1.5 hover:bg-black/10"
-            title="退出 (Esc)"
+            title={t.pitch.exitTitle}
           >
             <X className="h-4 w-4" />
           </button>
@@ -263,7 +265,7 @@ export const PitchOverlay: React.FC = () => {
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span>Space / → 步进下一要点</span>
+        <span>{t.pitch.stepHint}</span>
         <button
           type="button"
           disabled={slideIdx >= slides.length - 1}
@@ -280,9 +282,9 @@ export const PitchOverlay: React.FC = () => {
       {/* Speaker Notes Drawer */}
       {notesOpen && (
         <div className="fixed bottom-16 right-6 z-50 w-80 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-2xl">
-          <div className="mb-2 font-bold text-slate-900">演讲者备注</div>
+          <div className="mb-2 font-bold text-slate-900">{t.pitch.speakerNotesTitle}</div>
           <div className="max-h-52 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-            {slide.note || "当前页暂无备注"}
+            {slide.note || t.pitch.noNotes}
           </div>
         </div>
       )}

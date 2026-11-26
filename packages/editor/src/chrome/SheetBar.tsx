@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Map, Maximize, Minus, Plus, X } from "lucide-react";
 import { createSheet, generateId, type MindmapLayoutResult } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface SheetBarProps {
   viewportRef: React.RefObject<HTMLDivElement | null>;
@@ -18,6 +19,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
   const minimapOpen = useMindmapStore((s) => s.minimapOpen);
   const setMinimapOpen = useMindmapStore((s) => s.setMinimapOpen);
   const dispatch = useMindmapStore((s) => s.dispatch);
+  const { t } = useEditorI18n();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
 
@@ -26,7 +28,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
   const handleAddSheet = () => {
     const id = generateId("sheet", new Set(doc.deletedIds));
     const idx = doc.sheets.length + 1;
-    dispatch({ type: "sheet/add", sheet: createSheet(id, `画布 ${idx}`) });
+    dispatch({ type: "sheet/add", sheet: createSheet(id, t.sheetBar.newSheetName(idx)) });
   };
 
   const handleFitView = () => {
@@ -115,7 +117,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
           type="button"
           onClick={handleAddSheet}
           className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
-          title="新建画布"
+          title={t.sheetBar.addSheetTitle}
         >
           <Plus className="h-3 w-3" />
         </button>
@@ -128,7 +130,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
             type="button"
             onClick={() => setCamera({ scale: Math.max(0.15, camera.scale - 0.15) })}
             className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
-            title="缩小"
+            title={t.sheetBar.zoomOut}
           >
             <Minus className="h-3 w-3" />
           </button>
@@ -136,7 +138,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
             type="button"
             onClick={() => setCamera({ scale: 1 })}
             className="w-10 text-center font-mono text-[11px] hover:underline"
-            title="重置 100%"
+            title={t.sheetBar.resetZoom}
           >
             {Math.round(camera.scale * 100)}%
           </button>
@@ -144,7 +146,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
             type="button"
             onClick={() => setCamera({ scale: Math.min(3, camera.scale + 0.15) })}
             className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
-            title="放大"
+            title={t.sheetBar.zoomIn}
           >
             <Plus className="h-3 w-3" />
           </button>
@@ -152,7 +154,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
             type="button"
             onClick={handleFitView}
             className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
-            title="适应画布"
+            title={t.sheetBar.fitView}
           >
             <Maximize className="h-3 w-3" />
           </button>
@@ -168,13 +170,13 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
                   ? "hover:bg-white/[0.07] hover:text-white"
                   : "hover:bg-slate-900/[0.06]"
             }`}
-            title="小地图"
+            title={t.sheetBar.minimap}
           >
             <Map className="h-3 w-3" />
           </button>
         </div>
       ) : (
-        <div className="text-[11px] opacity-60">大纲写作模式</div>
+        <div className="text-[11px] opacity-60">{t.sheetBar.outlineMode}</div>
       )}
     </footer>
   );

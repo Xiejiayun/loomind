@@ -3,12 +3,14 @@ import { Command } from "cmdk";
 import { GitBranch, ListTree, Palette, Play, Search, Sparkles } from "lucide-react";
 import {
   collectAllTopics,
+  getPaletteLabel,
   PALETTE_LIST,
   richTextToPlainText,
   type MindmapLayoutResult,
   type MindmapStructure,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
+import { useEditorI18n } from "../i18n.js";
 
 interface CommandKProps {
   open: boolean;
@@ -18,16 +20,16 @@ interface CommandKProps {
   onOpenAi?: (initialPrompt?: string) => void;
 }
 
-const STRUCTURE_ITEMS: Array<{ id: MindmapStructure; label: string }> = [
-  { id: "mindmap", label: "思维导图" },
-  { id: "logic", label: "逻辑图" },
-  { id: "org", label: "组织结构图" },
-  { id: "brace", label: "括号图" },
-  { id: "indented", label: "缩进目录" },
-  { id: "timeline", label: "时间轴" },
-  { id: "fishbone", label: "鱼骨图" },
-  { id: "treeTable", label: "树型表格" },
-  { id: "matrix", label: "矩阵图" },
+const STRUCTURE_IDS: MindmapStructure[] = [
+  "mindmap",
+  "logic",
+  "org",
+  "brace",
+  "indented",
+  "timeline",
+  "fishbone",
+  "treeTable",
+  "matrix",
 ];
 
 export const CommandK: React.FC<CommandKProps> = ({
@@ -44,6 +46,7 @@ export const CommandK: React.FC<CommandKProps> = ({
   const setViewMode = useMindmapStore((s) => s.setViewMode);
   const setPitchMode = useMindmapStore((s) => s.setPitchMode);
   const camera = useMindmapStore((s) => s.camera);
+  const { locale, t } = useEditorI18n();
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -108,7 +111,7 @@ export const CommandK: React.FC<CommandKProps> = ({
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <Command label="全局命令与节点搜索">
+        <Command label={t.cmdk.ariaLabel}>
           <div
             className={`flex items-center border-b px-3.5 ${
               isDark ? "border-white/[0.075]" : "border-slate-900/[0.08]"
@@ -119,7 +122,7 @@ export const CommandK: React.FC<CommandKProps> = ({
               autoFocus
               value={search}
               onValueChange={setSearch}
-              placeholder="搜索主题、命令，或直接向 AI 提问…"
+              placeholder={t.cmdk.placeholder}
               className={`h-11 w-full bg-transparent text-[13px] outline-none ${
                 isDark
                   ? "text-[#f4f5f8] placeholder:text-[#646b78]"
@@ -138,10 +141,10 @@ export const CommandK: React.FC<CommandKProps> = ({
           </div>
 
           <Command.List className="max-h-80 overflow-y-auto p-1.5 text-[12px]">
-            <Command.Empty className="py-6 text-center text-[#646b78]">未找到匹配结果</Command.Empty>
+            <Command.Empty className="py-6 text-center text-[#646b78]">{t.cmdk.empty}</Command.Empty>
 
             {onOpenAi && search.trim() && (
-              <Command.Group heading="AI 助手" className={headingCls}>
+              <Command.Group heading={t.cmdk.groupAi} className={headingCls}>
                 <Command.Item
                   value={`ai ask ${search}`}
                   onSelect={() => {
@@ -151,12 +154,12 @@ export const CommandK: React.FC<CommandKProps> = ({
                   className={itemCls}
                 >
                   <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-75" />
-                  <span className="truncate">问 AI：「{search.trim()}」</span>
+                  <span className="truncate">{t.cmdk.askAi(search.trim())}</span>
                 </Command.Item>
               </Command.Group>
             )}
 
-            <Command.Group heading="跳转到主题" className={headingCls}>
+            <Command.Group heading={t.cmdk.groupTopics} className={headingCls}>
               {topics.map((t) => {
                 const text = richTextToPlainText(t.title);
                 const extra = [t.subtitle, t.note?.text, ...(t.labels ?? [])].filter(Boolean).join(" ");
@@ -182,7 +185,7 @@ export const CommandK: React.FC<CommandKProps> = ({
               })}
             </Command.Group>
 
-            <Command.Group heading="快捷动作" className={headingCls}>
+            <Command.Group heading={t.cmdk.groupActions} className={headingCls}>
               {onOpenAi && (
                 <Command.Item
                   onSelect={() => {
@@ -191,7 +194,7 @@ export const CommandK: React.FC<CommandKProps> = ({
                   }}
                   className={itemCls}
                 >
-                  <Sparkles className="h-3.5 w-3.5 opacity-75" /> 打开 AI 对话面板 (⌘J)
+                  <Sparkles className="h-3.5 w-3.5 opacity-75" /> {t.cmdk.openAiPanel}
                 </Command.Item>
               )}
               <Command.Item
@@ -201,7 +204,7 @@ export const CommandK: React.FC<CommandKProps> = ({
                 }}
                 className={itemCls}
               >
-                <ListTree className="h-3.5 w-3.5" /> 切换至大纲视图
+                <ListTree className="h-3.5 w-3.5" /> {t.cmdk.switchOutline}
               </Command.Item>
               <Command.Item
                 onSelect={() => {
@@ -210,26 +213,26 @@ export const CommandK: React.FC<CommandKProps> = ({
                 }}
                 className={itemCls}
               >
-                <Play className="h-3.5 w-3.5" /> 进入演说模式
+                <Play className="h-3.5 w-3.5" /> {t.cmdk.enterPitch}
               </Command.Item>
             </Command.Group>
 
-            <Command.Group heading="切换画布结构" className={headingCls}>
-              {STRUCTURE_ITEMS.map((st) => (
+            <Command.Group heading={t.cmdk.groupStructure} className={headingCls}>
+              {STRUCTURE_IDS.map((structureId) => (
                 <Command.Item
-                  key={st.id}
+                  key={structureId}
                   onSelect={() => {
-                    dispatch({ type: "sheet/setLayout", sheetId: sheet.id, structure: st.id });
+                    dispatch({ type: "sheet/setLayout", sheetId: sheet.id, structure: structureId });
                     onOpenChange(false);
                   }}
                   className={itemCls}
                 >
-                  <GitBranch className="h-3.5 w-3.5" /> 切换结构：{st.label}
+                  <GitBranch className="h-3.5 w-3.5" /> {t.cmdk.switchStructure(t.structures[structureId])}
                 </Command.Item>
               ))}
             </Command.Group>
 
-            <Command.Group heading="切换配色主题" className={headingCls}>
+            <Command.Group heading={t.cmdk.groupPalette} className={headingCls}>
               {PALETTE_LIST.map((p) => (
                 <Command.Item
                   key={p.id}
@@ -239,7 +242,7 @@ export const CommandK: React.FC<CommandKProps> = ({
                   }}
                   className={itemCls}
                 >
-                  <Palette className="h-3.5 w-3.5" /> 配色：{p.name}
+                  <Palette className="h-3.5 w-3.5" /> {t.cmdk.switchPalette(getPaletteLabel(p.id, locale))}
                 </Command.Item>
               ))}
             </Command.Group>

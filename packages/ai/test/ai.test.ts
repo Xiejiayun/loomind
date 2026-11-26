@@ -49,4 +49,16 @@ describe("@mindmap/ai streaming & actions", () => {
     expect(updated.children).toHaveLength(4);
     expect(updated.children.every((c) => c.task?.status === "todo")).toBe(true);
   });
+
+  it("returns localized English output when locale is set to en", async () => {
+    const doc = createDocument();
+    const adapter = new LocalImmerSyncAdapter(doc);
+    const sheetId = doc.activeSheetId;
+    const targetId = doc.sheets[0].rootTopic.children[0].id;
+
+    const msg = await runNodeAiAction(adapter, sheetId, targetId, "expand", "en");
+    expect(msg).toContain("Expanded 4 subtopics");
+    const updated = adapter.getDocument().sheets[0].rootTopic.children[0];
+    expect(richTextToPlainText(updated.children[0].title)).toContain("Key Elements");
+  });
 });
