@@ -11,9 +11,11 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Alt + 拖拽", "自由微调节点位置"],
   ["Shift + 框选", "多选节点批量操作"],
   ["⌘K / Ctrl+K", "全局搜索与命令面板"],
+  ["⌘J / Ctrl+J", "打开 / 收起 AI 对话面板"],
+  ["⇧⌘J", "节点内联 AI 指令栏"],
+  ["⌘I / Ctrl+I", "打开 / 收起格式面板"],
   ["F6", "聚焦下钻当前分支"],
   ["Space", "折叠 / 展开子分支"],
-  ["Ctrl + V", "粘贴图片到选中节点"],
 ];
 
 export const ShortcutsHelp: React.FC<{ isDark: boolean }> = ({ isDark }) => (
@@ -22,13 +24,13 @@ export const ShortcutsHelp: React.FC<{ isDark: boolean }> = ({ isDark }) => (
       <button
         type="button"
         title="快捷键指南"
-        className={`absolute bottom-3 left-3 z-30 flex h-8 w-8 items-center justify-center rounded-md border transition ${
+        className={`absolute bottom-3 left-3 z-30 flex h-8 w-8 items-center justify-center rounded-[7px] border transition ${
           isDark
-            ? "border-slate-700 bg-slate-900/90 text-slate-300 hover:bg-slate-800 hover:text-white"
-            : "border-slate-200 bg-white/95 text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+            ? "border-white/[0.1] bg-[#15171c]/90 text-[#9ca3b0] hover:border-white/[0.18] hover:bg-[#1c1f26] hover:text-white"
+            : "border-slate-900/[0.1] bg-white/95 text-[#525b6b] hover:border-slate-900/[0.18] hover:text-[#111318]"
         }`}
       >
-        <HelpCircle className="h-4 w-4" />
+        <HelpCircle className="h-3.5 w-3.5" />
       </button>
     </Popover.Trigger>
     <Popover.Portal>
@@ -36,22 +38,22 @@ export const ShortcutsHelp: React.FC<{ isDark: boolean }> = ({ isDark }) => (
         side="top"
         align="start"
         sideOffset={8}
-        className={`z-50 w-64 rounded-2xl border p-3.5 text-xs shadow-2xl ${
+        className={`z-50 w-64 rounded-[10px] border p-3.5 text-xs shadow-2xl ${
           isDark
-            ? "border-slate-700 bg-slate-900 text-slate-200"
-            : "border-slate-200 bg-white text-slate-700"
+            ? "border-white/[0.12] bg-[#15171c] text-[#f4f5f8]"
+            : "border-slate-900/[0.1] bg-white text-[#111318]"
         }`}
       >
-        <div className="mb-2.5 font-bold">快捷键与操作指南</div>
+        <div className="mb-2.5 text-[12px] font-semibold">快捷键与操作指南</div>
         <div className="space-y-1.5">
           {SHORTCUTS.map(([k, desc]) => (
             <div key={k} className="flex items-center justify-between gap-2">
-              <span className={isDark ? "text-slate-400" : "text-slate-500"}>{desc}</span>
+              <span className={isDark ? "text-[#9ca3b0]" : "text-[#525b6b]"}>{desc}</span>
               <kbd
                 className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
                   isDark
-                    ? "border-slate-700 bg-slate-800 text-slate-200"
-                    : "border-slate-200 bg-slate-50 text-slate-700"
+                    ? "border-white/[0.1] bg-[#1c1f26] text-[#d5d9e2]"
+                    : "border-slate-900/[0.1] bg-[#f7f8fa] text-[#2c3340]"
                 }`}
               >
                 {k}

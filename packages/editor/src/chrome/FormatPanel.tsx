@@ -188,44 +188,44 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
   return (
     <aside
-      className={`fixed right-0 top-11 bottom-8 z-40 flex w-[280px] shrink-0 flex-col border-l text-xs shadow-xl transition-colors md:static md:h-full md:shadow-none ${
+      className={`fixed right-0 top-11 bottom-7.5 z-40 flex w-[300px] shrink-0 flex-col border-l text-xs shadow-xl transition-colors md:static md:h-full md:shadow-none ${
         isDark
-          ? "dark-panel border-slate-800 bg-slate-900/95 text-slate-200 backdrop-blur"
-          : "border-slate-200 bg-white text-slate-700"
+          ? "dark-panel border-white/[0.075] bg-[#15171c] text-[#f4f5f8]"
+          : "border-slate-900/[0.08] bg-white text-[#111318]"
       }`}
     >
       <Tabs.Root defaultValue="canvas" className="flex h-full flex-col">
         <Tabs.List
           className={`grid grid-cols-3 border-b p-1 ${
-            isDark ? "border-slate-800 bg-slate-950/60" : "border-slate-200 bg-slate-50"
+            isDark ? "border-white/[0.075] bg-[#0b0c0e]" : "border-slate-900/[0.08] bg-[#f7f8fa]"
           }`}
         >
           <Tabs.Trigger
             value="style"
-            className={`rounded py-1.5 font-medium ${
+            className={`rounded-[5px] py-1.5 text-[11px] font-medium transition ${
               isDark
-                ? "text-slate-400 data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-                : "text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+                ? "text-[#9ca3b0] data-[state=active]:bg-[#1c1f26] data-[state=active]:text-[#f4f5f8]"
+                : "text-[#525b6b] data-[state=active]:bg-white data-[state=active]:text-[#111318] data-[state=active]:shadow-2xs"
             }`}
           >
             样式
           </Tabs.Trigger>
           <Tabs.Trigger
             value="canvas"
-            className={`rounded py-1.5 font-medium ${
+            className={`rounded-[5px] py-1.5 text-[11px] font-medium transition ${
               isDark
-                ? "text-slate-400 data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-                : "text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+                ? "text-[#9ca3b0] data-[state=active]:bg-[#1c1f26] data-[state=active]:text-[#f4f5f8]"
+                : "text-[#525b6b] data-[state=active]:bg-white data-[state=active]:text-[#111318] data-[state=active]:shadow-2xs"
             }`}
           >
             画布
           </Tabs.Trigger>
           <Tabs.Trigger
             value="markers"
-            className={`rounded py-1.5 font-medium ${
+            className={`rounded-[5px] py-1.5 text-[11px] font-medium transition ${
               isDark
-                ? "text-slate-400 data-[state=active]:bg-slate-800 data-[state=active]:text-white"
-                : "text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
+                ? "text-[#9ca3b0] data-[state=active]:bg-[#1c1f26] data-[state=active]:text-[#f4f5f8]"
+                : "text-[#525b6b] data-[state=active]:bg-white data-[state=active]:text-[#111318] data-[state=active]:shadow-2xs"
             }`}
           >
             图标贴纸

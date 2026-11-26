@@ -47,10 +47,10 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
 
   return (
     <footer
-      className={`flex h-8 shrink-0 items-center justify-between border-t px-2 text-xs transition-colors ${
+      className={`flex h-8 shrink-0 items-center justify-between border-t px-2.5 text-[11px] transition-colors ${
         isDark
-          ? "border-slate-800 bg-slate-900/95 text-slate-300"
-          : "border-slate-200 bg-slate-50 text-slate-600"
+          ? "border-white/[0.075] bg-[#0b0c0e] text-[#9ca3b0]"
+          : "border-slate-900/[0.08] bg-[#f7f8fa] text-[#525b6b]"
       }`}
     >
       {/* Multi-sheet tabs */}
@@ -65,14 +65,14 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
                 setRenamingId(s.id);
                 setRenameText(s.title);
               }}
-              className={`group flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 transition ${
+              className={`group flex cursor-pointer items-center gap-1.5 rounded-[5px] px-2 py-0.5 transition ${
                 active
                   ? isDark
-                    ? "bg-slate-800 font-semibold text-white shadow-xs"
-                    : "bg-white font-semibold text-slate-900 shadow-xs"
+                    ? "bg-[#1c1f26] font-medium text-[#f4f5f8]"
+                    : "bg-white font-medium text-[#111318] shadow-2xs ring-1 ring-slate-900/10"
                   : isDark
-                    ? "text-slate-400 hover:bg-slate-800/60"
-                    : "text-slate-500 hover:bg-slate-200/60"
+                    ? "text-[#9ca3b0] hover:bg-white/[0.05] hover:text-[#f4f5f8]"
+                    : "text-[#525b6b] hover:bg-slate-900/[0.04] hover:text-[#111318]"
               }`}
             >
               {renamingId === s.id ? (
@@ -90,7 +90,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
                       setRenamingId(null);
                     }
                   }}
-                  className="w-20 rounded border border-blue-400 px-1 text-xs outline-none"
+                  className="w-20 rounded border border-white/30 bg-transparent px-1 text-[11px] outline-none"
                 />
               ) : (
                 <span>{s.title}</span>
@@ -102,7 +102,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
                     e.stopPropagation();
                     dispatch({ type: "sheet/remove", sheetId: s.id });
                   }}
-                  className="opacity-0 hover:text-red-500 group-hover:opacity-100"
+                  className="opacity-0 hover:text-red-400 group-hover:opacity-100"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -114,27 +114,28 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
         <button
           type="button"
           onClick={handleAddSheet}
-          className="rounded p-1 hover:bg-slate-200"
+          className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
           title="新建画布"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-3 w-3" />
         </button>
       </div>
 
       {/* Right: Zoom & Minimap (Canvas mode only) */}
       {viewMode === "canvas" ? (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setCamera({ scale: Math.max(0.15, camera.scale - 0.15) })}
-            className="rounded p-1 hover:bg-slate-200"
+            className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
+            title="缩小"
           >
             <Minus className="h-3 w-3" />
           </button>
           <button
             type="button"
             onClick={() => setCamera({ scale: 1 })}
-            className="w-11 text-center font-mono text-[11px] hover:underline"
+            className="w-10 text-center font-mono text-[11px] hover:underline"
             title="重置 100%"
           >
             {Math.round(camera.scale * 100)}%
@@ -142,14 +143,15 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
           <button
             type="button"
             onClick={() => setCamera({ scale: Math.min(3, camera.scale + 0.15) })}
-            className="rounded p-1 hover:bg-slate-200"
+            className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
+            title="放大"
           >
             <Plus className="h-3 w-3" />
           </button>
           <button
             type="button"
             onClick={handleFitView}
-            className="rounded p-1 hover:bg-slate-200"
+            className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
             title="适应画布"
           >
             <Maximize className="h-3 w-3" />
@@ -157,14 +159,22 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
           <button
             type="button"
             onClick={() => setMinimapOpen(!minimapOpen)}
-            className={`rounded p-1 ${minimapOpen ? "bg-blue-100 text-blue-600" : "hover:bg-slate-200"}`}
+            className={`rounded p-1 transition ${
+              minimapOpen
+                ? isDark
+                  ? "bg-white/[0.12] text-white"
+                  : "bg-slate-900/[0.1] text-[#111318]"
+                : isDark
+                  ? "hover:bg-white/[0.07] hover:text-white"
+                  : "hover:bg-slate-900/[0.06]"
+            }`}
             title="小地图"
           >
-            <Map className="h-3.5 w-3.5" />
+            <Map className="h-3 w-3" />
           </button>
         </div>
       ) : (
-        <div className="text-[11px] text-slate-400">大纲写作模式</div>
+        <div className="text-[11px] opacity-60">大纲写作模式</div>
       )}
     </footer>
   );

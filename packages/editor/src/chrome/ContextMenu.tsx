@@ -5,6 +5,7 @@ import {
   Focus,
   MessageSquare,
   Plus,
+  Sparkles,
   SquareDashedBottom,
   Trash2,
 } from "lucide-react";
@@ -13,10 +14,17 @@ import { useMindmapStore } from "../context.js";
 
 interface ContextMenuProps {
   menu: { topicId: string; x: number; y: number } | null;
+  isDark?: boolean;
   onClose: () => void;
+  onOpenAiForTopic?: (topicId: string) => void;
 }
 
-export const ContextMenu: React.FC<ContextMenuProps> = ({ menu, onClose }) => {
+export const ContextMenu: React.FC<ContextMenuProps> = ({
+  menu,
+  isDark = false,
+  onClose,
+  onOpenAiForTopic,
+}) => {
   const doc = useMindmapStore((s) => s.doc);
   const dispatch = useMindmapStore((s) => s.dispatch);
   const selectTopics = useMindmapStore((s) => s.selectTopics);
@@ -41,15 +49,38 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ menu, onClose }) => {
     onClose();
   };
 
+  const sepCls = isDark ? "my-1 h-px bg-white/[0.075]" : "my-1 h-px bg-slate-900/[0.08]";
+
   return (
     <div
-      className="fixed z-50 min-w-[176px] rounded-xl border border-slate-200 bg-white p-1.5 text-xs text-slate-700 shadow-xl"
+      className={`fixed z-50 min-w-[196px] rounded-lg border p-1 text-xs shadow-2xl ${
+        isDark
+          ? "border-white/[0.12] bg-[#15171c] text-[#f4f5f8]"
+          : "border-slate-900/[0.1] bg-white text-[#111318]"
+      }`}
       style={{ left: menu.x, top: menu.y }}
       onClick={(e) => e.stopPropagation()}
     >
+      {onOpenAiForTopic && (
+        <>
+          <MenuItem
+            icon={<Sparkles className="h-3.5 w-3.5 opacity-80" />}
+            label="AI 快捷指令 (⌘J)"
+            isDark={isDark}
+            onClick={() =>
+              run(() => {
+                selectTopics([menu.topicId]);
+                onOpenAiForTopic(menu.topicId);
+              })
+            }
+          />
+          <div className={sepCls} />
+        </>
+      )}
       <MenuItem
         icon={<CornerDownRight className="h-3.5 w-3.5" />}
         label="插入子主题 (Tab)"
+        isDark={isDark}
         onClick={() =>
           run(() => {
             const newId = generateId("t", deletedSet);
@@ -63,6 +94,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ menu, onClose }) => {
         <MenuItem
           icon={<Plus className="h-3.5 w-3.5" />}
           label="插入同级主题 (Enter)"
+          isDark={isDark}
           onClick={() =>
             run(() => {
               const newId = generateId("t", deletedSet);
@@ -79,10 +111,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ menu, onClose }) => {
           }
         />
       )}
-      <div className="my-1 h-px bg-slate-100" />
+      <div className={sepCls} />
       <MenuItem
         icon={<MessageSquare className="h-3.5 w-3.5" />}
         label="添加批注 (Callout)"
+        isDark={isDark}
         onClick={() =>
           run(() =>
             dispatch({
@@ -97,6 +130,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ menu, onClose }) => {
       <MenuItem
         icon={<SquareDashedBottom className="h-3.5 w-3.5" />}
         label="添加外框 (Boundary)"
+        isDark={isDark}
         onClick={() =>
           run(() =>
             dispatch({
@@ -116,6 +150,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ menu, onClose }) => {
         <MenuItem
           icon={<Braces className="h-3.5 w-3.5" />}
           label="添加概要 (Summary)"
+          isDark={isDark}
           onClick={() =>
             run(() => {
               const loc = findTopicLocation(sheet, menu.topicId);
@@ -140,16 +175,18 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ menu, onClose }) => {
         <MenuItem
           icon={<Focus className="h-3.5 w-3.5" />}
           label="聚焦下钻 (F6)"
+          isDark={isDark}
           onClick={() => run(() => setDrillRootId(menu.topicId))}
         />
       )}
       {!isRoot && (
         <>
-          <div className="my-1 h-px bg-slate-100" />
+          <div className={sepCls} />
           <MenuItem
-            icon={<Trash2 className="h-3.5 w-3.5 text-red-500" />}
+            icon={<Trash2 className="h-3.5 w-3.5 text-red-400" />}
             label="删除主题"
             danger
+            isDark={isDark}
             onClick={() =>
               run(() => {
                 dispatch({ type: "topic/delete", sheetId: sheet.id, topicIds: [menu.topicId] });
@@ -167,13 +204,25 @@ const MenuItem: React.FC<{
   icon: React.ReactNode;
   label: string;
   danger?: boolean;
+  accent?: boolean;
+  isDark: boolean;
   onClick: () => void;
-}> = ({ icon, label, danger, onClick }) => (
+}> = ({ icon, label, danger, accent, isDark, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-slate-100 ${
-      danger ? "text-red-600 hover:bg-red-50" : ""
+    className={`flex w-full items-center gap-2 rounded-[5px] px-2.5 py-1.5 text-left transition ${
+      danger
+        ? isDark
+          ? "text-red-400 hover:bg-red-500/15"
+          : "text-red-600 hover:bg-red-50"
+        : accent
+          ? isDark
+            ? "font-medium text-[#a5b0ff] hover:bg-[#5e6ad2]/20"
+            : "font-medium text-[#4f5bd5] hover:bg-[#4f5bd5]/10"
+          : isDark
+            ? "text-[#d5d9e2] hover:bg-white/[0.07] hover:text-white"
+            : "text-[#2c3340] hover:bg-slate-900/[0.05] hover:text-[#111318]"
     }`}
   >
     {icon}
