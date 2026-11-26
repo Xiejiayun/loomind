@@ -370,7 +370,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
                 activeWorkspaceId={activeWorkspaceId}
                 workspaces={workspaces}
                 onModeChange={(mode) => navigate(`/app/create${mode === "outline" ? "?mode=outline" : ""}`, true)}
-                onCreate={(doc, wsId) => createMap(doc, wsId)}
+                onCreate={(doc, wsId, aiPrompt) => createMap(doc, wsId, aiPrompt)}
               />
             ) : route.pathname === "/app" ? (
               <HomeComposerView

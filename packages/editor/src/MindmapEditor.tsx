@@ -12,6 +12,7 @@ import {
   type SyncAdapter,
 } from "@mindmap/core";
 import { DomTextMeasurer } from "./canvas/DomMeasurer.js";
+import type { EditorAiRuntime } from "./ai-runtime.js";
 import { HybridCanvas } from "./canvas/HybridCanvas.js";
 import { Minimap } from "./canvas/Minimap.js";
 import { AiChatPanel } from "./chrome/AiChatPanel.js";
@@ -41,11 +42,12 @@ export interface MindmapEditorProps {
   initialRightPanel?: "none" | "ai" | "format";
   readOnly?: boolean;
   locale?: Locale;
+  aiRuntime?: EditorAiRuntime;
 }
 
 const MindmapEditorInner: React.FC<
-  Pick<MindmapEditorProps, "accountControl" | "chromeTheme" | "initialAiPrompt" | "initialRightPanel" | "readOnly">
-> = ({ accountControl, chromeTheme, initialAiPrompt, initialRightPanel, readOnly = false }) => {
+  Pick<MindmapEditorProps, "accountControl" | "chromeTheme" | "initialAiPrompt" | "initialRightPanel" | "readOnly" | "aiRuntime">
+> = ({ accountControl, chromeTheme, initialAiPrompt, initialRightPanel, readOnly = false, aiRuntime }) => {
   const doc = useMindmapStore((s) => s.doc);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
   const viewMode = useMindmapStore((s) => s.viewMode);
@@ -179,6 +181,7 @@ const MindmapEditorInner: React.FC<
             isDark={isDark}
             layout={layout}
             queuedPrompt={queuedAiPrompt}
+            aiRuntime={aiRuntime}
             onConsumeQueuedPrompt={() => setQueuedAiPrompt(undefined)}
             onClose={() => setAiPanelOpen(false)}
           />
@@ -200,6 +203,7 @@ const MindmapEditorInner: React.FC<
                   <InlineAiBar
                     open={inlineAiOpen}
                     isDark={isDark}
+                    aiRuntime={aiRuntime}
                     onClose={() => setInlineAiOpen(false)}
                     onContinueInPanel={(p) => openAiWithPrompt(p)}
                   />
@@ -259,6 +263,7 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
   initialRightPanel,
   readOnly = false,
   locale,
+  aiRuntime,
 }) => {
   useEffect(() => {
     if (locale) setLocale(locale);
@@ -290,6 +295,7 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
         initialAiPrompt={initialAiPrompt}
         initialRightPanel={initialRightPanel}
         readOnly={readOnly}
+        aiRuntime={aiRuntime}
       />
     </MindmapStoreContext.Provider>
   );

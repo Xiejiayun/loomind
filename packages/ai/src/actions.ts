@@ -12,6 +12,21 @@ import {
   type SkeletonId,
   type SyncAdapter,
 } from "@mindmap/core";
+import {
+  AI_LIMITS,
+  AiSafeCommandSchema,
+  isValidPalette,
+  isValidSkeleton,
+  isValidStructure,
+  sanitizeAiMindmapPartial,
+  serializeAiContext,
+  type AiIntent,
+  type AiSafeCommand,
+  type AiStreamEvent,
+  type AiStreamMeta,
+  type AiTier,
+  type AiTransport,
+} from "./protocol.js";
 import { AiMindmapStreamSchema, type AiMindmapStream, type AiTopicNode, type DeepPartial } from "./schema.js";
 import { reconcileStreamingTree } from "./stream-patcher.js";
 
@@ -28,8 +43,28 @@ export interface StreamGenerateOptions {
   sheetId: string;
   prompt: string;
   model?: LanguageModelV1;
+  transport?: AiTransport;
+  tier?: AiTier;
+  signal?: AbortSignal;
   locale?: Locale;
   onStep?: (partial: DeepPartial<AiMindmapStream>) => void;
+  onEvent?: (event: AiStreamEvent) => void;
+}
+
+export interface NodeAiActionOptions {
+  transport?: AiTransport;
+  tier?: AiTier;
+  prompt?: string;
+  signal?: AbortSignal;
+  selectedTopicIds?: string[];
+  onEvent?: (event: AiStreamEvent) => void;
+}
+
+export interface AiExecutionResult {
+  message: string;
+  summary: string;
+  appliedCount: number;
+  meta?: AiStreamMeta;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -129,26 +164,316 @@ function buildLocalDemoPlan(prompt: string, locale: Locale): AiMindmapStream {
 }
 
 /**
- * Generates a full mindmap with live branch-by-branch streaming growth.
- * Uses Vercel AI SDK `streamObject` when a `model` is provided, or falls back
- * to a deterministic progressive local stream for zero-config demos/tests.
+ * Applies validated `AiSafeCommand[]` ops to the live document under a single
+ * `coalesceKey` so the entire AI mutation can be undone in one step.
  */
-export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promise<void> {
-  const { adapter, sheetId, prompt, model, onStep } = opts;
+export function applyAiCommands(
+  adapter: SyncAdapter,
+  sheetId: string,
+  ops: AiSafeCommand[],
+  coalesceKey: string,
+): number {
+  let applied = 0;
+
+  for (const rawOp of ops) {
+    const parsed = AiSafeCommandSchema.safeParse(rawOp);
+    if (!parsed.success) continue;
+    const op = parsed.data;
+
+    const doc = adapter.getDocument();
+    const sheet = doc.sheets.find((s) => s.id === sheetId);
+    if (!sheet) break;
+    const deletedSet = new Set(doc.deletedIds);
+
+    switch (op.kind) {
+      case "addChildren": {
+        const loc = findTopicLocation(sheet, op.targetTopicId);
+        if (!loc) break;
+        for (const item of op.items.slice(0, 10)) {
+          const newId = generateId("ai", deletedSet);
+          deletedSet.add(newId);
+          adapter.applyCommand(
+            {
+              type: "topic/addChild",
+              sheetId,
+              parentId: op.targetTopicId,
+              newId,
+              title: createRichText(item.title.trim().slice(0, AI_LIMITS.MAX_TITLE_CHARS)),
+            },
+            { coalesceKey },
+          );
+          if (item.subtitle?.trim()) {
+            adapter.applyCommand(
+              {
+                type: "topic/setSubtitle",
+                sheetId,
+                topicId: newId,
+                subtitle: item.subtitle.trim().slice(0, AI_LIMITS.MAX_SUBTITLE_CHARS),
+              },
+              { coalesceKey },
+            );
+          }
+          if (item.labels?.length) {
+            adapter.applyCommand(
+              {
+                type: "topic/setLabels",
+                sheetId,
+                topicId: newId,
+                labels: item.labels.slice(0, AI_LIMITS.MAX_LABELS),
+              },
+              { coalesceKey },
+            );
+          }
+          if (item.task) {
+            adapter.applyCommand(
+              {
+                type: "topic/toggleTask",
+                sheetId,
+                topicId: newId,
+                status: item.task,
+              },
+              { coalesceKey },
+            );
+          }
+          applied += 1;
+        }
+        break;
+      }
+
+      case "setSummary": {
+        const loc = findTopicLocation(sheet, op.targetTopicId);
+        if (!loc || loc.topic.children.length === 0) break;
+        adapter.applyCommand(
+          {
+            type: "summary/upsert",
+            sheetId,
+            summary: {
+              id: generateId("sum", deletedSet),
+              parentId: op.targetTopicId,
+              startIndex: 0,
+              endIndex: loc.topic.children.length - 1,
+              brace: "curly",
+              topic: createTopic(generateId("sumt", deletedSet), op.title.trim().slice(0, AI_LIMITS.MAX_TITLE_CHARS), {
+                ...(op.note?.trim()
+                  ? { note: { format: "markdown", text: op.note.trim().slice(0, 2000) } }
+                  : {}),
+              }),
+            },
+          },
+          { coalesceKey },
+        );
+        applied += 1;
+        break;
+      }
+
+      case "setBoundary": {
+        const loc = findTopicLocation(sheet, op.targetTopicId);
+        if (!loc) break;
+        adapter.applyCommand(
+          {
+            type: "boundary/upsert",
+            sheetId,
+            boundary: {
+              id: generateId("bnd", deletedSet),
+              target: { kind: "subtree", topicId: op.targetTopicId },
+              shape: "rounded",
+              title: op.title.trim().slice(0, 60),
+            },
+          },
+          { coalesceKey },
+        );
+        applied += 1;
+        break;
+      }
+
+      case "setNote": {
+        const loc = findTopicLocation(sheet, op.targetTopicId);
+        if (!loc) break;
+        adapter.applyCommand(
+          {
+            type: "topic/setNote",
+            sheetId,
+            topicId: op.targetTopicId,
+            text: op.markdown.trim().slice(0, AI_LIMITS.MAX_NOTE_CHARS),
+          },
+          { coalesceKey },
+        );
+        applied += 1;
+        break;
+      }
+
+      case "setStyle": {
+        if (isValidStructure(op.structure)) {
+          adapter.applyCommand({ type: "sheet/setLayout", sheetId, structure: op.structure }, { coalesceKey });
+          applied += 1;
+        }
+        const patch: { skeletonId?: SkeletonId; paletteId?: PaletteId } = {};
+        if (isValidSkeleton(op.skeletonId)) patch.skeletonId = op.skeletonId;
+        if (isValidPalette(op.paletteId)) patch.paletteId = op.paletteId;
+        if (patch.skeletonId || patch.paletteId) {
+          adapter.applyCommand({ type: "theme/set", patch }, { coalesceKey });
+          applied += 1;
+        }
+        break;
+      }
+    }
+  }
+
+  return applied;
+}
+
+/**
+ * Unified SSE execution entry point for both full-map generation and node actions
+ * when using Loomind's backend `AiTransport` (`/api/ai/stream`).
+ */
+export async function executeRemoteAiStream(opts: {
+  adapter: SyncAdapter;
+  sheetId: string;
+  transport: AiTransport;
+  tier: AiTier;
+  intent: AiIntent;
+  prompt: string;
+  locale?: Locale;
+  targetTopicId?: string;
+  selectedTopicIds?: string[];
+  signal?: AbortSignal;
+  onStep?: (partial: DeepPartial<AiMindmapStream>) => void;
+  onEvent?: (event: AiStreamEvent) => void;
+}): Promise<AiExecutionResult> {
+  const { adapter, sheetId, transport, tier, intent, prompt, targetTopicId, selectedTopicIds, signal, onStep, onEvent } = opts;
   const locale = opts.locale ?? getLocale();
+  const doc = adapter.getDocument();
+  const sheet = doc.sheets.find((s) => s.id === sheetId);
+  if (!sheet) {
+    return {
+      message: locale === "en" ? "Sheet not found" : "未找到画布",
+      summary: "",
+      appliedCount: 0,
+    };
+  }
+
+  const rootId = sheet.rootTopic.id;
+  const prefix = `ai${Date.now().toString(36).slice(-4)}`;
+  const coalesceKey = `copilot:${prefix}`;
+  const context = serializeAiContext(doc, sheetId, targetTopicId ?? null, selectedTopicIds ?? []);
+
+  let rootReset = false;
+  let meta: AiStreamMeta | undefined;
+  let messageText = "";
+  let doneSummary = "";
+  let appliedCount = 0;
+
+  for await (const ev of transport.stream(
+    {
+      tier,
+      intent,
+      prompt: prompt.trim().slice(0, AI_LIMITS.MAX_PROMPT_CHARS),
+      locale,
+      targetTopicId: targetTopicId ?? rootId,
+      context,
+    },
+    signal,
+  )) {
+    onEvent?.(ev);
+    if (ev.event === "meta") {
+      meta = ev.data;
+    } else if (ev.event === "map_patch") {
+      const sanitized = sanitizeAiMindmapPartial(ev.data.partial);
+      if (!rootReset) {
+        rootReset = true;
+        adapter.applyCommand(
+          {
+            type: "doc/replaceSheetRoot",
+            sheetId,
+            rootTopic: createTopic(
+              rootId,
+              sanitized.root?.title || prompt.trim().slice(0, AI_LIMITS.MAX_TITLE_CHARS) || (locale === "en" ? "Generating..." : "生成中..."),
+            ),
+          },
+          { coalesceKey },
+        );
+      }
+      if (sanitized.recommendedStructure) {
+        adapter.applyCommand(
+          { type: "sheet/setLayout", sheetId, structure: sanitized.recommendedStructure },
+          { coalesceKey },
+        );
+      }
+      if (sanitized.recommendedPalette) {
+        adapter.applyCommand(
+          { type: "theme/set", patch: { paletteId: sanitized.recommendedPalette } },
+          { coalesceKey },
+        );
+      }
+      if (sanitized.root) {
+        reconcileStreamingTree(adapter, sheetId, rootId, sanitized.root, prefix, { coalesceKey });
+        appliedCount += 1;
+      }
+      onStep?.(sanitized);
+    } else if (ev.event === "commands") {
+      appliedCount += applyAiCommands(adapter, sheetId, ev.data.ops, coalesceKey);
+    } else if (ev.event === "message_delta") {
+      messageText += ev.data.delta;
+    } else if (ev.event === "done") {
+      doneSummary = ev.data.summary;
+      if (appliedCount === 0 && ev.data.appliedCount > 0) {
+        appliedCount = ev.data.appliedCount;
+      }
+    }
+  }
+
+  const fallbackSummary =
+    locale === "en" ? "Updated mind map" : "已更新思维导图";
+  return {
+    message: messageText.trim() || doneSummary || fallbackSummary,
+    summary: doneSummary || messageText.trim() || fallbackSummary,
+    appliedCount,
+    meta,
+  };
+}
+
+/**
+ * Generates a full mindmap with live branch-by-branch streaming growth.
+ * Uses remote `AiTransport` (`/api/ai/stream`) when provided, Vercel AI SDK
+ * `streamObject` when a `model` is provided, or falls back to a deterministic
+ * progressive local stream for zero-config demos/tests.
+ */
+export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promise<AiExecutionResult | void> {
+  const { adapter, sheetId, prompt, model, transport, tier = "free", signal, onStep, onEvent } = opts;
+  const locale = opts.locale ?? getLocale();
+
+  if (transport) {
+    return executeRemoteAiStream({
+      adapter,
+      sheetId,
+      transport,
+      tier,
+      intent: "generate_map",
+      prompt,
+      locale,
+      signal,
+      onStep,
+      onEvent,
+    });
+  }
+
   const doc = adapter.getDocument();
   const sheet = doc.sheets.find((s) => s.id === sheetId);
   if (!sheet) return;
 
   const prefix = `ai${Date.now().toString(36).slice(-4)}`;
+  const coalesceKey = `ai-stream:${prefix}`;
   const rootId = sheet.rootTopic.id;
 
   // Reset root children cleanly
-  adapter.applyCommand({
-    type: "doc/replaceSheetRoot",
-    sheetId,
-    rootTopic: createTopic(rootId, prompt.trim() || (locale === "en" ? "Generating..." : "生成中...")),
-  });
+  adapter.applyCommand(
+    {
+      type: "doc/replaceSheetRoot",
+      sheetId,
+      rootTopic: createTopic(rootId, prompt.trim() || (locale === "en" ? "Generating..." : "生成中...")),
+    },
+    { coalesceKey },
+  );
 
   if (model) {
     const { partialObjectStream } = streamObject({
@@ -161,29 +486,30 @@ export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promis
     });
 
     for await (const partial of partialObjectStream) {
-      if (partial.recommendedStructure) {
-        adapter.applyCommand({
-          type: "sheet/setLayout",
-          sheetId,
-          structure: partial.recommendedStructure,
-        });
+      if (signal?.aborted) break;
+      const sanitized = sanitizeAiMindmapPartial(partial as DeepPartial<AiMindmapStream>);
+      if (sanitized.recommendedStructure) {
+        adapter.applyCommand(
+          { type: "sheet/setLayout", sheetId, structure: sanitized.recommendedStructure },
+          { coalesceKey },
+        );
       }
-      if (partial.recommendedPalette) {
-        adapter.applyCommand({
-          type: "theme/set",
-          patch: { paletteId: partial.recommendedPalette },
-        });
+      if (sanitized.recommendedPalette) {
+        adapter.applyCommand(
+          { type: "theme/set", patch: { paletteId: sanitized.recommendedPalette } },
+          { coalesceKey },
+        );
       }
-      reconcileStreamingTree(adapter, sheetId, rootId, partial.root as DeepPartial<AiTopicNode> | undefined, prefix);
-      onStep?.(partial as DeepPartial<AiMindmapStream>);
+      reconcileStreamingTree(adapter, sheetId, rootId, sanitized.root, prefix, { coalesceKey });
+      onStep?.(sanitized);
     }
     return;
   }
 
   // Deterministic progressive local streaming (grows branch by branch)
   const plan = buildLocalDemoPlan(prompt, locale);
-  adapter.applyCommand({ type: "sheet/setLayout", sheetId, structure: plan.recommendedStructure });
-  adapter.applyCommand({ type: "theme/set", patch: { paletteId: plan.recommendedPalette } });
+  adapter.applyCommand({ type: "sheet/setLayout", sheetId, structure: plan.recommendedStructure }, { coalesceKey });
+  adapter.applyCommand({ type: "theme/set", patch: { paletteId: plan.recommendedPalette } }, { coalesceKey });
 
   const progressive: DeepPartial<AiTopicNode> = {
     title: plan.root.title,
@@ -192,19 +518,21 @@ export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promis
   };
 
   for (const branch of plan.root.children ?? []) {
+    if (signal?.aborted) break;
     const bCopy: DeepPartial<AiTopicNode> = {
       title: branch.title,
       labels: branch.labels,
       children: [],
     };
     progressive.children!.push(bCopy);
-    reconcileStreamingTree(adapter, sheetId, rootId, progressive, prefix);
+    reconcileStreamingTree(adapter, sheetId, rootId, progressive, prefix, { coalesceKey });
     onStep?.({ ...plan, root: progressive });
     await sleep(90);
 
     for (const leaf of branch.children ?? []) {
+      if (signal?.aborted) break;
       bCopy.children!.push(leaf);
-      reconcileStreamingTree(adapter, sheetId, rootId, progressive, prefix);
+      reconcileStreamingTree(adapter, sheetId, rootId, progressive, prefix, { coalesceKey });
       onStep?.({ ...plan, root: progressive });
       await sleep(70);
     }
@@ -218,7 +546,25 @@ export async function runNodeAiAction(
   topicId: string,
   action: NodeAiActionKind,
   locale: Locale = getLocale(),
+  opts?: NodeAiActionOptions,
 ): Promise<string> {
+  if (opts?.transport) {
+    const result = await executeRemoteAiStream({
+      adapter,
+      sheetId,
+      transport: opts.transport,
+      tier: opts.tier ?? "free",
+      intent: action,
+      prompt: opts.prompt || action,
+      locale,
+      targetTopicId: topicId,
+      selectedTopicIds: opts.selectedTopicIds,
+      signal: opts.signal,
+      onEvent: opts.onEvent,
+    });
+    return result.message;
+  }
+
   const doc = adapter.getDocument();
   const sheet = doc.sheets.find((s) => s.id === sheetId);
   if (!sheet) return locale === "en" ? "Sheet not found" : "未找到画布";
@@ -228,6 +574,7 @@ export async function runNodeAiAction(
   const title = richTextToPlainText(loc.topic.title);
   const deletedSet = new Set(doc.deletedIds);
   const isEn = locale === "en";
+  const coalesceKey = `ai-node:${action}:${Date.now().toString(36)}`;
 
   switch (action) {
     case "expand": {
@@ -245,13 +592,16 @@ export async function runNodeAiAction(
             `${title} · 潜在挑战`,
           ];
       for (const idea of ideas) {
-        adapter.applyCommand({
-          type: "topic/addChild",
-          sheetId,
-          parentId: topicId,
-          newId: generateId("ai", deletedSet),
-          title: createRichText(idea),
-        });
+        adapter.applyCommand(
+          {
+            type: "topic/addChild",
+            sheetId,
+            parentId: topicId,
+            newId: generateId("ai", deletedSet),
+            title: createRichText(idea),
+          },
+          { coalesceKey },
+        );
         await sleep(50);
       }
       return isEn ? `Expanded 4 subtopics for "${title}"` : `已为「${title}」扩展 4 个子主题`;
@@ -273,19 +623,25 @@ export async function runNodeAiAction(
           ];
       for (const s of steps) {
         const newId = generateId("ait", deletedSet);
-        adapter.applyCommand({
-          type: "topic/addChild",
-          sheetId,
-          parentId: topicId,
-          newId,
-          title: createRichText(s),
-        });
-        adapter.applyCommand({
-          type: "topic/toggleTask",
-          sheetId,
-          topicId: newId,
-          status: "todo",
-        });
+        adapter.applyCommand(
+          {
+            type: "topic/addChild",
+            sheetId,
+            parentId: topicId,
+            newId,
+            title: createRichText(s),
+          },
+          { coalesceKey },
+        );
+        adapter.applyCommand(
+          {
+            type: "topic/toggleTask",
+            sheetId,
+            topicId: newId,
+            status: "todo",
+          },
+          { coalesceKey },
+        );
         await sleep(40);
       }
       return isEn ? "Created 4 actionable tasks" : "已拆解 4 项可执行任务";
@@ -296,43 +652,49 @@ export async function runNodeAiAction(
         return isEn ? "No child topics to summarize" : "该节点暂无子节点可概要";
       }
       const childTitles = loc.topic.children.map((c) => richTextToPlainText(c.title)).join(" / ");
-      adapter.applyCommand({
-        type: "summary/upsert",
-        sheetId,
-        summary: {
-          id: generateId("sum", deletedSet),
-          parentId: topicId,
-          startIndex: 0,
-          endIndex: loc.topic.children.length - 1,
-          brace: "curly",
-          topic: createTopic(
-            generateId("sumt", deletedSet),
-            isEn
-              ? `Key Takeaway: Focus on ${title} (${loc.topic.children.length} items)`
-              : `核心结论：聚焦${title}（共 ${loc.topic.children.length} 项）`,
-            {
-              note: {
-                format: "markdown",
-                text: isEn ? `Key points: ${childTitles}` : `综合要点：${childTitles}`,
+      adapter.applyCommand(
+        {
+          type: "summary/upsert",
+          sheetId,
+          summary: {
+            id: generateId("sum", deletedSet),
+            parentId: topicId,
+            startIndex: 0,
+            endIndex: loc.topic.children.length - 1,
+            brace: "curly",
+            topic: createTopic(
+              generateId("sumt", deletedSet),
+              isEn
+                ? `Key Takeaway: Focus on ${title} (${loc.topic.children.length} items)`
+                : `核心结论：聚焦${title}（共 ${loc.topic.children.length} 项）`,
+              {
+                note: {
+                  format: "markdown",
+                  text: isEn ? `Key points: ${childTitles}` : `综合要点：${childTitles}`,
+                },
               },
-            },
-          ),
+            ),
+          },
         },
-      });
+        { coalesceKey },
+      );
       return isEn ? "Generated branch summary" : "已生成分支概要";
     }
 
     case "cluster": {
-      adapter.applyCommand({
-        type: "boundary/upsert",
-        sheetId,
-        boundary: {
-          id: generateId("bnd", deletedSet),
-          target: { kind: "subtree", topicId },
-          shape: "rounded",
-          title: isEn ? `${title} Cluster` : `${title} 聚类`,
+      adapter.applyCommand(
+        {
+          type: "boundary/upsert",
+          sheetId,
+          boundary: {
+            id: generateId("bnd", deletedSet),
+            target: { kind: "subtree", topicId },
+            shape: "rounded",
+            title: isEn ? `${title} Cluster` : `${title} 聚类`,
+          },
         },
-      });
+        { coalesceKey },
+      );
       return isEn ? "Added semantic cluster boundary" : "已为分支添加语义聚类外框";
     }
 
@@ -346,12 +708,15 @@ export async function runNodeAiAction(
           `- **背景说明**：围绕「${title}」梳理关键上下文与约束。\n` +
           `- **关键行动**：优先推进高杠杆事项并设定可量化验收标准。\n` +
           `- **注意事项**：定期同步依赖方，控制范围蔓延。`;
-      adapter.applyCommand({
-        type: "topic/setNote",
-        sheetId,
-        topicId,
-        text: note,
-      });
+      adapter.applyCommand(
+        {
+          type: "topic/setNote",
+          sheetId,
+          topicId,
+          text: note,
+        },
+        { coalesceKey },
+      );
       return isEn ? "Generated structured Markdown note" : "已生成结构化 Markdown 长备注";
     }
 
@@ -379,8 +744,8 @@ export async function runNodeAiAction(
         paletteId = "prism-vibrant";
       }
 
-      adapter.applyCommand({ type: "sheet/setLayout", sheetId, structure });
-      adapter.applyCommand({ type: "theme/set", patch: { skeletonId, paletteId } });
+      adapter.applyCommand({ type: "sheet/setLayout", sheetId, structure }, { coalesceKey });
+      adapter.applyCommand({ type: "theme/set", patch: { skeletonId, paletteId } }, { coalesceKey });
       return isEn ? `Switched to ${structure} + ${paletteId}` : `已智能切换为 ${structure} + ${paletteId}`;
     }
   }

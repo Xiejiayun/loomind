@@ -7,7 +7,15 @@
   "workers_dev": true,
   "vars": {
     "AUTH_ORIGIN": "https://loomind.jeremyxie.com",
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAGSMsKL2gyj9cijh"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAGSMsKL2gyj9cijh",
+    "AI_FREE_MODEL": "@cf/qwen/qwen2.5-7b-instruct",
+    "PRO_LLM_MODEL": "gpt-6.2-sol",
+    "AI_FREE_DAILY_LIMIT": "10",
+    "AI_PRO_DAILY_LIMIT": "100",
+    "AI_ALLOW_MOCK": "true"
+  },
+  "ai": {
+    "binding": "AI"
   },
   "secrets": {
     "required": ["GOOGLE_CLIENT_ID", "TURNSTILE_SECRET", "SESSION_SECRET"]
