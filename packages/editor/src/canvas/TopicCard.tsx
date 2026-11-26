@@ -63,9 +63,9 @@ function renderRichText(doc: RichTextDoc, nowrap: boolean): React.ReactNode {
                       {el}
                     </code>
                   );
-                else if (m.type === "textStyle" && m.attrs?.color) style.color = m.attrs.color;
+                else if (m.type === "textStyle" && m.attrs?.color) style.color = hex8ToCss(m.attrs.color);
                 else if (m.type === "highlight")
-                  style.backgroundColor = m.attrs?.backgroundColor ?? "#FEF08A";
+                  style.backgroundColor = hex8ToCss(m.attrs?.backgroundColor ?? m.attrs?.color ?? "#FEF08AFF");
               }
             }
             return (
