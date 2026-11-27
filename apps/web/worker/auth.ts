@@ -5,6 +5,7 @@ import { handleAiChat } from "./ai-chat.js";
 import { handleCollab } from "./collab.js";
 import { handleDraft, handleRevisions } from "./drafts.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
+import { handleNodeReviews } from "./reviews.js";
 import { handleShare, handleInvite } from "./sharing.js";
 import { handleWorkspace } from "./workspaces.js";
 
@@ -99,6 +100,9 @@ async function handle(request: Request, env: Env) {
     const rest = path.slice("/api/mindmaps/".length);
     const segments = rest.split("/");
     if (segments.length === 1) return handleDraft(request, env, session?.sub, segments[0]);
+    if (segments[1] === "comments" && (segments.length === 2 || segments.length === 3)) {
+      return handleNodeReviews(request, env, session?.sub, session?.email, segments[0], segments[2]);
+    }
     if (segments[1] === "revisions" && (segments.length === 2 || segments.length === 3)) {
       return handleRevisions(request, env, session?.sub, segments[0], segments[2]);
     }

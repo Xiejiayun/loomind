@@ -1411,6 +1411,25 @@
 }
 .lm-modal::backdrop, .lm-account-dialog::backdrop { background: rgba(0, 0, 0, .58); backdrop-filter: blur(2px); }
 .lm-modal-inner { padding: 20px; }
+.lm-review-dialog { width: min(520px, calc(100vw - 28px)); overflow-y: auto; overflow-wrap: anywhere; }
+.lm-review-dialog h3 { margin: 18px 0 8px; font-size: 15px; }
+.lm-review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lm-review-dialog .lm-review-policy { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.lm-review-anchor { margin: 14px 0 6px; font-size: 13px; font-weight: 600; }
+.lm-review-compose { display: grid; gap: 6px; margin-block: 10px 14px; }
+.lm-review-compose label, .lm-review-dialog small { color: var(--lm-text-secondary); font-size: 12px; }
+.lm-review-compose textarea { width: 100%; padding: 8px; resize: vertical; border: 1px solid var(--lm-border-strong); border-radius: var(--lm-radius-sm); background: var(--lm-bg-canvas); color: inherit; font: inherit; }
+.lm-review-compose button { justify-self: end; }
+.lm-review-threads, .lm-review-replies { list-style: none; margin: 8px 0; padding: 0; }
+.lm-review-threads button { display: grid; gap: 3px; width: 100%; padding: 10px 0; border-top: 1px solid var(--lm-border-subtle); text-align: start; }
+.lm-review-threads span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lm-review-message { padding: 10px 0; border-top: 1px solid var(--lm-border-subtle); }
+.lm-review-message p { margin: 5px 0; white-space: pre-wrap; }
+@media (max-width: 640px) {
+  .lm-review-compose textarea { font-size: 16px; }
+  .lm-review-dialog button { min-height: 44px; }
+  .lm-review-dialog .lm-icon-button-sm { min-width: 44px; }
+}
 .lm-modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .lm-modal-heading h2 { margin: 4px 0 0; font-family: var(--lm-font-display); font-size: 24px; font-weight: 500; letter-spacing: -.01em; line-height: 1.2; }
 .lm-modal-description { margin: 12px 0 16px; color: var(--lm-text-secondary); font-size: 12.5px; line-height: 1.6; }

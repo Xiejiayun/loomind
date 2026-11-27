@@ -1,4 +1,6 @@
 import { getWebMessages } from "./i18n.js";
+import { OWNER_HEADER } from "./drafts/shared.js";
+import type { ReviewDetail, ReviewList } from "./drafts/reviews.js";
 
 export type Access = "owner" | "editor" | "viewer";
 export interface WorkspaceSummary { id: string; name: string; role: Access; createdAt: string }
@@ -41,3 +43,20 @@ export const listShares = (type: "workspace" | "mindmap", resourceId: string) =>
 export const revokeShare = (id: string) => request<{ revoked: boolean }>(`/api/shares/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const previewInvite = (token: string) => request<InvitePreview>(`/api/invites/${encodeURIComponent(token)}`);
 export const acceptInvite = (token: string) => send<{ type: "workspace" | "mindmap"; id: string }>(`/api/invites/${encodeURIComponent(token)}/accept`, {});
+
+export function nodeReviewApi(owner: string, mapId: string) {
+  const path = `/api/mindmaps/${encodeURIComponent(mapId)}/comments`;
+  const headers = { [OWNER_HEADER]: owner };
+  const page = (cursor?: number) => cursor ? `?cursor=${cursor}` : "";
+  const write = <T>(url: string, method: "POST" | "PATCH", value: object) => request<T>(url, {
+    method, headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(value),
+  });
+  return {
+    list: (cursor?: number) => request<ReviewList>(path + page(cursor), { headers }),
+    detail: (id: number, cursor?: number) => request<ReviewDetail>(`${path}/${id}${page(cursor)}`, { headers }),
+    create: (sheetId: string, topicId: string, body: string) => write<{ id: number }>(path, "POST", { sheetId, topicId, body }),
+    reply: (id: number, body: string) => write(`${path}/${id}`, "POST", { body }),
+    resolve: (id: number, resolved: boolean) => write(`${path}/${id}`, "PATCH", { resolved }),
+    policy: (viewersCanComment: boolean) => write(path, "PATCH", { viewersCanComment }),
+  };
+}

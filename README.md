@@ -52,6 +52,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Real-time CRDT Collaboration**: Powered by `LoroSyncAdapter` (Movable Tree CRDT) with instant same-browser `BroadcastChannel` sync, Cloudflare D1 incremental delta sync (`/api/mindmaps/:id/collab`), and live collaborator selection presence badges.
 - **Cloud Version History**: Automatically snapshots up to 20 cloud revisions per mindmap (`mindmap_revisions`) with live SVG thumbnail previews, JSON download, and non-destructive one-click restore.
 - **Workspace & Mindmap Sharing**: Invite another Google account to an entire workspace or a single mindmap with editor or viewer access (7-day expiry, instant revocation, signed-session access control).
+- **Node comments**: Select a saved topic and open **Node comments** to start a discussion. Map members can read it; the owner and editors can reply, resolve or reopen it. Viewers can post and reply only if the map owner enables **Allow viewers to comment**; this does not grant map editing. Members see each author's account email. Refresh the dialog to see others' replies. Discussions follow node IDs through renames and remain labeled after node deletion. File exports and map revision restores do not include or modify these separate records; deleting the map removes them.
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
 - **Pitch Mode**: Automatically compiles your mind map into polished presentation slides with speaker notes and exports directly to **`.pptx`**.
@@ -72,7 +73,7 @@ Loomind is organized as a **pnpm Monorepo**:
 loomind/
 ├── apps/
 │   └── web/              # Vite + React 19 + Tailwind CSS v4 web app & Cloudflare Workers config
-│       ├── migrations/   # D1 SQL migrations (0001..0007: maps, sharing, AI usage, revisions, CRDT collab)
+│       ├── migrations/   # D1 SQL migrations: maps, sharing, AI, revisions, CRDT, document blocks, node reviews
 │       └── worker/       # Google / Turnstile auth, D1 drafts/revisions/collab, sharing & dual-tier AI proxy
 └── packages/
     ├── core/             # Document schema, 9 layout engines, 14 templates, 11 palettes, Loro CRDT & I/O codecs

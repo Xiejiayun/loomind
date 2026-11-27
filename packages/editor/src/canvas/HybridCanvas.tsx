@@ -177,7 +177,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
   }, [computeFitCamera, applyTransformDom, setCamera]);
 
   // Synchronous pre-paint auto-fit on initial mount or sheet/structure/spacing change (zero jump!)
-  const layoutKey = `${sheet.id}:${sheet.structure}:${sheet.spacing}`;
+  const layoutKey = `${sheet.id}:${sheet.structure}:${sheet.spacing}:${drillRootId ?? ""}`;
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -1051,10 +1051,11 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
 
   const handleStartEditTopic = useCallback(
     (id: string) => {
+      if (readOnly) return;
       setInitialEditChar(undefined);
       setEditingTopicId(id);
     },
-    [setEditingTopicId],
+    [readOnly, setEditingTopicId],
   );
 
   const handleCancelEdit = useCallback(() => {

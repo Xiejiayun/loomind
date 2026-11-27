@@ -75,6 +75,10 @@ beforeAll(async () => {
   for (const statement of aiChatMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const reviewsMigration = await readFile(new URL("../migrations/0011_node_reviews.sql", import.meta.url), "utf8");
+  for (const statement of reviewsMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -281,6 +285,77 @@ describe("collaboration API (signed sessions and local D1)", () => {
 });
 
 describe("mindmaps API (local workerd D1)", () => {
+  it("keeps node discussions separate from the map, scopes them to members and enforces the owner's reviewer setting", async () => {
+    const mapId = crypto.randomUUID();
+    const otherId = crypto.randomUUID();
+    const map = `mindmaps/${mapId}`;
+    const path = `${map}/comments`;
+    const owner = await login("review-author");
+    const guest = await login("review-viewer");
+    const editor = await login("review-editor");
+    const outsider = await login("review-outsider");
+    const as = (name: string) => ({ [OWNER_HEADER]: `review-${name}` });
+    const doc = getTemplate("reading-notes").create();
+    const first = { sheetId: "sheet-book", topicId: "book-1", body: "  Verify the quote.  " };
+    for (const id of [mapId, otherId]) expect((await request(`mindmaps/${id}`, "PUT", owner, doc, { ...as("author"), "If-Match": '"0"' })).status).toBe(200);
+    await env.DB.prepare("INSERT INTO mindmap_members(mindmap_id,subject,role) VALUES (?, 'review-viewer','viewer'), (?, 'review-editor','editor')").bind(mapId, mapId).run();
+    expect((await request(path, "GET")).status).toBe(401);
+    expect((await request(path, "GET", outsider, undefined, as("outsider"))).status).toBe(404);
+    expect((await request(path, "GET", guest, undefined, as("author"))).status).toBe(403);
+    expect(await (await request(path, "GET", guest, undefined, as("viewer"))).json()).toMatchObject({ access: "viewer", viewersCanComment: false, threads: [] });
+    expect((await request(path, "POST", guest, first, as("viewer"))).status).toBe(403);
+    expect((await request(path, "PATCH", editor, { viewersCanComment: true }, as("editor"))).status).toBe(403);
+    expect((await request(path, "PATCH", owner, { viewersCanComment: true }, { ...as("author"), Origin: "https://elsewhere.test" })).status).toBe(403);
+    expect((await request(path, "PATCH", owner, { viewersCanComment: true }, as("author"))).status).toBe(200);
+    expect((await request(path, "POST", guest, { ...first, topicId: "not-on-this-sheet" }, as("viewer"))).status).toBe(409);
+    expect((await request(path, "POST", guest, { ...first, body: " " }, as("viewer"))).status).toBe(400);
+    expect((await request(path, "POST", guest, { ...first, body: "a".repeat(2001) }, as("viewer"))).status).toBe(400);
+    const created = await request(path, "POST", guest, { ...first, author: "impersonated" }, as("viewer"));
+    expect(created.status).toBe(201);
+    const { id } = await created.json() as { id: number };
+    const thread = `${path}/${id}`;
+    expect(await (await request(thread, "GET", editor, undefined, as("editor"))).json()).toMatchObject({ thread: { sheetId: first.sheetId, topicId: first.topicId, body: "Verify the quote.", author: "review-viewer@example.test" }, replies: [] });
+    expect((await request(`mindmaps/${otherId}/comments/${id}`, "GET", owner, undefined, as("author"))).status).toBe(404);
+    expect((await request(`mindmaps/${otherId}/comments/${id}`, "POST", owner, { body: "wrong map" }, as("author"))).status).toBe(404);
+    expect((await request(`mindmaps/${otherId}/comments/${id}`, "PATCH", owner, { resolved: true }, as("author"))).status).toBe(404);
+    expect((await request(thread, "POST", editor, { body: "Checked page 3." }, as("editor"))).status).toBe(201);
+    expect((await request(thread, "PATCH", guest, { resolved: true }, as("viewer"))).status).toBe(403);
+    expect((await request(thread, "PATCH", editor, { resolved: true }, as("editor"))).status).toBe(200);
+    expect(await (await request(thread, "GET", guest, undefined, as("viewer"))).json()).toMatchObject({ thread: { resolvedBy: "review-editor@example.test", resolvedAt: expect.any(String) } });
+    expect((await request(thread, "POST", guest, { body: "late" }, as("viewer"))).status).toBe(409);
+    expect((await request(thread, "PATCH", owner, { resolved: false }, as("author"))).status).toBe(200);
+    expect((await request(path, "PATCH", owner, { viewersCanComment: false }, as("author"))).status).toBe(200);
+    expect((await request(thread, "POST", guest, { body: "no longer allowed" }, as("viewer"))).status).toBe(403);
+    expect(await (await request(thread, "GET", guest, undefined, as("viewer"))).json()).toMatchObject({ thread: { resolvedBy: null }, replies: [{ body: "Checked page 3." }] });
+    expect(await (await request(map, "GET", owner, undefined, as("author"))).json()).toEqual({ revision: 1, document: doc });
+    expect((await request(map, "DELETE", owner, undefined, as("author"))).status).toBe(200);
+    expect(await env.DB.prepare("SELECT count(*) AS total FROM mindmap_review_replies WHERE thread_id = ?").bind(id).first("total")).toBe(0);
+  });
+
+  it("pages earlier discussions and replies without losing or duplicating entries", async () => {
+    const mapId = crypto.randomUUID();
+    const session = await login("reviews-pages");
+    const headers = { [OWNER_HEADER]: "reviews-pages" };
+    const path = `mindmaps/${mapId}/comments`;
+    const doc = getTemplate("reading-notes").create();
+    expect((await request(`mindmaps/${mapId}`, "PUT", session, doc, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    const series = "WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < 43)";
+    await env.DB.prepare(`${series} INSERT INTO mindmap_review_threads(mindmap_id, sheet_id, topic_id, topic_title, body, author)
+      SELECT ?, 'sheet-book', 'book-1', 'Fact', 'thread ' || n, 'test-author' FROM seq`).bind(mapId).run();
+    const threadId = await env.DB.prepare("SELECT max(id) FROM mindmap_review_threads WHERE mindmap_id = ?").bind(mapId).first<number>("max(id)");
+    await env.DB.prepare(`${series} INSERT INTO mindmap_review_replies(thread_id, body, author) SELECT ?, 'reply ' || n, 'test-author' FROM seq`).bind(threadId).run();
+    for (const [url, key] of [[path, "threads"], [`${path}/${threadId}`, "replies"]] as const) {
+      type Page = { nextCursor: number | null } & Record<typeof key, { id: number }[]>;
+      const recent = await (await request(url, "GET", session, undefined, headers)).json() as Page;
+      const earlier = await (await request(`${url}?cursor=${recent.nextCursor}`, "GET", session, undefined, headers)).json() as Page;
+      expect(recent[key]).toHaveLength(40);
+      expect(earlier[key]).toHaveLength(3);
+      expect(earlier.nextCursor).toBeNull();
+      const ids = [...recent[key], ...earlier[key]].map((item) => item.id);
+      expect(ids).toEqual([...new Set(ids)].sort((left, right) => right - left));
+    }
+    expect((await request(`${path}?cursor=-1`, "GET", session, undefined, headers)).status).toBe(400);
+  });
   it("migrates the former one-map account record without changing its revision", async () => {
     const legacy = await login("legacy");
     const owner = { [OWNER_HEADER]: "legacy" };

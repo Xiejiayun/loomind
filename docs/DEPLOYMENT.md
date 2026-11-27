@@ -42,4 +42,6 @@ CD **没有** `push`、`workflow_run` 或 PR 自动发布触发器。审批前�
 
 当前 `0002_mindmaps.sql` 会把旧 `account_drafts` 数据复制到 `mindmaps`，`0003_remove_account_drafts.sql` 会删除旧表。若这两项在某次发布中仍待应用，审批前应特别核对旧 Worker 是否能继续使用迁移后的表结构。
 
+`0011_node_reviews.sql` 新增独立的讨论表和默认关闭的查看者评论权限，不重写已有导图。验收时用已受邀的查看者确认默认只读；由所有者开启后留言，再用未登录和未获邀请的身份确认评论不可见。回滚到上一版应用不需要删除评论表或恢复整库。
+
 参考：[D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)、[D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)、[Worker 回滚](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)、[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。

@@ -17,22 +17,23 @@ export async function workspaceRole(db: D1Database, subject: string, id: string)
   return row?.role ?? null;
 }
 
-export async function mindmapPermission(db: D1Database, subject: string, id: string) {
-  return db.prepare(`
-    SELECT m.owner, m.workspace_id AS workspaceId,
+export const mapPermissionSql = `
+    SELECT m.owner, m.workspace_id AS workspaceId, m.viewers_can_comment AS viewersCanComment,
       CASE
-        WHEN m.owner = ? THEN 'owner'
-        WHEN w.owner = ? OR wm.role = 'editor' OR mm.role = 'editor' THEN 'editor'
+        WHEN m.owner = ?1 THEN 'owner'
+        WHEN w.owner = ?1 OR wm.role = 'editor' OR mm.role = 'editor' THEN 'editor'
         WHEN wm.role = 'viewer' OR mm.role = 'viewer' THEN 'viewer'
         ELSE NULL
       END AS access
     FROM mindmaps m
     LEFT JOIN workspaces w ON w.id = m.workspace_id
-    LEFT JOIN workspace_members wm ON wm.workspace_id = m.workspace_id AND wm.subject = ?
-    LEFT JOIN mindmap_members mm ON mm.mindmap_id = m.id AND mm.subject = ?
-    WHERE m.id = ?
-  `).bind(subject, subject, subject, subject, id)
-    .first<{ owner: string; workspaceId: string | null; access: Access | null }>();
+    LEFT JOIN workspace_members wm ON wm.workspace_id = m.workspace_id AND wm.subject = ?1
+    LEFT JOIN mindmap_members mm ON mm.mindmap_id = m.id AND mm.subject = ?1
+    WHERE m.id = ?2`;
+
+export async function mindmapPermission(db: D1Database, subject: string, id: string) {
+  return db.prepare(mapPermissionSql).bind(subject, id)
+    .first<{ owner: string; workspaceId: string | null; access: Access | null; viewersCanComment: number }>();
 }
 
 export async function visibleMindmap(db: D1Database, subject: string, id: string) {
