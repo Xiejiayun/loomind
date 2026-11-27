@@ -58,7 +58,8 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Dual-View Sync**: Switch seamlessly between the infinite canvas, docked outline sidebar (`⌘O`), and fullscreen Outliner, complete with Zen focus mode, Markdown note cards, and task filtering.
 
 ### Lossless Import & Export
-- **`.xmind`**: Round-trip support for topics, notes, tasks, layouts, summaries, floating topics, and relationships.
+- **Loomind full backup (`.loomind.json`)**: In **Export**, save a complete editable copy with every sheet, image, equation and text style. To restore it (or an existing map/revision JSON download), open a blank map, select **Export → Import backup or file**, then confirm replacement. No cloud connection is required once the editor is loaded.
+- **`.xmind`**: Use for exchanging topics, notes, tasks, layouts, summaries, floating topics and relationships, not as a lossless backup.
 - **Markdown / OPML 2.0**: Bi-directional conversion preserving hierarchy, multi-root OPML documents, notes, and task states.
 - **Pure Vector SVG / Vector PDF / PNG / PPTX**: Native `<text>/<tspan>` SVG serialization with zero `foreignObject` distortion.
 
