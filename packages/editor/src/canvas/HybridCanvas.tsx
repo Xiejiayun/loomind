@@ -29,6 +29,13 @@ import {
 import { computePanToRevealNode, findNextTopicByArrow, type ArrowDirection } from "./navigation.js";
 import { NodeLayer } from "./NodeLayer.js";
 import { SvgLayer } from "./SvgLayer.js";
+import {
+  applyTouchPinchStep,
+  applyWheelGesture,
+  computeFitCameraForBounds,
+  MAX_CAMERA_SCALE,
+  MIN_CAMERA_SCALE,
+} from "./viewport-camera.js";
 
 interface DragState {
   topicId: string;
@@ -69,6 +76,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const centeredSheetRef = useRef<string | null>(null);
   const userMovedCameraRef = useRef(false);
+  const pinchingRef = useRef(false);
 
   const doc = useMindmapStore((s) => s.doc);
   const camera = useMindmapStore((s) => s.camera);
@@ -114,19 +122,12 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
   const workspaceCanvas = palette.id === "workspace" && !!appearance;
 
   const computeFitCamera = useCallback(
-    (vw: number, vh: number) => {
-      const pad = 72;
-      const scaleX = (vw - pad) / Math.max(160, layout.bounds.width);
-      const scaleY = (vh - pad) / Math.max(120, layout.bounds.height);
-      const scale = Math.max(0.35, Math.min(workspaceCanvas ? 1 : 1.6, scaleX, scaleY));
-      const cx = layout.bounds.x + layout.bounds.width / 2;
-      const cy = layout.bounds.y + layout.bounds.height / 2;
-      return {
-        x: vw / 2 - cx * scale,
-        y: vh / 2 - cy * scale,
-        scale,
-      };
-    },
+    (vw: number, vh: number) =>
+      computeFitCameraForBounds(layout.bounds, vw, vh, {
+        pad: 72,
+        minScale: 0.35,
+        maxScale: workspaceCanvas ? 1 : 1.6,
+      }),
     [layout.bounds, workspaceCanvas],
   );
 
@@ -184,10 +185,24 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
     [camera],
   );
 
-  // Zero-rerender 120fps Pan & Wheel Zoom via direct GPU DOM transform
+  // Prevent Safari native pinch-zoom from hijacking canvas gestures
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const prevent = (e: Event) => e.preventDefault();
+    el.addEventListener("gesturestart", prevent, { passive: false });
+    el.addEventListener("gesturechange", prevent, { passive: false });
+    return () => {
+      el.removeEventListener("gesturestart", prevent);
+      el.removeEventListener("gesturechange", prevent);
+    };
+  }, [containerRef]);
+
+  // Zero-rerender 120fps Pan, Trackpad Pan/Pinch, and Touch Pinch-Zoom via direct GPU DOM transform
   useGesture(
     {
-      onDrag: ({ delta: [dx, dy], event, first, last }) => {
+      onDrag: ({ delta: [dx, dy], event, first, last, touches }) => {
+        if (pinchingRef.current || touches > 1) return;
         if ((event.target as HTMLElement)?.closest("[data-topic-id]")) return;
         const me = event as PointerEvent;
         if (me.shiftKey) return;
@@ -207,23 +222,14 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
           setCamera(next);
         }
       },
-      onWheel: ({ event, delta: [, dy] }) => {
+      onWheel: ({ event }) => {
         event.preventDefault();
         userMovedCameraRef.current = true;
         setInteractingDom(true);
-        const factor = Math.exp(-dy * 0.0014);
-        const prev = cameraRef.current;
-        const nextScale = Math.max(0.15, Math.min(3, prev.scale * factor));
         const rect = containerRef.current?.getBoundingClientRect();
         const mx = event.clientX - (rect?.left ?? 0);
         const my = event.clientY - (rect?.top ?? 0);
-        const wx = (mx - prev.x) / prev.scale;
-        const wy = (my - prev.y) / prev.scale;
-        const next = {
-          scale: nextScale,
-          x: mx - wx * nextScale,
-          y: my - wy * nextScale,
-        };
+        const next = applyWheelGesture(cameraRef.current, event, { x: mx, y: my });
         cameraRef.current = next;
         applyTransformDom(next);
 
@@ -234,11 +240,42 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
           setCamera(cameraRef.current);
         }, 120);
       },
+      onPinch: ({ offset: [nextScale], origin: [ox, oy], first, last, memo }) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        const ax = ox - (rect?.left ?? 0);
+        const ay = oy - (rect?.top ?? 0);
+        if (first) {
+          pinchingRef.current = true;
+          userMovedCameraRef.current = true;
+          setInteractingDom(true);
+          return { x: ax, y: ay };
+        }
+        const prevOrigin = (memo as { x: number; y: number } | undefined) ?? { x: ax, y: ay };
+        const next = applyTouchPinchStep(
+          cameraRef.current,
+          nextScale,
+          { x: ax, y: ay },
+          { dx: ax - prevOrigin.x, dy: ay - prevOrigin.y },
+        );
+        cameraRef.current = next;
+        applyTransformDom(next);
+        if (last) {
+          pinchingRef.current = false;
+          setInteractingDom(false);
+          setCamera(next);
+        }
+        return { x: ax, y: ay };
+      },
     },
     {
       target: containerRef,
       eventOptions: { passive: false },
       drag: { filterTaps: true },
+      pinch: {
+        scaleBounds: { min: MIN_CAMERA_SCALE, max: MAX_CAMERA_SCALE },
+        from: () => [cameraRef.current.scale, 0],
+        pointer: { touch: true },
+      },
     },
   );
 
