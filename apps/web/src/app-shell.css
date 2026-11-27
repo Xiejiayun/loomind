@@ -1198,7 +1198,7 @@
   transition: background .12s var(--lm-ease), color .12s var(--lm-ease);
 }
 .lm-create-tabs button:hover { color: var(--lm-text-primary); }
-.lm-create-tabs button[aria-selected="true"] {
+.lm-create-tabs button[aria-selected="true"], .lm-create-tabs button[aria-pressed="true"] {
   background: var(--lm-bg-elevated);
   color: var(--lm-text-primary);
 }
