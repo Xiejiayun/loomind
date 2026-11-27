@@ -15,6 +15,8 @@ interface NodeLayerProps {
   camera: CameraState;
   viewportSize: { width: number; height: number };
   selectedIds: Set<string>;
+  searchMatchedIds?: ReadonlySet<string>;
+  activeSearchMatchId?: string | null;
   editingTopicId: string | null;
   initialEditChar?: string;
   onSelectTopic: (topicId: string, e: React.MouseEvent) => void;
@@ -37,6 +39,8 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
     camera,
     viewportSize,
     selectedIds,
+    searchMatchedIds,
+    activeSearchMatchId,
     editingTopicId,
     initialEditChar,
     onSelectTopic,
@@ -91,6 +95,9 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
                 topic={topic}
                 layoutNode={layoutNode}
                 selected={isSelected}
+                searchHighlight={
+                  activeSearchMatchId === id ? "active" : searchMatchedIds?.has(id) ? "match" : undefined
+                }
                 editing={isEditing}
                 initialEditChar={isEditing ? initialEditChar : undefined}
                 lodLow={lodLow}

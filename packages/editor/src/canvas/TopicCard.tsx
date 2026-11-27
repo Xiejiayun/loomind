@@ -83,6 +83,7 @@ export interface TopicCardProps {
   topic: MindmapTopic;
   layoutNode: LayoutNode;
   selected: boolean;
+  searchHighlight?: "match" | "active";
   editing: boolean;
   initialEditChar?: string;
   lodLow: boolean;
@@ -104,6 +105,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     topic,
     layoutNode,
     selected,
+    searchHighlight,
     editing,
     initialEditChar,
     lodLow,
@@ -280,11 +282,15 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
         {/* Main Topic Card */}
         <div
           className={`relative box-border flex flex-col justify-center ${
-            selected
-              ? layoutNode.underlineMode
-                ? "rounded-md ring-2 ring-blue-500/80 ring-offset-0"
-                : "ring-2 ring-blue-500 ring-offset-2"
-              : "hover:ring-1 hover:ring-blue-300/70"
+            searchHighlight === "active"
+              ? "rounded-md ring-2 ring-amber-400 ring-offset-2"
+              : searchHighlight === "match"
+                ? "rounded-md ring-2 ring-amber-400/70"
+                : selected
+                  ? layoutNode.underlineMode
+                    ? "rounded-md ring-2 ring-blue-500/80 ring-offset-0"
+                    : "ring-2 ring-blue-500 ring-offset-2"
+                  : "hover:ring-1 hover:ring-blue-300/70"
           }`}
           style={{
             ...cardStyle,
