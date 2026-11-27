@@ -8,7 +8,6 @@ import {
   Crosshair,
   ListChecks,
   Loader2,
-  Plus,
   RotateCcw,
   Sparkles,
   Square,
@@ -187,16 +186,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const persistSnapshot = (nextMessages: AiChatMessage[]) => {
     if (!chatPersistence || readOnly) return;
     void chatPersistence.saveMessages(nextMessages);
-  };
-
-  const handleClearChat = () => {
-    if (readOnly || busy) return;
-    if (messages.length > 0 && typeof window !== "undefined" && !window.confirm(t.aiChat.clearConfirm)) {
-      return;
-    }
-    setMessages([]);
-    setExpandedRuns({});
-    void chatPersistence?.clearMessages();
   };
 
   const executePrompt = async (
@@ -577,18 +566,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             <span className="font-medium">{t.aiChat.title}</span>
           </div>
           <div className="flex items-center gap-1">
-            {!readOnly && (
-              <button
-                type="button"
-                title={t.aiChat.newChat}
-                onClick={handleClearChat}
-                className={`inline-flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[11px] transition ${
-                  isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
-                }`}
-              >
-                <Plus className="h-3 w-3" /> {t.aiChat.newChat}
-              </button>
-            )}
             <button
               type="button"
               aria-label={t.aiChat.closeAria}
@@ -626,18 +603,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             ) : null}
           </div>
           <div className="flex items-center gap-1.5">
-            {embedded && !readOnly && messages.length > 0 && (
-              <button
-                type="button"
-                title={t.aiChat.newChat}
-                onClick={handleClearChat}
-                className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] transition ${
-                  isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-200/70"
-                }`}
-              >
-                <Plus className="h-3 w-3" /> {t.aiChat.newChat}
-              </button>
-            )}
             {embedded && (
               <button
                 type="button"
