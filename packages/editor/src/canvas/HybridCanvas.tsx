@@ -65,11 +65,22 @@ interface HybridCanvasProps {
   viewportRef?: React.RefObject<HTMLDivElement | null>;
   layout: MindmapLayoutResult;
   readOnly?: boolean;
+  searchMatchedIds?: ReadonlySet<string>;
+  activeSearchMatchId?: string | null;
   onOpenContextMenu?: (topicId: string, pos: { x: number; y: number }) => void;
   onOpenAi?: () => void;
 }
 
-export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef, appearance, readOnly = false, onOpenContextMenu, onOpenAi }) => {
+export const HybridCanvas: React.FC<HybridCanvasProps> = ({
+  layout,
+  viewportRef,
+  appearance,
+  readOnly = false,
+  searchMatchedIds,
+  activeSearchMatchId,
+  onOpenContextMenu,
+  onOpenAi,
+}) => {
   const localRef = useRef<HTMLDivElement>(null);
   const containerRef = viewportRef ?? localRef;
   const worldRef = useRef<HTMLDivElement>(null);
@@ -1022,6 +1033,8 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
           camera={camera}
           viewportSize={viewportSize}
           selectedIds={selectedSet}
+          searchMatchedIds={searchMatchedIds}
+          activeSearchMatchId={activeSearchMatchId}
           editingTopicId={editingTopicId}
           initialEditChar={initialEditChar}
           onSelectTopic={handleSelectTopic}

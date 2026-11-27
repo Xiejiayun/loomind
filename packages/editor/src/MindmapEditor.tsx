@@ -20,6 +20,8 @@ import { CanvasDock } from "./chrome/CanvasDock.js";
 import { CommandK } from "./chrome/CommandK.js";
 import { ContextMenu } from "./chrome/ContextMenu.js";
 import { ExportModal } from "./chrome/ExportModal.js";
+import { findTopicsInSheet } from "./chrome/find-replace.js";
+import { FindReplaceBar } from "./chrome/FindReplaceBar.js";
 import { FormatPanel } from "./chrome/FormatPanel.js";
 import { InlineAiBar } from "./chrome/InlineAiBar.js";
 import { SheetBar } from "./chrome/SheetBar.js";
@@ -105,9 +107,23 @@ const MindmapEditorInner: React.FC<
 
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [showReplace, setShowReplace] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [findCaseSensitive, setFindCaseSensitive] = useState(false);
+  const [findActiveIndex, setFindActiveIndex] = useState(0);
   const [contextMenu, setContextMenu] = useState<{ topicId: string; x: number; y: number } | null>(
     null,
   );
+
+  const searchMatches = useMemo(
+    () => (findOpen && findQuery ? findTopicsInSheet(activeSheet, findQuery, { caseSensitive: findCaseSensitive }) : []),
+    [findOpen, findQuery, findCaseSensitive, activeSheet],
+  );
+  const searchMatchedIds = useMemo(() => new Set(searchMatches.map((m) => m.topicId)), [searchMatches]);
+  const activeSearchMatchId =
+    searchMatches.length > 0 ? searchMatches[Math.min(findActiveIndex, searchMatches.length - 1)].topicId : null;
 
   const engineRef = useRef<LayoutEngine | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -168,14 +184,22 @@ const MindmapEditorInner: React.FC<
     [layout, camera.scale, setCamera],
   );
 
-  // Global editor shortcuts: Esc (zen), Cmd/Ctrl+J (AI), Cmd/Ctrl+O (Outline), Cmd/Ctrl+I (Format)
+  // Global editor shortcuts: Esc (zen), Cmd/Ctrl+F/H (Find/Replace), Cmd/Ctrl+J (AI), Cmd/Ctrl+O (Outline), Cmd/Ctrl+I (Format)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && zenMode) {
         setZenMode(false);
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j" && !readOnly) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setFindOpen(true);
+        setShowReplace(false);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "h" && !e.shiftKey && !e.altKey && !readOnly) {
+        e.preventDefault();
+        setFindOpen(true);
+        setShowReplace(true);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j" && !readOnly) {
         e.preventDefault();
         if (e.shiftKey) {
           setInlineAiOpen((prev) => !prev);
@@ -260,8 +284,28 @@ const MindmapEditorInner: React.FC<
                 appearance={chromeTheme}
                 layout={layout}
                 readOnly={readOnly}
+                searchMatchedIds={searchMatchedIds}
+                activeSearchMatchId={activeSearchMatchId}
                 onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
                 onOpenAi={() => openAiWithPrompt()}
+              />
+              <FindReplaceBar
+                open={findOpen}
+                showReplace={showReplace}
+                isDark={isDark}
+                readOnly={readOnly}
+                query={findQuery}
+                replacement={replaceText}
+                caseSensitive={findCaseSensitive}
+                matches={searchMatches}
+                activeIndex={findActiveIndex}
+                onQueryChange={setFindQuery}
+                onReplacementChange={setReplaceText}
+                onToggleCaseSensitive={() => setFindCaseSensitive((v) => !v)}
+                onToggleShowReplace={() => setShowReplace((v) => !v)}
+                onActiveIndexChange={setFindActiveIndex}
+                onFocusTopic={focusTopicOnCanvas}
+                onClose={() => setFindOpen(false)}
               />
               {!readOnly && (
                 <>
@@ -302,6 +346,10 @@ const MindmapEditorInner: React.FC<
         onOpenChange={setCmdkOpen}
         layout={layout}
         viewportRef={viewportRef}
+        onOpenFind={() => {
+          setFindOpen(true);
+          setShowReplace(!readOnly);
+        }}
         onOpenAi={readOnly ? undefined : (p) => openAiWithPrompt(p)}
       />
       <PitchOverlay />

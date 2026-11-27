@@ -19,6 +19,7 @@ interface CommandKProps {
   onOpenChange: (open: boolean) => void;
   layout: MindmapLayoutResult;
   viewportRef?: React.RefObject<HTMLDivElement | null>;
+  onOpenFind?: () => void;
   onOpenAi?: (initialPrompt?: string) => void;
 }
 
@@ -40,6 +41,7 @@ export const CommandK: React.FC<CommandKProps> = ({
   onOpenChange,
   layout,
   viewportRef,
+  onOpenFind,
   onOpenAi,
 }) => {
   const doc = useMindmapStore((s) => s.doc);
@@ -189,6 +191,17 @@ export const CommandK: React.FC<CommandKProps> = ({
             </Command.Group>
 
             <Command.Group heading={t.cmdk.groupActions} className={headingCls}>
+              {onOpenFind && (
+                <Command.Item
+                  onSelect={() => {
+                    onOpenFind();
+                    onOpenChange(false);
+                  }}
+                  className={itemCls}
+                >
+                  <Search className="h-3.5 w-3.5" /> {t.cmdk.findReplace}
+                </Command.Item>
+              )}
               {onOpenAi && (
                 <Command.Item
                   onSelect={() => {
