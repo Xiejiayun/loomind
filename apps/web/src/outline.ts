@@ -46,24 +46,20 @@ export function parseOutline(raw: string): OutlineNode {
 
   const listOnly = lines[0].bullet;
   const root: OutlineNode = { title: listOnly ? err.outlineDefaultRoot : lines[0].title, children: [] };
-  const rootHeading = lines[0].heading || 1;
-  const stack: Array<{ level: number; node: OutlineNode }> = [{ level: 0, node: root }];
-  let activeHeadingLevel = 0;
+  const headings: Array<{ rank: number; node: OutlineNode }> = [];
+  const items: Array<{ indent: number; node: OutlineNode }> = [];
   for (const line of lines.slice(listOnly ? 0 : 1)) {
-    let level: number;
-    if (line.heading) {
-      level = Math.max(1, line.heading - rootHeading);
-      activeHeadingLevel = level;
-    } else if (line.bullet) {
-      level = activeHeadingLevel + 1 + Math.floor(line.indent / 2);
-    } else {
-      level = activeHeadingLevel + Math.max(1, Math.floor(line.indent / 2));
-    }
-    level = Math.min(level, stack[stack.length - 1].level + 1);
-    while (stack[stack.length - 1].level >= level) stack.pop();
     const node: OutlineNode = { title: line.title, children: [] };
-    stack[stack.length - 1].node.children.push(node);
-    stack.push({ level, node });
+    if (line.heading) {
+      items.length = 0;
+      while (headings.length && headings[headings.length - 1].rank >= line.heading) headings.pop();
+      (headings.at(-1)?.node ?? root).children.push(node);
+      headings.push({ rank: line.heading, node });
+    } else {
+      while (items.length && items[items.length - 1].indent >= line.indent) items.pop();
+      (items.at(-1)?.node ?? headings.at(-1)?.node ?? root).children.push(node);
+      items.push({ indent: line.indent, node });
+    }
   }
   return validateOutline(root);
 }
