@@ -27,6 +27,7 @@ import {
   setInternalTopicClipboard,
 } from "./clipboard.js";
 import { computePanToRevealNode, findNextTopicByArrow, type ArrowDirection } from "./navigation.js";
+import { resolveDropTarget, type DropIndicatorSide, type DropMode } from "./drop-target.js";
 import { NodeLayer } from "./NodeLayer.js";
 import { SvgLayer } from "./SvgLayer.js";
 import {
@@ -48,7 +49,8 @@ interface DragState {
   altKey: boolean;
   active: boolean;
   dropTargetId: string | null;
-  dropMode: "child" | "before" | "after" | "floating";
+  dropMode: DropMode;
+  indicatorSide: DropIndicatorSide;
 }
 
 interface MarqueeState {
@@ -284,7 +286,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
   // Node drag-to-reparent / detach / Alt-drag manualOffset
   const handleStartDragTopic = useCallback(
     (topicId: string, e: React.PointerEvent) => {
-      if (topicId === sheet.rootTopic.id) return;
+      if (readOnly || topicId === sheet.rootTopic.id) return;
       const startX = e.clientX;
       const startY = e.clientY;
       const altKey = e.altKey;
@@ -301,6 +303,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
         active: false,
         dropTargetId: null,
         dropMode: "floating",
+        indicatorSide: "around",
       };
 
       const onMove = (ev: PointerEvent) => {
@@ -329,27 +332,10 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
         }
 
         const world = screenToWorld(ev.clientX, ev.clientY);
-        const hits = layout.spatialIndex
-          .search({ minX: world.x - 10, minY: world.y - 10, maxX: world.x + 10, maxY: world.y + 10 })
-          .filter((h) => h.topicId !== topicId);
-
-        if (hits.length > 0) {
-          const targetId = hits[0].topicId;
-          const targetNode = layout.nodes.get(targetId)!;
-          const relY = (world.y - targetNode.contentBox.y) / Math.max(1, targetNode.contentBox.height);
-          state.dropTargetId = targetId;
-          state.dropMode =
-            targetId === sheet.rootTopic.id
-              ? "child"
-              : relY < 0.25
-                ? "before"
-                : relY > 0.75
-                  ? "after"
-                  : "child";
-        } else {
-          state.dropTargetId = null;
-          state.dropMode = "floating";
-        }
+        const resolved = resolveDropTarget(sheet, layout, topicId, world);
+        state.dropTargetId = resolved.dropTargetId;
+        state.dropMode = resolved.dropMode;
+        state.indicatorSide = resolved.indicatorSide;
         setDragState({ ...state });
       };
 
@@ -397,12 +383,13 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [sheet, topicMap, camera.scale, dispatch, layout, screenToWorld],
+    [readOnly, sheet, topicMap, camera.scale, dispatch, layout, screenToWorld, setInteractingDom],
   );
 
   // Right-edge custom width drag
   const handleStartResizeWidth = useCallback(
     (topicId: string, e: React.PointerEvent) => {
+      if (readOnly) return;
       const node = layout.nodes.get(topicId);
       if (!node) return;
       const startX = e.clientX;
@@ -1057,24 +1044,36 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
           <div
             className="pointer-events-none absolute rounded-lg border-2 border-dashed border-blue-500 bg-blue-500/10"
             style={
-              dragState.dropMode === "child"
+              dragState.indicatorSide === "around"
                 ? {
                     left: dropTargetBox.x - 4,
                     top: dropTargetBox.y - 4,
                     width: dropTargetBox.width + 8,
                     height: dropTargetBox.height + 8,
                   }
-                : {
-                    left: dropTargetBox.x,
-                    top:
-                      dragState.dropMode === "before"
-                        ? dropTargetBox.y - 6
-                        : dropTargetBox.y + dropTargetBox.height + 2,
-                    width: dropTargetBox.width,
-                    height: 4,
-                    backgroundColor: "#3B82F6",
-                    border: "none",
-                  }
+                : dragState.indicatorSide === "left" || dragState.indicatorSide === "right"
+                  ? {
+                      left:
+                        dragState.indicatorSide === "left"
+                          ? dropTargetBox.x - 6
+                          : dropTargetBox.x + dropTargetBox.width + 2,
+                      top: dropTargetBox.y,
+                      width: 4,
+                      height: dropTargetBox.height,
+                      backgroundColor: "#3B82F6",
+                      border: "none",
+                    }
+                  : {
+                      left: dropTargetBox.x,
+                      top:
+                        dragState.indicatorSide === "top"
+                          ? dropTargetBox.y - 6
+                          : dropTargetBox.y + dropTargetBox.height + 2,
+                      width: dropTargetBox.width,
+                      height: 4,
+                      backgroundColor: "#3B82F6",
+                      border: "none",
+                    }
             }
           />
         )}
