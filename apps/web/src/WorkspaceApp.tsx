@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
-  ChevronDown,
+  ChevronsUpDown,
   Command,
   FolderOpen,
   GitBranch,
   Languages,
+  Layers,
   LogOut,
   Menu,
   PanelLeft,
@@ -30,7 +31,7 @@ import { documentFromOutline, documentFromTopic, outlineNodeCount, parseOutline 
 import { OutlineTree } from "./OutlineTree.js";
 import { deleteLocal, listLocalMaps, loadLocal, saveLocal } from "./persistence.js";
 import { ShareDialog, type ShareTarget } from "./ShareDialog.js";
-import { LanguageToggle, ThemeToggle, type UiTheme } from "./ui.js";
+import { Brand, LanguageToggle, ThemeToggle, type UiTheme } from "./ui.js";
 
 const EditorWorkspace = lazy(() => import("./EditorWorkspace.js").then(({ EditorWorkspace }) => ({ default: EditorWorkspace })));
 
@@ -128,6 +129,26 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   useEffect(() => {
     try { localStorage.setItem(`loomind:space:${owner}`, activeWorkspaceId ?? ""); } catch { /* Optional preference. */ }
   }, [owner, activeWorkspaceId]);
+
+  // Close workspace dropdown when clicking outside or pressing Escape
+  useEffect(() => {
+    const closeOnOutside = (event: MouseEvent) => {
+      if (picker.current?.open && event.target instanceof Node && !picker.current.contains(event.target)) {
+        picker.current.open = false;
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && picker.current?.open) {
+        picker.current.open = false;
+      }
+    };
+    document.addEventListener("mousedown", closeOnOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
 
   // Global shortcuts: [ toggles sidebar, Cmd/Ctrl+K opens Workspace CommandK when outside editor
   useEffect(() => {
@@ -227,11 +248,23 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   return <div className={`lm-app-shell ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
     <aside className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label={t.workspace.sidebarAria}>
       <div className="lm-sidebar-head">
+        <Brand to="/app" compact onClick={() => setMobileOpen(false)}/>
+
+        <div className="lm-sidebar-head-actions">
+          <button type="button" className="lm-icon-button-sm" title={t.workspace.searchTitle} aria-label={t.workspace.searchAria} onClick={() => setCmdkOpen(true)}><Search size={14}/></button>
+          <AppLink href="/app" className="lm-icon-button-sm" title={t.workspace.newMapTitle} aria-label={t.workspace.newMapAria} onClick={() => setMobileOpen(false)}><Plus size={15}/></AppLink>
+          <button type="button" className="lm-mobile-close" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}><X size={15}/></button>
+        </div>
+      </div>
+
+      <div className="lm-sidebar-space">
         <details ref={picker} className="lm-space-picker">
           <summary aria-label={t.workspace.selectSpaceAria}>
-            <span className="lm-space-avatar">{(activeSpace?.name ?? "L").slice(0, 1).toUpperCase()}</span>
+            <span className="lm-space-avatar" aria-hidden="true">
+              {activeSpace ? activeSpace.name.slice(0, 1).toUpperCase() : <Layers size={12}/>}
+            </span>
             <strong>{activeSpace?.name ?? t.common.myMaps}</strong>
-            <ChevronDown size={13}/>
+            <ChevronsUpDown size={13}/>
           </summary>
           <div className="lm-space-menu">
             <span className="lm-eyebrow">{t.workspace.spacesEyebrow}</span>
@@ -249,12 +282,6 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             </div>
           </div>
         </details>
-
-        <div className="lm-sidebar-head-actions">
-          <button type="button" className="lm-icon-button-sm" title={t.workspace.searchTitle} aria-label={t.workspace.searchAria} onClick={() => setCmdkOpen(true)}><Search size={14}/></button>
-          <AppLink href="/app" className="lm-icon-button-sm" title={t.workspace.newMapTitle} aria-label={t.workspace.newMapAria} onClick={() => setMobileOpen(false)}><Plus size={15}/></AppLink>
-          <button type="button" className="lm-mobile-close" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}><X size={15}/></button>
-        </div>
       </div>
 
       <nav className="lm-sidebar-nav" aria-label={t.workspace.mainNavAria}>
@@ -295,11 +322,13 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             <small>{session.user!.email}</small>
           </div>
         </div>
-        <LanguageToggle compact/>
-        <ThemeToggle theme={theme} toggle={toggleTheme}/>
-        <button type="button" className="lm-icon-button-sm" title={t.workspace.logoutTitle} aria-label={t.workspace.logoutTitle} onClick={() => void logout()}>
-          <LogOut size={14}/>
-        </button>
+        <div className="lm-sidebar-bottom-actions">
+          <LanguageToggle compact/>
+          <ThemeToggle theme={theme} toggle={toggleTheme} compact/>
+          <button type="button" className="lm-icon-button-sm" title={t.workspace.logoutTitle} aria-label={t.workspace.logoutTitle} onClick={() => void logout()}>
+            <LogOut size={14}/>
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -360,9 +389,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             )}
 
             {isLibrary ? (
-              <LibraryView maps={maps} workspaces={workspaces} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+              <LibraryView key="library" maps={maps} workspaces={workspaces} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
             ) : isShared ? (
-              <LibraryView maps={maps} workspaces={workspaces} initialFilter="shared" onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+              <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
             ) : isCreate ? (
               <CreateView
                 mode={createMode}
@@ -375,6 +404,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             ) : route.pathname === "/app" ? (
               <HomeComposerView
                 activeWorkspaceId={activeWorkspaceId}
+                activeSpaceName={activeSpace?.name ?? t.common.myMaps}
                 workspaces={workspaces}
                 recentMaps={recent.slice(0, 5)}
                 onCreate={createMap}
@@ -408,8 +438,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   </div>;
 }
 
-function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate }: {
+function HomeComposerView({ activeWorkspaceId, activeSpaceName, workspaces, recentMaps, onCreate }: {
   activeWorkspaceId: string | null;
+  activeSpaceName: string;
   workspaces: WorkspaceSummary[];
   recentMaps: MindmapSummary[];
   onCreate: (document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) => Promise<void>;
@@ -461,96 +492,113 @@ function HomeComposerView({ activeWorkspaceId, workspaces, recentMaps, onCreate 
     }
   }
 
-  return <div className="lm-content lm-home">
-    <div className="lm-home-heading">
-      <h1>{t.home.heading}</h1>
-      <p>{t.home.subtitle}</p>
+  return <div className="lm-home-stage">
+    <div className="lm-home-atmosphere" aria-hidden="true">
+      <div className="lm-ambient-glow" />
+      <div className="lm-home-dotgrid" />
     </div>
+    <div className="lm-content lm-home">
+      <div className="lm-home-heading">
+        <div className="lm-hero-pill">
+          <span className="lm-live-dot"/>
+          {t.home.pillPrefix} · {activeSpaceName}
+        </div>
+        <h1>
+          {t.home.headingPrefix}
+          <span>{t.home.headingAccent}</span>
+        </h1>
+        <p>{t.home.subtitle}</p>
+      </div>
 
-    <form className="lm-composer" onSubmit={(e) => void handleSubmit(e)}>
-      <label className="lm-sr-only" htmlFor="lm-home-prompt">{t.home.promptLabel}</label>
-      <textarea
-        id="lm-home-prompt"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-            e.preventDefault();
-            void handleSubmit();
-          }
-        }}
-        placeholder={t.home.promptPlaceholder}
-      />
+      <form className="lm-composer" onSubmit={(e) => void handleSubmit(e)}>
+        <label className="lm-sr-only" htmlFor="lm-home-prompt">{t.home.promptLabel}</label>
+        <textarea
+          id="lm-home-prompt"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              void handleSubmit();
+            }
+          }}
+          placeholder={t.home.promptPlaceholder}
+        />
 
-      {parsedOutline && (
-        <>
-          <div className="lm-composer-outline-pill">
-            <span>{t.home.outlineDetected(outlineNodeCount(parsedOutline), parsedOutline.children.length)}</span>
-            <button type="button" className="lm-text-button" style={{ marginTop: 0 }} onClick={() => setShowPreview((v) => !v)}>
-              {showPreview ? t.home.hidePreview : t.home.showPreview}
+        {parsedOutline && (
+          <>
+            <div className="lm-composer-outline-pill">
+              <span>{t.home.outlineDetected(outlineNodeCount(parsedOutline), parsedOutline.children.length)}</span>
+              <button type="button" className="lm-text-button" style={{ marginTop: 0 }} onClick={() => setShowPreview((v) => !v)}>
+                {showPreview ? t.home.hidePreview : t.home.showPreview}
+              </button>
+            </div>
+            {showPreview && (
+              <div className="lm-composer-outline-preview">
+                <OutlineTree outline={parsedOutline}/>
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="lm-composer-bar">
+          <div className="lm-composer-controls">
+            <label className="lm-chip-select" title={t.home.templateTitle}>
+              <GitBranch size={12}/>
+              <select aria-label={t.home.templateAria} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                {TEMPLATE_IDS.map((id) => <option key={id} value={id}>{t.workspace.templates[id] ?? id}</option>)}
+              </select>
+            </label>
+            <label className="lm-chip-select" title={t.home.spaceTitle}>
+              <FolderOpen size={12}/>
+              <select aria-label={t.home.spaceAria} value={workspaceId ?? ""} onChange={(e) => setWorkspaceId(e.target.value || null)}>
+                <option value="">{t.common.myMaps}</option>
+                {writable.map((space) => <option key={space.id} value={space.id}>{space.name}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="lm-composer-submit-group">
+            <span className="lm-composer-shortcut" aria-hidden="true">{t.home.shortcutHint}</span>
+            <button type="submit" className="lm-primary-button lm-composer-submit" disabled={busy || !text.trim()}>
+              <Sparkles size={13}/>
+              {busy ? t.home.creating : parsedOutline ? t.home.createFromOutline : t.home.createWithAi}
             </button>
           </div>
-          {showPreview && (
-            <div className="lm-composer-outline-preview">
-              <OutlineTree outline={parsedOutline}/>
-            </div>
-          )}
-        </>
-      )}
-
-      <div className="lm-composer-bar">
-        <div className="lm-composer-controls">
-          <label className="lm-chip-select" title={t.home.templateTitle}>
-            <GitBranch size={12}/>
-            <select aria-label={t.home.templateAria} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-              {TEMPLATE_IDS.map((id) => <option key={id} value={id}>{t.workspace.templates[id] ?? id}</option>)}
-            </select>
-          </label>
-          <label className="lm-chip-select" title={t.home.spaceTitle}>
-            <FolderOpen size={12}/>
-            <select aria-label={t.home.spaceAria} value={workspaceId ?? ""} onChange={(e) => setWorkspaceId(e.target.value || null)}>
-              <option value="">{t.common.myMaps}</option>
-              {writable.map((space) => <option key={space.id} value={space.id}>{space.name}</option>)}
-            </select>
-          </label>
         </div>
+      </form>
 
-        <button type="submit" className="lm-primary-button" disabled={busy || !text.trim()}>
-          <Sparkles size={13}/>
-          {busy ? t.home.creating : parsedOutline ? t.home.createFromOutline : t.home.createWithAi}
-        </button>
+      {error && <p className="lm-form-error" role="alert">{error}</p>}
+
+      <div className="lm-suggestion-row">
+        {t.home.suggestions.map((idea) => (
+          <button key={idea} type="button" onClick={() => setText(idea)}>
+            {idea}
+          </button>
+        ))}
       </div>
-    </form>
 
-    {error && <p className="lm-form-error" role="alert">{error}</p>}
-
-    <div className="lm-suggestion-row">
-      {t.home.suggestions.map((idea) => (
-        <button key={idea} type="button" onClick={() => setText(idea)}>
-          <Sparkles size={11}/> {idea}
-        </button>
-      ))}
-    </div>
-
-    {recentMaps.length > 0 && (
-      <section className="lm-home-recent" aria-label={t.home.recentAria}>
-        <div className="lm-home-recent-head">
-          <h2>{t.home.recentHeading}</h2>
-          <AppLink href="/app/library">{t.home.viewAll} <ArrowRight size={12}/></AppLink>
-        </div>
-        <div className="lm-library-list" role="list">
-          {recentMaps.map((map) => (
-            <div key={map.id} className="lm-library-row" role="listitem">
-              <span className="lm-map-icon" aria-hidden="true"><GitBranch size={14}/></span>
-              <AppLink href={`/app/mindmaps/${map.id}`} className="lm-library-title">{map.title}</AppLink>
-              <div className="lm-library-meta">
-                <span>{formatRelativeTime(map.updatedAt, locale)}</span>
+      {recentMaps.length > 0 && (
+        <section className="lm-home-recent" aria-label={t.home.recentAria}>
+          <div className="lm-home-recent-head">
+            <span className="lm-eyebrow">{t.home.recentHeading}</span>
+            <AppLink href="/app/library">{t.home.viewAll} <ArrowRight size={12}/></AppLink>
+          </div>
+          <div className="lm-library-list lm-home-recent-list" role="list">
+            {recentMaps.map((map) => (
+              <div key={map.id} className="lm-library-row" role="listitem">
+                <span className="lm-map-icon" aria-hidden="true"><GitBranch size={14}/></span>
+                <AppLink href={`/app/mindmaps/${map.id}`} className="lm-library-title">{map.title}</AppLink>
+                <div className="lm-library-meta">
+                  <span>{formatRelativeTime(map.updatedAt, locale)}</span>
+                  <ArrowRight size={13} className="lm-row-arrow" aria-hidden="true"/>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    )}
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
   </div>;
 }
 

@@ -186,8 +186,11 @@ const zh = {
     } as Record<string, string>,
   },
   home: {
-    heading: "今天想梳理什么？",
-    subtitle: "输入一个想法让 AI 流式生成导图，或直接粘贴 Markdown / 缩进大纲。",
+    pillPrefix: "Loom for Mind",
+    heading: "今天想将什么思绪，织成脉络？",
+    headingPrefix: "今天想将什么思绪，",
+    headingAccent: "织成脉络？",
+    subtitle: "输入一个想法以对话流式织图，或直接粘贴 Markdown / 缩进大纲。",
     promptLabel: "想法或大纲",
     promptPlaceholder: "例如：帮我梳理一个新产品从用户调研到发布的计划…（或直接粘贴 Markdown 大纲）",
     outlineDetected: (nodes: number, branches: number) =>
@@ -200,7 +203,8 @@ const zh = {
     spaceAria: "保存空间",
     creating: "正在创建…",
     createFromOutline: "从大纲创建",
-    createWithAi: "AI 生成导图",
+    createWithAi: "开始织图",
+    shortcutHint: "⌘↵ 发送",
     createError: "创建导图失败，请重试。",
     suggestions: ["设计一套安静的软件", "个人知识编织系统", "系统设计的权衡心智模型", "从深度阅读到长文写作"],
     recentAria: "最近导图",
@@ -231,6 +235,8 @@ const zh = {
     failed: "无法创建工作区。",
   },
   library: {
+    eyebrow: "WORKSPACE / LIBRARY",
+    sharedEyebrow: "WORKSPACE / SHARED",
     localOnly: "仅本机",
     recent: "最近",
     justNow: "刚刚",
@@ -589,8 +595,11 @@ const en: typeof zh = {
     },
   },
   home: {
-    heading: "What would you like to map today?",
-    subtitle: "Enter an idea to stream a mind map with AI, or paste Markdown / an indented outline.",
+    pillPrefix: "Loom for Mind",
+    heading: "What would you like to weave today?",
+    headingPrefix: "What would you like to ",
+    headingAccent: "weave today?",
+    subtitle: "Think aloud to stream a mind map in dialogue, or paste Markdown / an indented outline.",
     promptLabel: "Idea or outline",
     promptPlaceholder: "e.g. Map out a new product launch from user research to release… (or paste a Markdown outline)",
     outlineDetected: (nodes: number, branches: number) =>
@@ -603,7 +612,8 @@ const en: typeof zh = {
     spaceAria: "Save to space",
     creating: "Creating…",
     createFromOutline: "Create from Outline",
-    createWithAi: "Generate with AI",
+    createWithAi: "Start weaving",
+    shortcutHint: "⌘↵",
     createError: "Failed to create mind map. Please try again.",
     suggestions: [
       "Designing Calm Software",
@@ -639,6 +649,8 @@ const en: typeof zh = {
     failed: "Unable to create workspace.",
   },
   library: {
+    eyebrow: "WORKSPACE / LIBRARY",
+    sharedEyebrow: "WORKSPACE / SHARED",
     localOnly: "Local only",
     recent: "Recent",
     justNow: "Just now",

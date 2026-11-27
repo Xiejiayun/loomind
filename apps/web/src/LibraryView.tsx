@@ -22,10 +22,11 @@ export function formatRelativeTime(value: string, locale: Locale = getLocale()) 
   return new Intl.DateTimeFormat(getIntlLocale(locale), { month: "short", day: "numeric" }).format(date);
 }
 
-export function LibraryView({ maps, workspaces, initialFilter = "all", onShare, onMove, onDelete }: {
+export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedView = false, onShare, onMove, onDelete }: {
   maps: MindmapSummary[];
   workspaces: WorkspaceSummary[];
   initialFilter?: string;
+  isSharedView?: boolean;
   onShare: (map: MindmapSummary) => void;
   onMove: (map: MindmapSummary, workspaceId: string) => Promise<void>;
   onDelete: (map: MindmapSummary) => Promise<void>;
@@ -68,7 +69,10 @@ export function LibraryView({ maps, workspaces, initialFilter = "all", onShare, 
 
   return <div className="lm-content-wide">
     <div className="lm-library-header">
-      <h1>{t.library.title}<span>{visible.length}</span></h1>
+      <div>
+        <span className="lm-eyebrow">{isSharedView ? t.library.sharedEyebrow : t.library.eyebrow}</span>
+        <h1>{isSharedView ? t.workspace.navShared : t.library.title}<span className="lm-library-count">{visible.length}</span></h1>
+      </div>
       <AppLink href="/app" className="lm-primary-button"><FilePlus2 size={14}/> {t.library.newMap}</AppLink>
     </div>
 
