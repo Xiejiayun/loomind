@@ -110,10 +110,21 @@ export class LoroSyncAdapter implements SyncAdapter {
     if (rejected) return rejected;
     if (patches.length === 0) return undefined;
 
-    this.syncCommandToLoro(cmd, nextDoc);
+    // Floating and summary topics live in sheet metadata, not under sheets[index].rootTopic.
+    const syncedTreeTitle =
+      cmd.type === "topic/setTitle" &&
+      patches.length === 1 &&
+      patches[0].path[2] === "rootTopic" &&
+      patches[0].path.at(-1) === "title" &&
+      this.syncTreeTitle(cmd.topicId, cmd.title);
+    if (!syncedTreeTitle) this.syncCommandToLoro(cmd, nextDoc);
     this.loro.commit();
-    this.rebuildIndexFromTree();
-    this.cachedDoc = this.readDocumentFromLoro();
+    if (syncedTreeTitle) {
+      this.cachedDoc = nextDoc;
+    } else {
+      this.rebuildIndexFromTree();
+      this.cachedDoc = this.readDocumentFromLoro();
+    }
     this.notify(dirtyTopicIds);
     return undefined;
   }
@@ -197,6 +208,19 @@ export class LoroSyncAdapter implements SyncAdapter {
     node.data.set("topicId", topic.id);
     node.data.set("sheetId", sheetId);
     node.data.set("payload", JSON.stringify(rest));
+  }
+
+  private syncTreeTitle(topicId: string, title: MindmapTopic["title"]): boolean {
+    const treeId = this.topicIdToTreeId.get(topicId);
+    const node = treeId && this.tree.getNodeByID(treeId);
+    const payload = node?.data.get("payload");
+    if (!node || typeof payload !== "string") return false;
+
+    const topic: Omit<MindmapTopic, "children"> = JSON.parse(payload);
+    topic.title = title;
+    const updated = JSON.stringify(topic);
+    if (updated !== payload) node.data.set("payload", updated);
+    return true;
   }
 
   private writeDocumentToLoro(doc: MindmapDocument): void {
