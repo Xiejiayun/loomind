@@ -56,6 +56,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Collaboration transport limits**: One edit frame can carry 1.5 MiB of base64 (1,152 KiB of binary data). Each pull returns an ordered prefix of up to 100 frames and 1.5 MiB of encoded updates. D1 retains the newest 200 frames or 37.5 MiB of encoded updates per map, whichever fills first. This log is not a backup; a successful upload does not prove that another editor has applied an edit.
 - **Member invitations**: Invite a Google account to a workspace or a single mind map as a viewer or editor. Invitation links expire after 7 days; revoking an invitation prevents new joins, not access already granted to a member.
 - **Public read-only links**: Off by default. From **Share → Enable read-only link**, the map owner can share all sheets, notes and referenced images with anyone who has the link, without sign-in. Anonymous readers cannot access history, member details or AI chat. Both anonymous and invited viewers refresh the latest saved revision every five seconds while the page is visible; this is not a live keystroke feed. Revocation blocks further public reads without changing member access. It cannot recall copies already viewed or downloaded.
+- **Node comments**: Select a saved topic and open **Node comments** to start a discussion. Map members can read it; the owner and editors can reply, resolve or reopen it. Viewers can post and reply only if the map owner enables **Allow viewers to comment**; this does not grant map editing. Members see each author's account email. Refresh the dialog to see others' replies. Discussions follow node IDs through renames and remain labeled after node deletion. File exports and map revision restores do not include or modify these separate records; deleting the map removes them.
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
 - **Pitch Mode**: Automatically compiles your mind map into polished presentation slides with speaker notes and exports directly to **`.pptx`**.
@@ -76,7 +77,7 @@ Loomind is organized as a **pnpm Monorepo**:
 loomind/
 ├── apps/
 │   └── web/              # Vite + React 19 + Tailwind CSS v4 web app & Cloudflare Workers config
-│       ├── migrations/   # D1 SQL migrations (0001..0007: maps, sharing, AI usage, revisions, CRDT collab)
+│       ├── migrations/   # D1 SQL migrations: maps, sharing, AI, revisions, CRDT, document blocks, node reviews
 │       └── worker/       # Google / Turnstile auth, D1 drafts/revisions/collab, sharing & dual-tier AI proxy
 └── packages/
     ├── core/             # Document schema, 9 layout engines, 14 templates, 11 palettes, Loro CRDT & I/O codecs

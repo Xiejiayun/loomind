@@ -46,4 +46,6 @@ PR 本身不发布。引入实时协作快照时，必须在部署新 Worker 前
 
 `0010_public_view_links.sql` 仅增加可为空的授权列，旧图默认不公开。发布后用无敏感内容的测试图验证匿名只读、查看新版和撤销链接（已打开的页面也应停止读取），并确认正式成员仍可查看。回退 Worker 不会清除已保存的授权；如需永久停用某链接，请由所有者显式撤销。
 
+`0011_node_reviews.sql` 新增独立的讨论表和默认关闭的查看者评论权限，不重写已有导图。验收时用已受邀的查看者确认默认只读；由所有者开启后留言，再用未登录和未获邀请的身份确认评论不可见。回滚到上一版应用不需要删除评论表或恢复整库。
+
 参考：[D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)、[D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)、[Worker 回滚](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)、[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。

@@ -13,6 +13,7 @@ import { useWebAiRuntime } from "./ai.js";
 import { AccountControl } from "./auth/AccountControl.js";
 import type { Session } from "./auth/shared.js";
 import { ReadOnlyMap } from "./ReadOnlyMap.js";
+import { NodeReview } from "./NodeReview.js";
 import { createMapAiChatPersistence } from "./drafts/ai-chat.js";
 import { LiveDraft } from "./drafts/live-draft.js";
 import { mapTitle, type MindmapSummary } from "./drafts/shared.js";
@@ -209,6 +210,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
         <PeerPresenceStrip peers={remotePeers} label={t.editorWorkspace.onlinePeers} />
+        {session.user && <NodeReview key={`${owner}:${map.id}`} owner={owner} mapId={map.id}/>}
         <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryOpen(true)} title={t.editorWorkspace.historyBtn}>
           <History size={12}/> <span className="max-sm:sr-only">{t.editorWorkspace.historyBtn}</span>
         </button>
@@ -274,6 +276,7 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={title}>{title}</span>
+        <NodeReview key={`${owner}:${map.id}`} owner={owner} mapId={map.id}/>
         <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryTitle(title)} title={t.editorWorkspace.historyBtn}>
           <History size={12}/> <span className="max-sm:sr-only">{t.editorWorkspace.historyBtn}</span>
         </button>
