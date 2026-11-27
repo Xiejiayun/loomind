@@ -301,6 +301,7 @@ const MindmapEditorInner: React.FC<
         isDark={isDark}
         onOpenChange={setCmdkOpen}
         layout={layout}
+        viewportRef={viewportRef}
         onOpenAi={readOnly ? undefined : (p) => openAiWithPrompt(p)}
       />
       <PitchOverlay />

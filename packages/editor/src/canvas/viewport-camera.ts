@@ -3,8 +3,47 @@ import type { CameraState, LayoutBox } from "@mindmap/core";
 export const MIN_CAMERA_SCALE = 0.15;
 export const MAX_CAMERA_SCALE = 3;
 
+export const ZOOM_PRESETS = [0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 0.85, 1, 1.15, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
+
 export function clampCameraScale(scale: number): number {
   return Math.max(MIN_CAMERA_SCALE, Math.min(MAX_CAMERA_SCALE, scale));
+}
+
+/**
+ * Steps camera zoom to the next or previous ergonomic preset, centered on the viewport.
+ */
+export function stepZoomCamera(
+  camera: CameraState,
+  direction: "in" | "out",
+  viewportWidth: number,
+  viewportHeight: number,
+): CameraState {
+  const eps = 0.01;
+  let targetScale = camera.scale;
+  if (direction === "in") {
+    targetScale = ZOOM_PRESETS.find((s) => s > camera.scale + eps) ?? MAX_CAMERA_SCALE;
+  } else {
+    for (let i = ZOOM_PRESETS.length - 1; i >= 0; i--) {
+      if (ZOOM_PRESETS[i] < camera.scale - eps) {
+        targetScale = ZOOM_PRESETS[i];
+        break;
+      }
+    }
+    if (camera.scale <= MIN_CAMERA_SCALE + eps) targetScale = MIN_CAMERA_SCALE;
+  }
+  return zoomAroundPoint(camera, targetScale, viewportWidth / 2, viewportHeight / 2);
+}
+
+/**
+ * Resets zoom to `targetScale` (default 100%) around the viewport center.
+ */
+export function resetZoomCentered(
+  camera: CameraState,
+  viewportWidth: number,
+  viewportHeight: number,
+  targetScale = 1,
+): CameraState {
+  return zoomAroundPoint(camera, targetScale, viewportWidth / 2, viewportHeight / 2);
 }
 
 /**
