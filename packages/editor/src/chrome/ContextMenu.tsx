@@ -1,21 +1,34 @@
 import React, { useEffect } from "react";
 import {
   Braces,
+  ClipboardPaste,
+  Copy,
+  CopyPlus,
   CornerDownRight,
   Focus,
   MessageSquare,
   Plus,
+  Scissors,
   Sparkles,
   SquareDashedBottom,
   Trash2,
 } from "lucide-react";
 import { createRichText, createTopic, findTopicLocation, generateId } from "@mindmap/core";
+import {
+  buildTakenTopicIds,
+  cloneTopicWithFreshIds,
+  deserializeClipboardPayload,
+  getInternalTopicClipboard,
+  serializeTopicsForClipboard,
+  setInternalTopicClipboard,
+} from "../canvas/clipboard.js";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
 
 interface ContextMenuProps {
   menu: { topicId: string; x: number; y: number } | null;
   isDark?: boolean;
+  readOnly?: boolean;
   onClose: () => void;
   onOpenAiForTopic?: (topicId: string) => void;
 }
@@ -23,6 +36,7 @@ interface ContextMenuProps {
 export const ContextMenu: React.FC<ContextMenuProps> = ({
   menu,
   isDark = false,
+  readOnly = false,
   onClose,
   onOpenAiForTopic,
 }) => {
@@ -79,99 +93,196 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           <div className={sepCls} />
         </>
       )}
+      {!readOnly && (
+        <>
+          <MenuItem
+            icon={<CornerDownRight className="h-3.5 w-3.5" />}
+            label={t.contextMenu.addChild}
+            isDark={isDark}
+            onClick={() =>
+              run(() => {
+                const newId = generateId("t", deletedSet);
+                dispatch({ type: "topic/addChild", sheetId: sheet.id, parentId: menu.topicId, newId });
+                selectTopics([newId]);
+                requestAnimationFrame(() => setEditingTopicId(newId));
+              })
+            }
+          />
+          {!isRoot && (
+            <MenuItem
+              icon={<Plus className="h-3.5 w-3.5" />}
+              label={t.contextMenu.addSibling}
+              isDark={isDark}
+              onClick={() =>
+                run(() => {
+                  const newId = generateId("t", deletedSet);
+                  dispatch({
+                    type: "topic/addSibling",
+                    sheetId: sheet.id,
+                    targetId: menu.topicId,
+                    position: "after",
+                    newId,
+                  });
+                  selectTopics([newId]);
+                  requestAnimationFrame(() => setEditingTopicId(newId));
+                })
+              }
+            />
+          )}
+          <div className={sepCls} />
+        </>
+      )}
       <MenuItem
-        icon={<CornerDownRight className="h-3.5 w-3.5" />}
-        label={t.contextMenu.addChild}
+        icon={<Copy className="h-3.5 w-3.5" />}
+        label={t.contextMenu.copyTopic}
         isDark={isDark}
         onClick={() =>
           run(() => {
-            const newId = generateId("t", deletedSet);
-            dispatch({ type: "topic/addChild", sheetId: sheet.id, parentId: menu.topicId, newId });
-            selectTopics([newId]);
-            requestAnimationFrame(() => setEditingTopicId(newId));
+            const bundle = serializeTopicsForClipboard(sheet, [menu.topicId], doc.assets);
+            if (!bundle) return;
+            setInternalTopicClipboard(bundle);
+            void navigator.clipboard?.writeText(bundle.text).catch(() => {});
           })
         }
       />
-      {!isRoot && (
+      {!readOnly && !isRoot && (
         <MenuItem
-          icon={<Plus className="h-3.5 w-3.5" />}
-          label={t.contextMenu.addSibling}
+          icon={<Scissors className="h-3.5 w-3.5" />}
+          label={t.contextMenu.cutTopic}
           isDark={isDark}
           onClick={() =>
             run(() => {
-              const newId = generateId("t", deletedSet);
-              dispatch({
-                type: "topic/addSibling",
-                sheetId: sheet.id,
-                targetId: menu.topicId,
-                position: "after",
-                newId,
-              });
-              selectTopics([newId]);
-              requestAnimationFrame(() => setEditingTopicId(newId));
+              const bundle = serializeTopicsForClipboard(sheet, [menu.topicId], doc.assets);
+              if (!bundle) return;
+              setInternalTopicClipboard(bundle);
+              void navigator.clipboard?.writeText(bundle.text).catch(() => {});
+              const parentId = findTopicLocation(sheet, menu.topicId)?.parent?.id ?? sheet.rootTopic.id;
+              dispatch({ type: "topic/delete", sheetId: sheet.id, topicIds: [menu.topicId] });
+              selectTopics([parentId]);
             })
           }
         />
       )}
-      <div className={sepCls} />
-      <MenuItem
-        icon={<MessageSquare className="h-3.5 w-3.5" />}
-        label={t.contextMenu.addCallout}
-        isDark={isDark}
-        onClick={() =>
-          run(() =>
-            dispatch({
-              type: "topic/setCallout",
-              sheetId: sheet.id,
-              topicId: menu.topicId,
-              callout: { id: generateId("co", deletedSet), title: createRichText(t.contextMenu.defaultCallout) },
-            }),
-          )
-        }
-      />
-      <MenuItem
-        icon={<SquareDashedBottom className="h-3.5 w-3.5" />}
-        label={t.contextMenu.addBoundary}
-        isDark={isDark}
-        onClick={() =>
-          run(() =>
-            dispatch({
-              type: "boundary/upsert",
-              sheetId: sheet.id,
-              boundary: {
-                id: generateId("bnd", deletedSet),
-                target: { kind: "subtree", topicId: menu.topicId },
-                shape: "rounded",
-                title: t.contextMenu.defaultBoundary,
-              },
-            }),
-          )
-        }
-      />
-      {!isRoot && (
+      {!readOnly && (
         <MenuItem
-          icon={<Braces className="h-3.5 w-3.5" />}
-          label={t.contextMenu.addSummary}
+          icon={<ClipboardPaste className="h-3.5 w-3.5" />}
+          label={t.contextMenu.pasteTopic}
+          isDark={isDark}
+          onClick={() => {
+            onClose();
+            const doPaste = (plainText: string | null) => {
+              const payload = deserializeClipboardPayload({
+                plainText,
+                internalFallback: getInternalTopicClipboard(),
+                deletedIds: deletedSet,
+                takenIds: buildTakenTopicIds(sheet),
+              });
+              if (!payload || payload.topics.length === 0) return;
+              const rejected = dispatch({
+                type: "topic/insertSubtrees",
+                sheetId: sheet.id,
+                parentId: menu.topicId,
+                topics: payload.topics,
+                assets: payload.assets,
+              });
+              if (!rejected) selectTopics(payload.topics.map((item) => item.id));
+            };
+            if (navigator.clipboard?.readText) {
+              void navigator.clipboard.readText().then(
+                (text) => doPaste(text),
+                () => doPaste(null),
+              );
+            } else {
+              doPaste(null);
+            }
+          }}
+        />
+      )}
+      {!readOnly && !isRoot && (
+        <MenuItem
+          icon={<CopyPlus className="h-3.5 w-3.5" />}
+          label={t.contextMenu.duplicateTopic}
           isDark={isDark}
           onClick={() =>
             run(() => {
               const loc = findTopicLocation(sheet, menu.topicId);
               if (!loc?.parent) return;
-              dispatch({
-                type: "summary/upsert",
+              const cloned = cloneTopicWithFreshIds(loc.topic, deletedSet, buildTakenTopicIds(sheet));
+              const rejected = dispatch({
+                type: "topic/insertSubtrees",
                 sheetId: sheet.id,
-                summary: {
-                  id: generateId("sum", deletedSet),
-                  parentId: loc.parent.id,
-                  startIndex: loc.index,
-                  endIndex: loc.index,
-                  brace: "curly",
-                  topic: createTopic(generateId("sumt", deletedSet), t.contextMenu.defaultSummary),
-                },
+                parentId: loc.parent.id,
+                index: loc.index + 1,
+                topics: [cloned],
               });
+              if (!rejected) selectTopics([cloned.id]);
             })
           }
         />
+      )}
+      {!readOnly && (
+        <>
+          <div className={sepCls} />
+          <MenuItem
+            icon={<MessageSquare className="h-3.5 w-3.5" />}
+            label={t.contextMenu.addCallout}
+            isDark={isDark}
+            onClick={() =>
+              run(() =>
+                dispatch({
+                  type: "topic/setCallout",
+                  sheetId: sheet.id,
+                  topicId: menu.topicId,
+                  callout: { id: generateId("co", deletedSet), title: createRichText(t.contextMenu.defaultCallout) },
+                }),
+              )
+            }
+          />
+          <MenuItem
+            icon={<SquareDashedBottom className="h-3.5 w-3.5" />}
+            label={t.contextMenu.addBoundary}
+            isDark={isDark}
+            onClick={() =>
+              run(() =>
+                dispatch({
+                  type: "boundary/upsert",
+                  sheetId: sheet.id,
+                  boundary: {
+                    id: generateId("bnd", deletedSet),
+                    target: { kind: "subtree", topicId: menu.topicId },
+                    shape: "rounded",
+                    title: t.contextMenu.defaultBoundary,
+                  },
+                }),
+              )
+            }
+          />
+          {!isRoot && (
+            <MenuItem
+              icon={<Braces className="h-3.5 w-3.5" />}
+              label={t.contextMenu.addSummary}
+              isDark={isDark}
+              onClick={() =>
+                run(() => {
+                  const loc = findTopicLocation(sheet, menu.topicId);
+                  if (!loc?.parent) return;
+                  dispatch({
+                    type: "summary/upsert",
+                    sheetId: sheet.id,
+                    summary: {
+                      id: generateId("sum", deletedSet),
+                      parentId: loc.parent.id,
+                      startIndex: loc.index,
+                      endIndex: loc.index,
+                      brace: "curly",
+                      topic: createTopic(generateId("sumt", deletedSet), t.contextMenu.defaultSummary),
+                    },
+                  });
+                })
+              }
+            />
+          )}
+        </>
       )}
       {!isRoot && (
         <MenuItem
@@ -181,7 +292,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           onClick={() => run(() => setDrillRootId(menu.topicId))}
         />
       )}
-      {!isRoot && (
+      {!readOnly && !isRoot && (
         <>
           <div className={sepCls} />
           <MenuItem

@@ -393,6 +393,60 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         dirtyTopicIds.add(cmd.newId);
         break;
       }
+      case "topic/insertSubtrees": {
+        if (cmd.topics.length === 0) break;
+        const loc = findTopicLocation(sheet, cmd.parentId);
+        if (!loc) break;
+        if (cmd.assets) {
+          for (const asset of Object.values(cmd.assets)) {
+            if (!isAllowedImageMimeType(asset.mimeType)) {
+              rejected = {
+                code: "UNSUPPORTED_IMAGE_MIME",
+                message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
+              };
+              break;
+            }
+          }
+          if (rejected) break;
+        }
+        const insertIdx =
+          cmd.index !== undefined
+            ? Math.max(0, Math.min(cmd.index, loc.topic.children.length))
+            : loc.topic.children.length;
+        loc.topic.collapsed = false;
+        loc.topic.children.splice(insertIdx, 0, ...cmd.topics);
+        const count = cmd.topics.length;
+        for (const s of sheet.summaries) {
+          if (s.parentId === loc.topic.id) {
+            if (insertIdx <= s.startIndex) {
+              s.startIndex += count;
+              s.endIndex += count;
+            } else if (insertIdx <= s.endIndex) {
+              s.endIndex += count;
+            }
+          }
+        }
+        for (const b of sheet.boundaries) {
+          if (b.target.kind === "range" && b.target.parentId === loc.topic.id) {
+            if (insertIdx <= b.target.startIndex) {
+              b.target.startIndex += count;
+              b.target.endIndex += count;
+            } else if (insertIdx <= b.target.endIndex) {
+              b.target.endIndex += count;
+            }
+          }
+        }
+        if (cmd.assets) {
+          for (const [resId, asset] of Object.entries(cmd.assets)) {
+            draft.assets[resId] = asset;
+          }
+        }
+        dirtyTopicIds.add(cmd.parentId);
+        for (const inserted of cmd.topics) {
+          dirtyTopicIds.add(inserted.id);
+        }
+        break;
+      }
       case "topic/delete": {
         const removed = new Set<string>();
         for (const id of cmd.topicIds) {
