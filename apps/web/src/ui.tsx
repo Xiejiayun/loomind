@@ -1,5 +1,5 @@
 import { ArrowUpRight, Languages, Moon, Sun } from "lucide-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useI18n } from "./i18n.js";
 import { AppLink } from "./navigation.js";
 
@@ -43,7 +43,7 @@ export function LoomindMark({ size = 24 }: { size?: number }) {
   );
 }
 
-export function Brand({ to = "/app", compact = false, onClick }: { to?: string; compact?: boolean; onClick?: () => void }) {
+export function Brand({ to = "/app", compact = false, onClick }: { to?: string; compact?: boolean; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void }) {
   const { t } = useI18n();
   return (
     <AppLink href={to} className={`lm-brand ${compact ? "lm-brand-compact" : ""}`} aria-label={t.common.brandHomeAria} onClick={onClick}>

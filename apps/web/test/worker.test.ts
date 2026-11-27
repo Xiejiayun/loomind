@@ -311,6 +311,7 @@ describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
     const config = unstable_readConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) });
     const model = "@cf/google/gemma-4-26b-a4b-it";
     expect(config.vars.AI_FREE_MODEL).toBe(model);
+    expect(config.vars.AI_FREE_DAILY_LIMIT).toBe("3");
 
     const ops = [{ kind: "addChildren", targetTopicId: "root", items: ["选址", "馆藏", "服务", "活动"].map(title => ({ title })) }];
     const chunk = { choices: [{ delta: { content: JSON.stringify({ ops }) } }] };
@@ -429,5 +430,82 @@ describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
     }), { ...env, AI_ALLOW_MOCK: "false" });
     expect(noProRes.status).toBe(503);
     expect(await noProRes.json()).toMatchObject({ code: "PRO_NOT_CONFIGURED" });
+  });
+
+  it("tracks per-device trial quota via signed HttpOnly cookie independently behind a shared IP and refunds on upstream error", async () => {
+    const sharedIp = "198.51.100.77";
+    const okRun = vi.fn(async () => {
+      const enc = new TextEncoder();
+      return new ReadableStream({
+        start(controller) {
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ response: '{"title":"Shared IP","recommendedStructure":"mindmap","recommendedPalette":"workspace","root":{"title":"Shared IP","children":[{"title":"A"}]}}' })}\n\n`));
+          controller.enqueue(enc.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+    });
+    const trialEnv: Env = {
+      ...env,
+      AI_FREE_DAILY_LIMIT: "2",
+      AI_FREE_IP_DAILY_LIMIT: "10",
+      AI_ALLOW_MOCK: "false",
+      AI: { run: okRun } as unknown as Ai,
+    };
+
+    // Device A gets a signed HttpOnly trial cookie on config fetch
+    const cfgA = await worker.fetch(new Request(`${origin}/api/ai/config?tier=free`, {
+      headers: { Origin: origin, "CF-Connecting-IP": sharedIp },
+    }), trialEnv);
+    expect(cfgA.status).toBe(200);
+    const setCookieA = cfgA.headers.getSetCookie()[0];
+    expect(setCookieA).toContain("__Host-loomind-trial=");
+    expect(setCookieA).toContain("HttpOnly");
+    const cookieA = setCookieA.split(";")[0];
+    expect(await cfgA.json()).toMatchObject({ dailyLimit: 2, remainingToday: 2 });
+
+    // Device A uses both trials
+    for (let i = 0; i < 2; i++) {
+      const res = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+        method: "POST",
+        headers: { Origin: origin, Cookie: cookieA, "Content-Type": "application/json", "CF-Connecting-IP": sharedIp },
+        body: JSON.stringify({ tier: "free", intent: "generate_map", prompt: `Run ${i}`, locale: "en" }),
+      }), trialEnv);
+      expect(res.status).toBe(200);
+      await res.text();
+    }
+
+    // Device A's 3rd attempt is blocked
+    const blockedA = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST",
+      headers: { Origin: origin, Cookie: cookieA, "Content-Type": "application/json", "CF-Connecting-IP": sharedIp },
+      body: JSON.stringify({ tier: "free", intent: "generate_map", prompt: "Blocked", locale: "en" }),
+    }), trialEnv);
+    expect(blockedA.status).toBe(429);
+
+    // Device B on the exact same shared IP still gets its full 2 trials
+    const cfgB = await worker.fetch(new Request(`${origin}/api/ai/config?tier=free`, {
+      headers: { Origin: origin, "CF-Connecting-IP": sharedIp },
+    }), trialEnv);
+    const cookieB = cfgB.headers.getSetCookie()[0].split(";")[0];
+    expect(await cfgB.json()).toMatchObject({ dailyLimit: 2, remainingToday: 2 });
+
+    // If upstream fails on Device B, the trial is refunded
+    const failingEnv: Env = {
+      ...trialEnv,
+      AI: { run: async () => { throw new Error("upstream boom"); } } as unknown as Ai,
+    };
+    const failedRes = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST",
+      headers: { Origin: origin, Cookie: cookieB, "Content-Type": "application/json", "CF-Connecting-IP": sharedIp },
+      body: JSON.stringify({ tier: "free", intent: "generate_map", prompt: "Fail", locale: "en" }),
+    }), failingEnv);
+    expect(failedRes.status).toBe(200);
+    const failedBody = await failedRes.text();
+    expect(failedBody).toContain("event: error");
+
+    const cfgBAfterFail = await worker.fetch(new Request(`${origin}/api/ai/config?tier=free`, {
+      headers: { Origin: origin, Cookie: cookieB, "CF-Connecting-IP": sharedIp },
+    }), trialEnv);
+    expect(await cfgBAfterFail.json()).toMatchObject({ dailyLimit: 2, remainingToday: 2 });
   });
 });
