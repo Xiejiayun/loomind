@@ -57,3 +57,54 @@ export async function writeCloud(owner: string, id: string, revision: number, do
 export async function deleteCloud(owner: string, id: string): Promise<void> {
   await request(owner, id, { method: "DELETE" });
 }
+
+export interface MindmapRevisionSummary {
+  revision: number;
+  title: string;
+  savedBy: string;
+  createdAt: string;
+}
+
+export interface MindmapRevisionSnapshot extends MindmapRevisionSummary {
+  document: MindmapDocument;
+}
+
+export async function listRevisions(owner: string, id: string): Promise<MindmapRevisionSummary[]> {
+  if (!MAP_ID.test(id)) throw new CloudError(400, getWebMessages().errors.invalidMapId);
+  const err = getWebMessages().errors;
+  const response = await fetch(`/api/mindmaps/${id}/revisions`, {
+    headers: { [OWNER_HEADER]: owner },
+    credentials: "same-origin",
+    cache: "no-store",
+    signal: AbortSignal.timeout(12_000),
+  }).catch(() => { throw new CloudError(0, err.cloudConnect); });
+  const data: unknown = await response.json().catch(() => { throw new CloudError(503, err.cloudUnavailable); });
+  if (!response.ok) {
+    const rec = asRecord(data);
+    throw new CloudError(response.status, typeof rec?.error === "string" ? rec.error : err.cloudSyncFailed);
+  }
+  if (!Array.isArray(data) || !data.every((item) => item && typeof item.revision === "number" && typeof item.title === "string" && typeof item.createdAt === "string")) {
+    throw new CloudError(502, err.cloudListInvalid);
+  }
+  return data as MindmapRevisionSummary[];
+}
+
+export async function readRevision(owner: string, id: string, revision: number): Promise<MindmapRevisionSnapshot> {
+  if (!MAP_ID.test(id)) throw new CloudError(400, getWebMessages().errors.invalidMapId);
+  const err = getWebMessages().errors;
+  const response = await fetch(`/api/mindmaps/${id}/revisions/${revision}`, {
+    headers: { [OWNER_HEADER]: owner },
+    credentials: "same-origin",
+    cache: "no-store",
+    signal: AbortSignal.timeout(12_000),
+  }).catch(() => { throw new CloudError(0, err.cloudConnect); });
+  const data: unknown = await response.json().catch(() => { throw new CloudError(503, err.cloudUnavailable); });
+  const rec = asRecord(data);
+  if (!response.ok) {
+    throw new CloudError(response.status, typeof rec?.error === "string" ? rec.error : err.cloudSyncFailed);
+  }
+  if (!rec || typeof rec.revision !== "number" || typeof rec.title !== "string" || typeof rec.createdAt !== "string" || !MindmapDocumentSchema.safeParse(rec.document).success) {
+    throw new CloudError(502, err.cloudDraftInvalid);
+  }
+  return data as MindmapRevisionSnapshot;
+}

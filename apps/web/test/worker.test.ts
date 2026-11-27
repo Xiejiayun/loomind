@@ -63,6 +63,10 @@ beforeAll(async () => {
   for (const statement of aiUsageMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const revisionsMigration = await readFile(new URL("../migrations/0006_mindmap_revisions.sql", import.meta.url), "utf8");
+  for (const statement of revisionsMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -504,8 +508,76 @@ describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
     expect(failedBody).toContain("event: error");
 
     const cfgBAfterFail = await worker.fetch(new Request(`${origin}/api/ai/config?tier=free`, {
-      headers: { Origin: origin, Cookie: cookieB, "CF-Connecting-IP": sharedIp },
+      headers: { Origin: origin, "CF-Connecting-IP": sharedIp, Cookie: cookieB },
     }), trialEnv);
     expect(await cfgBAfterFail.json()).toMatchObject({ dailyLimit: 2, remainingToday: 2 });
+  });
+});
+
+
+describe("Version history API (D1 snapshots & pruning)", () => {
+  it("records revision snapshots on PUT, caps at 20 revisions, enforces permissions, and cleans up on DELETE", async () => {
+    const ownerCookie = await login("hist-owner");
+    const strangerCookie = await login("hist-stranger");
+    const mapId = crypto.randomUUID();
+    const base = getTemplate("blank-organic").create();
+
+    // Save 22 revisions so pruning to latest 20 is exercised
+    for (let rev = 0; rev < 22; rev += 1) {
+      const next = structuredClone(base);
+      next.sheets[0].title = `Version ${rev + 1}`;
+      next.sheets[0].rootTopic.title = {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: `Version ${rev + 1}` }] }],
+      };
+      const put = await request(`mindmaps/${mapId}`, "PUT", ownerCookie, next, {
+        [OWNER_HEADER]: "hist-owner",
+        "If-Match": `"${rev}"`,
+      });
+      expect(put.status).toBe(200);
+    }
+
+    // List revisions: capped at 20, newest first (22 down to 3)
+    const listRes = await request(`mindmaps/${mapId}/revisions`, "GET", ownerCookie, undefined, {
+      [OWNER_HEADER]: "hist-owner",
+    });
+    expect(listRes.status).toBe(200);
+    const list = await listRes.json() as Array<{ revision: number; title: string; savedBy: string; createdAt: string }>;
+    expect(list).toHaveLength(20);
+    expect(list[0].revision).toBe(22);
+    expect(list[0].title).toBe("Version 22");
+    expect(list[19].revision).toBe(3);
+
+    // Read an older revision (v5) and verify full document snapshot
+    const snapRes = await request(`mindmaps/${mapId}/revisions/5`, "GET", ownerCookie, undefined, {
+      [OWNER_HEADER]: "hist-owner",
+    });
+    expect(snapRes.status).toBe(200);
+    const snap = await snapRes.json() as { revision: number; title: string; document: typeof base };
+    expect(snap.revision).toBe(5);
+    expect(snap.title).toBe("Version 5");
+    expect(snap.document.sheets[0].title).toBe("Version 5");
+
+    // Pruned revision (v1) returns 404
+    const prunedRes = await request(`mindmaps/${mapId}/revisions/1`, "GET", ownerCookie, undefined, {
+      [OWNER_HEADER]: "hist-owner",
+    });
+    expect(prunedRes.status).toBe(404);
+
+    // Stranger cannot access revisions
+    const strangerRes = await request(`mindmaps/${mapId}/revisions`, "GET", strangerCookie, undefined, {
+      [OWNER_HEADER]: "hist-stranger",
+    });
+    expect(strangerRes.status).toBe(404);
+
+    // Deleting the mindmap also cleans up stored revision snapshots
+    const delRes = await request(`mindmaps/${mapId}`, "DELETE", ownerCookie, undefined, {
+      [OWNER_HEADER]: "hist-owner",
+    });
+    expect(delRes.status).toBe(200);
+    const remaining = await platform.env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM mindmap_revisions WHERE mindmap_id = ?",
+    ).bind(mapId).first<{ count: number }>();
+    expect(remaining?.count).toBe(0);
   });
 });
