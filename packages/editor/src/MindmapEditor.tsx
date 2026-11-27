@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ListTree, Sparkles, X } from "lucide-react";
 import type { StoreApi } from "zustand";
 import {
   createMindmapStore,
@@ -27,6 +28,7 @@ import { ShortcutsHelp } from "./chrome/ShortcutsHelp.js";
 import { TemplateModal } from "./chrome/TemplateModal.js";
 import { TopToolbar } from "./chrome/TopToolbar.js";
 import { MindmapStoreContext, useMindmapStore } from "./context.js";
+import { useEditorI18n } from "./i18n.js";
 import { OutlinerView } from "./outline/OutlinerView.js";
 import { PitchOverlay } from "./pitch/PitchOverlay.js";
 
@@ -51,12 +53,16 @@ const MindmapEditorInner: React.FC<
   const doc = useMindmapStore((s) => s.doc);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
   const viewMode = useMindmapStore((s) => s.viewMode);
+  const setViewMode = useMindmapStore((s) => s.setViewMode);
+  const camera = useMindmapStore((s) => s.camera);
+  const setCamera = useMindmapStore((s) => s.setCamera);
   const zenMode = useMindmapStore((s) => s.zenMode);
   const setZenMode = useMindmapStore((s) => s.setZenMode);
   const formatPanelOpen = useMindmapStore((s) => s.formatPanelOpen);
   const setFormatPanelOpen = useMindmapStore((s) => s.setFormatPanelOpen);
   const lastRejection = useMindmapStore((s) => s.lastRejection);
   const clearRejection = useMindmapStore((s) => s.clearRejection);
+  const { t } = useEditorI18n();
 
   useEffect(() => {
     if (!lastRejection) return;
@@ -64,10 +70,10 @@ const MindmapEditorInner: React.FC<
     return () => clearTimeout(timer);
   }, [lastRejection, clearRejection]);
 
-  const [aiPanelOpen, setAiPanelOpen] = useState(() => {
-    if (readOnly) return false;
-    if (initialAiPrompt || initialRightPanel === "ai") return true;
-    return typeof window === "undefined" ? true : window.innerWidth >= 900;
+  const [leftPanel, setLeftPanel] = useState<"none" | "ai" | "outline">(() => {
+    if (readOnly) return "none";
+    if (initialAiPrompt || initialRightPanel === "ai") return "ai";
+    return typeof window === "undefined" ? "ai" : window.innerWidth >= 900 ? "ai" : "none";
   });
   const [queuedAiPrompt, setQueuedAiPrompt] = useState<string | undefined>(initialAiPrompt);
   const [inlineAiOpen, setInlineAiOpen] = useState(false);
@@ -76,20 +82,28 @@ const MindmapEditorInner: React.FC<
   useEffect(() => {
     if (readOnly) {
       setFormatPanelOpen(false);
-      setAiPanelOpen(false);
+      setLeftPanel((prev) => (prev === "ai" ? "none" : prev));
       return;
     }
     if (initialAiPrompt || initialRightPanel === "ai") {
-      setAiPanelOpen(true);
+      setLeftPanel("ai");
     } else if (typeof window !== "undefined" && window.innerWidth < 768) {
       setFormatPanelOpen(false);
     }
   }, [initialAiPrompt, initialRightPanel, readOnly, setFormatPanelOpen]);
 
+  // Auto-collapse irrelevant right Format panel & duplicate left outline in fullscreen Outline mode
+  useEffect(() => {
+    if (viewMode === "outline") {
+      setFormatPanelOpen(false);
+      setLeftPanel((prev) => (prev === "outline" ? "none" : prev));
+    }
+  }, [viewMode, setFormatPanelOpen]);
+
   const activeSheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
   const isDark = chromeTheme
     ? chromeTheme === "dark"
-    : getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark && viewMode === "canvas";
+    : getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark;
 
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [cmdkOpen, setCmdkOpen] = useState(false);
@@ -119,21 +133,45 @@ const MindmapEditorInner: React.FC<
 
   const toggleAiPanel = () => {
     if (readOnly) return;
-    setAiPanelOpen((prev) => !prev);
+    setLeftPanel((prev) => (prev === "ai" ? "none" : "ai"));
+  };
+
+  const toggleOutlineSidebar = () => {
+    if (viewMode === "outline") {
+      setViewMode("canvas");
+      setLeftPanel("outline");
+      return;
+    }
+    setLeftPanel((prev) => (prev === "outline" ? "none" : "outline"));
   };
 
   const toggleFormatPanel = () => {
-    if (readOnly) return;
+    if (readOnly || viewMode !== "canvas") return;
     setFormatPanelOpen(!formatPanelOpen);
   };
 
   const openAiWithPrompt = (prompt?: string) => {
     if (readOnly) return;
-    setAiPanelOpen(true);
+    setLeftPanel("ai");
     if (prompt) setQueuedAiPrompt(prompt);
   };
 
-  // Global editor shortcuts: Esc (zen), Cmd/Ctrl+J (AI panel), Cmd/Ctrl+I (Format panel)
+  const focusTopicOnCanvas = useCallback(
+    (topicId: string) => {
+      const node = layout.nodes.get(topicId);
+      if (!node) return;
+      const rect = viewportRef.current?.getBoundingClientRect();
+      const vw = Math.max(320, rect?.width ?? window.innerWidth - 360);
+      const vh = Math.max(320, rect?.height ?? window.innerHeight - 80);
+      setCamera({
+        x: vw / 2 - (node.contentBox.x + node.contentBox.width / 2) * camera.scale,
+        y: vh / 2 - (node.contentBox.y + node.contentBox.height / 2) * camera.scale,
+      });
+    },
+    [layout, camera.scale, setCamera],
+  );
+
+  // Global editor shortcuts: Esc (zen), Cmd/Ctrl+J (AI), Cmd/Ctrl+O (Outline), Cmd/Ctrl+I (Format)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && zenMode) {
@@ -147,7 +185,10 @@ const MindmapEditorInner: React.FC<
         } else {
           toggleAiPanel();
         }
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i" && !readOnly) {
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        toggleOutlineSidebar();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i" && !readOnly && viewMode === "canvas") {
         e.preventDefault();
         toggleFormatPanel();
       }
@@ -155,7 +196,10 @@ const MindmapEditorInner: React.FC<
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zenMode, formatPanelOpen, readOnly]);
+  }, [zenMode, formatPanelOpen, readOnly, viewMode]);
+
+  const showLeftSidebar = !zenMode && leftPanel !== "none" && !(leftPanel === "ai" && readOnly);
+  const borderCls = isDark ? "border-white/[0.075]" : "border-slate-900/[0.08]";
 
   return (
     <div
@@ -166,25 +210,117 @@ const MindmapEditorInner: React.FC<
       <TopToolbar
         isDark={isDark}
         accountControl={accountControl}
-        aiOpen={aiPanelOpen}
+        leftPanel={showLeftSidebar ? leftPanel : "none"}
         readOnly={readOnly}
         onOpenTemplates={() => setTemplatesOpen(true)}
         onToggleAi={toggleAiPanel}
+        onToggleOutlineSidebar={toggleOutlineSidebar}
         onToggleFormat={toggleFormatPanel}
         onOpenExport={() => setExportOpen(true)}
       />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        {!readOnly && (
-          <AiChatPanel
-            open={aiPanelOpen && !zenMode}
-            isDark={isDark}
-            layout={layout}
-            queuedPrompt={queuedAiPrompt}
-            aiRuntime={aiRuntime}
-            onConsumeQueuedPrompt={() => setQueuedAiPrompt(undefined)}
-            onClose={() => setAiPanelOpen(false)}
-          />
+        {showLeftSidebar && (
+          <aside
+            className={`fixed left-0 top-11 bottom-8 z-40 flex w-[340px] max-w-[88vw] shrink-0 flex-col border-r text-[12.5px] shadow-2xl md:static md:h-full md:shadow-none ${
+              isDark
+                ? "border-white/[0.075] bg-[#121419] text-[#f4f5f8]"
+                : "border-slate-900/[0.08] bg-[#fafbfc] text-[#111318]"
+            }`}
+            aria-label={leftPanel === "ai" ? t.aiChat.ariaLabel : t.outliner.title}
+          >
+            {/* Unified Left Panel Header: Chat | Outline switcher */}
+            <div className={`flex h-10 shrink-0 items-center justify-between gap-2 border-b px-2.5 ${borderCls}`}>
+              {!readOnly && viewMode === "canvas" ? (
+                <div
+                  className={`flex items-center rounded-[6px] border p-0.5 ${
+                    isDark ? "border-white/[0.08] bg-[#0b0c0e]" : "border-slate-900/[0.08] bg-slate-200/60"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanel("ai")}
+                    className={`flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11.5px] font-medium transition ${
+                      leftPanel === "ai"
+                        ? isDark
+                          ? "bg-[#22262f] text-white"
+                          : "bg-white text-[#111318] shadow-2xs"
+                        : isDark
+                          ? "text-[#9ca3b0] hover:text-white"
+                          : "text-[#525b6b] hover:text-[#111318]"
+                    }`}
+                  >
+                    <Sparkles className="h-3 w-3" /> {t.toolbar.chat}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanel("outline")}
+                    className={`flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11.5px] font-medium transition ${
+                      leftPanel === "outline"
+                        ? isDark
+                          ? "bg-[#22262f] text-white"
+                          : "bg-white text-[#111318] shadow-2xs"
+                        : isDark
+                          ? "text-[#9ca3b0] hover:text-white"
+                          : "text-[#525b6b] hover:text-[#111318]"
+                    }`}
+                  >
+                    <ListTree className="h-3 w-3" /> {t.toolbar.outlineSidebar}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-1 text-xs font-medium">
+                  {leftPanel === "ai" ? (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5 opacity-75" />
+                      <span>{t.aiChat.title}</span>
+                    </>
+                  ) : (
+                    <>
+                      <ListTree className="h-3.5 w-3.5 opacity-75" />
+                      <span>{t.outliner.title}</span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                aria-label={t.outliner.closeSidebarAria}
+                onClick={() => setLeftPanel("none")}
+                className={`inline-grid h-6 w-6 place-items-center rounded-[5px] transition ${
+                  isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
+                }`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {leftPanel === "ai" && !readOnly ? (
+              <AiChatPanel
+                open
+                embedded
+                isDark={isDark}
+                layout={layout}
+                queuedPrompt={queuedAiPrompt}
+                aiRuntime={aiRuntime}
+                onConsumeQueuedPrompt={() => setQueuedAiPrompt(undefined)}
+                onClose={() => setLeftPanel("none")}
+              />
+            ) : (
+              <OutlinerView
+                variant="sidebar"
+                isDark={isDark}
+                readOnly={readOnly}
+                onSelectTopic={focusTopicOnCanvas}
+                onExpandFullscreen={() => {
+                  setLeftPanel("none");
+                  setFormatPanelOpen(false);
+                  setViewMode("outline");
+                }}
+              />
+            )}
+          </aside>
         )}
 
         <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -213,11 +349,11 @@ const MindmapEditorInner: React.FC<
               {!zenMode && <ShortcutsHelp isDark={isDark} />}
             </>
           ) : (
-            <OutlinerView />
+            <OutlinerView variant="full" isDark={isDark} readOnly={readOnly} />
           )}
         </div>
 
-        {!readOnly && <FormatPanel isDark={isDark} />}
+        {!readOnly && viewMode === "canvas" && <FormatPanel isDark={isDark} />}
       </div>
 
       <SheetBar layout={layout} isDark={isDark} viewportRef={viewportRef} />
