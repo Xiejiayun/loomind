@@ -76,14 +76,13 @@ export function App() {
   return <div className="lm-theme" data-theme={theme}><NotFound to="/" /></div>;
 }
 
-function PublicAtmosphere({ showRails = false }: { showRails?: boolean }) {
-  return <>
+function PublicAtmosphere() {
+  return (
     <div className="lm-public-atmosphere" aria-hidden="true">
       <div className="lm-ambient-glow" />
       <div className="lm-public-dotgrid" />
     </div>
-    {showRails && <div className="lm-public-rails" aria-hidden="true" />}
-  </>;
+  );
 }
 
 function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
@@ -94,7 +93,7 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
     setActivePreviewNode((cur) => (cur === key ? null : key));
   };
   return <div className="lm-public">
-    <PublicAtmosphere showRails />
+    <PublicAtmosphere />
     <header className="lm-site-header">
       <div className="lm-header-wide lm-site-header-inner">
         <Brand to="/"/>
@@ -184,37 +183,33 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         </div>
       </section>
 
-      <div className="lm-band">
-        <section id="features" className="lm-features lm-container lm-framed-section">
-          <div className="lm-section-heading">
-            <span className="lm-eyebrow">{t.landing.featuresEyebrow}</span>
-            <h2>{t.landing.featuresTitleLine1}<br/>{t.landing.featuresTitleLine2}</h2>
-          </div>
-          <div className="lm-feature-grid">
-            {t.landing.features.map((feat, idx) => {
-              const Icon = featureIcons[idx] ?? Sparkles;
-              return (
-                <article key={feat.num}>
-                  <span className="lm-feature-number">{feat.num}</span>
-                  <Icon size={18}/>
-                  <h3>{feat.title}</h3>
-                  <p>{feat.desc}</p>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      </div>
+      <section id="features" className="lm-features lm-container">
+        <div className="lm-section-heading">
+          <span className="lm-eyebrow">{t.landing.featuresEyebrow}</span>
+          <h2>{t.landing.featuresTitleLine1}<br/>{t.landing.featuresTitleLine2}</h2>
+        </div>
+        <div className="lm-feature-grid">
+          {t.landing.features.map((feat, idx) => {
+            const Icon = featureIcons[idx] ?? Sparkles;
+            return (
+              <article key={feat.num}>
+                <span className="lm-feature-number">{feat.num}</span>
+                <Icon size={18}/>
+                <h3>{feat.title}</h3>
+                <p>{feat.desc}</p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
-      <div className="lm-band">
-        <section className="lm-closing lm-container lm-framed-section">
-          <div>
-            <h2>{t.landing.closingTitle}</h2>
-            <p className="lm-closing-sub">{t.landing.closingSub}</p>
-          </div>
-          <AppLink href="/login" className="lm-primary-button">{t.landing.closingCta} <ArrowRight size={15}/></AppLink>
-        </section>
-      </div>
+      <section className="lm-closing lm-container">
+        <div>
+          <h2>{t.landing.closingTitle}</h2>
+          <p className="lm-closing-sub">{t.landing.closingSub}</p>
+        </div>
+        <AppLink href="/login" className="lm-primary-button">{t.landing.closingCta} <ArrowRight size={15}/></AppLink>
+      </section>
     </main>
   </div>;
 }
