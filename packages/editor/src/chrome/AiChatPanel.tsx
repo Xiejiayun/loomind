@@ -333,7 +333,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       )}
 
       {/* Tier & Quota Status Strip */}
-      {(aiRuntime || (embedded && messages.length > 0)) && (
+      {(aiRuntime || embedded) && (
         <div
           className={`flex shrink-0 flex-wrap items-center justify-between gap-1.5 border-b px-3 py-1.5 text-[10.5px] ${borderCls} ${
             isDark ? "bg-white/[0.025]" : "bg-slate-900/[0.025]"
@@ -401,6 +401,18 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 }`}
               >
                 <Plus className="h-3 w-3" /> {t.aiChat.newChat}
+              </button>
+            )}
+            {embedded && (
+              <button
+                type="button"
+                aria-label={t.aiChat.closeAria}
+                onClick={onClose}
+                className={`inline-grid h-5 w-5 place-items-center rounded-[4px] transition ${
+                  isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-200/70"
+                }`}
+              >
+                <X className="h-3 w-3" />
               </button>
             )}
           </div>

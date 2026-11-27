@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ListTree, Sparkles, X } from "lucide-react";
 import type { StoreApi } from "zustand";
 import {
   createMindmapStore,
@@ -197,7 +196,6 @@ const MindmapEditorInner: React.FC<
   }, [zenMode, formatPanelOpen, readOnly, viewMode]);
 
   const showLeftSidebar = !zenMode && leftPanel !== "none" && !(leftPanel === "ai" && readOnly);
-  const borderCls = isDark ? "border-white/[0.075]" : "border-slate-900/[0.08]";
 
   return (
     <div
@@ -226,73 +224,6 @@ const MindmapEditorInner: React.FC<
             }`}
             aria-label={leftPanel === "ai" ? t.aiChat.ariaLabel : t.outliner.title}
           >
-            {/* Unified Left Panel Header: Chat | Outline switcher */}
-            <div className={`flex h-10 shrink-0 items-center justify-between gap-2 border-b px-2.5 ${borderCls}`}>
-              {!readOnly && viewMode === "canvas" ? (
-                <div
-                  className={`flex items-center rounded-[6px] border p-0.5 ${
-                    isDark ? "border-white/[0.08] bg-[#0b0c0e]" : "border-slate-900/[0.08] bg-slate-200/60"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setLeftPanel("ai")}
-                    className={`flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11.5px] font-medium transition ${
-                      leftPanel === "ai"
-                        ? isDark
-                          ? "bg-[#22262f] text-white"
-                          : "bg-white text-[#111318] shadow-2xs"
-                        : isDark
-                          ? "text-[#9ca3b0] hover:text-white"
-                          : "text-[#525b6b] hover:text-[#111318]"
-                    }`}
-                  >
-                    <Sparkles className="h-3 w-3" /> {t.toolbar.chat}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLeftPanel("outline")}
-                    className={`flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11.5px] font-medium transition ${
-                      leftPanel === "outline"
-                        ? isDark
-                          ? "bg-[#22262f] text-white"
-                          : "bg-white text-[#111318] shadow-2xs"
-                        : isDark
-                          ? "text-[#9ca3b0] hover:text-white"
-                          : "text-[#525b6b] hover:text-[#111318]"
-                    }`}
-                  >
-                    <ListTree className="h-3 w-3" /> {t.toolbar.outlineSidebar}
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-1 text-xs font-medium">
-                  {leftPanel === "ai" ? (
-                    <>
-                      <Sparkles className="h-3.5 w-3.5 opacity-75" />
-                      <span>{t.aiChat.title}</span>
-                    </>
-                  ) : (
-                    <>
-                      <ListTree className="h-3.5 w-3.5 opacity-75" />
-                      <span>{t.outliner.title}</span>
-                    </>
-                  )}
-                </div>
-              )}
-
-              <button
-                type="button"
-                aria-label={t.outliner.closeSidebarAria}
-                onClick={() => setLeftPanel("none")}
-                className={`inline-grid h-6 w-6 place-items-center rounded-[5px] transition ${
-                  isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
-                }`}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
             {leftPanel === "ai" && !readOnly ? (
               <AiChatPanel
                 open
@@ -310,6 +241,7 @@ const MindmapEditorInner: React.FC<
                 isDark={isDark}
                 readOnly={readOnly}
                 onSelectTopic={focusTopicOnCanvas}
+                onClose={() => setLeftPanel("none")}
                 onExpandFullscreen={() => {
                   setLeftPanel("none");
                   setFormatPanelOpen(false);
