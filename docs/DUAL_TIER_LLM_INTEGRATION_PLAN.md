@@ -14,7 +14,7 @@ Loomind 将 LLM 能力清晰划分为两个产品层级，共用同一套前端 
 | **入口路由** | 公开免登录体验页 **`/try`**（首页 Landing 提供醒目入口） | 已登录工作区 **`/app`**、**`/app/mindmaps/:id`**、**`/app/new`** |
 | **目标用户** | 游客（免登录即可直接体验真实流式画图） | 已登录 Loomind 账号的编辑者（Owner / Editor） |
 | **底层模型引擎** | **Cloudflare Workers AI**（原生 `env.AI` 绑定，免费 10,000 Neurons/天） | **平台自营付费 LLM 代理站**（标准 OpenAI 兼容 `/v1/chat/completions` 流式接口） |
-| **默认模型** | 轻量高效开源模型（默认 `@cf/qwen/qwen2.5-7b-instruct` 或环境变量指定） | 高性能旗舰模型（由 `PRO_LLM_MODEL` 指定，如 GPT / Claude / Gemini） |
+| **默认模型** | `@cf/google/gemma-4-26b-a4b-it`，可通过 `AI_FREE_MODEL` 覆盖 | 高性能旗舰模型（由 `PRO_LLM_MODEL` 指定，如 GPT / Claude / Gemini） |
 | **持久化与权限** | 仅浏览器本地临时画布（不写 D1，支持导出）；引导登录后保存云端 | 完整 IndexedDB + D1 乐观锁云端同步、多图管理与团队协作 |
 | **防滥用配额** | 同源 `Origin` 校验 + 基于匿名哈希 IP 的 D1 每日限流（默认 10 次/天） | `__Host-loomind-session` 强鉴权 + 基于 `subject` 的 D1 每日限流（默认 100 次/天） |
 | **缺失外部资源时** | 当本地无远程 Workers AI 绑定且开启 `AI_ALLOW_MOCK=true` 时，走带显式标记的 **Free Mock 流** | 当 `PRO_LLM_BASE_URL` / `PRO_LLM_API_KEY` 尚未配置且开启 `AI_ALLOW_MOCK=true` 时，走带显式标记的 **Pro Mock 流**；生产关闭 Mock 时返回明确 `503` |
@@ -88,7 +88,7 @@ flowchart LR
   "available": true,
   "isMock": false,
   "providerLabel": "Cloudflare Workers AI",
-  "modelLabel": "Qwen 2.5 7B (Free)",
+  "modelLabel": "gemma-4-26b-a4b-it",
   "dailyLimit": 10,
   "remainingToday": 9,
   "requiresLogin": false

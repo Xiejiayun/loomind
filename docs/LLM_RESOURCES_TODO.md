@@ -12,7 +12,7 @@
 | **R2** | **自有付费 LLM 代理站密钥** | `PRO_LLM_API_KEY`（Worker Secret） | 调用代理站的 `Authorization: Bearer <key>` 凭据（已从本地文件写入被 `.gitignore` 忽略的 `apps/web/.dev.vars`） | 本地 `.dev.vars` 已配置真实密钥；线上未写入前走 Mock 兜底 | **需写入 Cloudflare Worker Secret** |
 | **R3** | **付费模式默认模型名** | `PRO_LLM_MODEL`（Worker Var） | 指定代理站上的强力模型 ID（已在 `wrangler.jsonc` 配置为 `gpt-6.2-sol`，已实测通过 `/v1/responses` 流式返回） | 已配置真实模型名 | **已完成配置** |
 | **R4** | **Cloudflare Workers AI 绑定确认** | `wrangler.jsonc` 中 `"ai": { "binding": "AI" }` | `/try` 免费体验页调用 Cloudflare 原生免费 10,000 Neurons/天 推理 | 本地 `wrangler dev --local` 无远端 AI 绑定且 `AI_ALLOW_MOCK=true` 时走 `Free Mock Provider` | **生产自动生效**（确认账户已开通 Workers AI） |
-| **R5** | **免费体验默认模型名** | `AI_FREE_MODEL`（Worker Var） | Cloudflare Workers AI 免费目录模型 ID | 代码内置默认 `@cf/qwen/qwen2.5-7b-instruct`（可按需替换如 `@cf/meta/llama-3.1-8b-instruct`） | 可选（已有默认值） |
+| **R5** | **免费体验默认模型名** | `AI_FREE_MODEL`（Worker Var） | Workers AI 目录中支持流式文本生成的模型 ID | 默认 `@cf/google/gemma-4-26b-a4b-it` | 可选（已有默认值） |
 | **R6** | **每日调用配额阈值** | `AI_FREE_DAILY_LIMIT`、`AI_PRO_DAILY_LIMIT` | 控制单 IP 免费体验次数与单登录用户付费调用次数 | 代码默认 `10`（免费） / `100`（付费） | 可选（已有默认值） |
 | **R7** | **生产关闭 Mock 开关** | `AI_ALLOW_MOCK`（Worker Var） | 控制缺失上游凭据时是否允许降级为 Mock | 本地/预发默认 `true` 便于测试；**生产必须设为 `false`** | **生产必改 `false`** |
 | **R8** | **线上 D1 执行 `0005` 迁移** | `apps/web/migrations/0005_ai_usage.sql` | 创建 `ai_usage_daily` 每日配额限流表 | 本地与单测自动执行；生产发布工作流会自动 apply | **生产必执行** |
@@ -32,7 +32,7 @@ PRO_LLM_API_KEY=sk-你的真实密钥
 PRO_LLM_MODEL=你的模型ID
 
 # 可选：自定义免费体验模型与限流
-AI_FREE_MODEL=@cf/qwen/qwen2.5-7b-instruct
+AI_FREE_MODEL=@cf/google/gemma-4-26b-a4b-it
 AI_FREE_DAILY_LIMIT=10
 AI_PRO_DAILY_LIMIT=100
 
@@ -55,6 +55,7 @@ pnpm dev
    npx wrangler secret put PRO_LLM_API_KEY
    ```
 2. **确认非敏感 Vars（`apps/web/wrangler.jsonc` 或 Cloudflare Dashboard）**：
+   - 更换 `AI_FREE_MODEL` 前，在 `apps/web` 下用 `pnpm exec wrangler ai models list --search <模型名> --task "Text Generation"` 核对完整 ID，并用新模型实际完成一次节点扩展。`/api/ai/config` 的 `isMock: false` 只表示有 AI 绑定，不代表模型可以调用；
    - 将 `PRO_LLM_MODEL` 更新为你代理站支持的强力模型名称；
    - 将 `AI_ALLOW_MOCK` 改为 `"false"`；
    - 确认 `wrangler.jsonc` 中 `"ai": { "binding": "AI" }` 已存在。
