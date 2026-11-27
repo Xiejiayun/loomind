@@ -10,6 +10,7 @@ import type {
 import { TopicCard } from "./TopicCard.js";
 
 interface NodeLayerProps {
+  sheetTitle: string;
   layout: MindmapLayoutResult;
   topicMap: Map<string, MindmapTopic>;
   assets: Record<string, InlineAsset>;
@@ -37,6 +38,7 @@ interface NodeLayerProps {
 
 export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
   ({
+    sheetTitle,
     layout,
     topicMap,
     assets,
@@ -91,7 +93,12 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
     }, [remotePeers]);
 
     return (
-      <div className="pointer-events-none absolute inset-0">
+      <div
+        role="tree"
+        aria-label={sheetTitle}
+        aria-multiselectable="true"
+        className="pointer-events-none absolute inset-0"
+      >
         {visibleTopicIds.map((id) => {
           const layoutNode = layout.nodes.get(id);
           const topic = topicMap.get(id);

@@ -14,6 +14,7 @@ import {
 } from "@mindmap/core";
 import { MARKER_BY_ID, STICKER_BY_ID } from "../chrome/markers-catalog.js";
 import { useEditorI18n } from "../i18n.js";
+import { buildTopicAriaLabel } from "./a11y.js";
 import { EquationView } from "./EquationView.js";
 import { TopicEditor } from "./TopicEditor.js";
 
@@ -204,11 +205,18 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
       layoutNode.shape === "diamond" ? 8 : layoutNode.shape === "cloud" ? 6 : 0;
 
     const centerAlign = !layoutNode.underlineMode && !isTransparentFill;
+    const ariaLabel = buildTopicAriaLabel(topic, layoutNode, t.a11y);
 
     return (
       <div
         data-topic-id={topic.id}
-        className="group relative box-border select-none"
+        role="treeitem"
+        tabIndex={selected ? 0 : -1}
+        aria-selected={selected}
+        aria-level={layoutNode.depth + 1}
+        aria-expanded={topic.children.length > 0 ? !topic.collapsed : undefined}
+        aria-label={ariaLabel}
+        className="group relative box-border select-none outline-none"
         style={{
           width: layoutNode.box.width,
           height: layoutNode.box.height,
@@ -276,6 +284,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 }}
                 className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-amber-950 opacity-0 shadow-xs transition group-hover/co:opacity-100 hover:bg-amber-500"
                 title={t.topic.deleteCalloutTitle}
+                aria-label={t.topic.deleteCalloutTitle}
               >
                 <X className="h-2.5 w-2.5" />
               </button>
@@ -401,6 +410,9 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
             {!lodLow && !layoutNode.taskSummary && topic.task && (
               <button
                 type="button"
+                role="checkbox"
+                aria-checked={topic.task.status === "done"}
+                aria-label={t.topic.toggleTaskTitle}
                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
                   topic.task.status === "done"
                     ? "border-emerald-500 bg-emerald-500 text-white"
@@ -474,6 +486,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 onClick={(e) => e.stopPropagation()}
                 className="shrink-0 opacity-70 hover:opacity-100"
                 title={topic.href.label ?? topic.href.target}
+                aria-label={topic.href.label ?? topic.href.target}
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
@@ -566,6 +579,8 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                 border: `1.5px solid ${accentCss}`,
               }}
               title={topic.collapsed ? t.topic.expandBranchTitle : t.topic.collapseBranchTitle}
+              aria-label={topic.collapsed ? t.topic.expandBranchTitle : t.topic.collapseBranchTitle}
+              aria-expanded={!topic.collapsed}
             >
               {topic.collapsed ? (
                 <span>+{layoutNode.hiddenCount}</span>

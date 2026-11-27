@@ -17,6 +17,7 @@ import {
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
+import { buildSelectionAnnouncement } from "./a11y.js";
 import {
   buildTakenTopicIds,
   cloneTopicWithFreshIds,
@@ -1000,9 +1001,17 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
     [dispatch, sheet.id, topicMap, deletedSet],
   );
 
+  const selectionAnnouncement = useMemo(
+    () => buildSelectionAnnouncement(selectedTopicIds, topicMap, layout, t.a11y),
+    [selectedTopicIds, topicMap, layout, t.a11y],
+  );
+
   return (
     <div
       ref={containerRef}
+      role="application"
+      aria-roledescription={t.a11y.canvasRoleDesc}
+      aria-label={t.a11y.canvasLabel(sheet.title, topicMap.size)}
       className="relative h-full w-full flex-1 overflow-hidden touch-none"
       style={{
         backgroundColor: hex8ToCss(palette.canvasBg),
@@ -1038,6 +1047,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
         />
 
         <NodeLayer
+          sheetTitle={sheet.title}
           layout={layout}
           topicMap={topicMap}
           assets={doc.assets}
@@ -1180,6 +1190,10 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
           )}
         </div>
       )}
+      {/* Screen-reader live region announcing focused/selected topic */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {selectionAnnouncement}
+      </div>
     </div>
   );
 };
