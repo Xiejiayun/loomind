@@ -41,6 +41,7 @@ export interface OutlinerViewProps {
   readOnly?: boolean;
   onSelectTopic?: (topicId: string) => void;
   onExpandFullscreen?: () => void;
+  onClose?: () => void;
 }
 
 interface FlatOutlineRow {
@@ -145,6 +146,7 @@ export const OutlinerView: React.FC<OutlinerViewProps> = ({
   readOnly = false,
   onSelectTopic,
   onExpandFullscreen,
+  onClose,
 }) => {
   const doc = useMindmapStore((s) => s.doc);
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
@@ -336,6 +338,19 @@ export const OutlinerView: React.FC<OutlinerViewProps> = ({
             }`}
           >
             <Maximize2 className="h-3 w-3" />
+          </button>
+        )}
+
+        {isSidebar && onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t.outliner.closeSidebarAria}
+            className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition ${
+              isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
+            }`}
+          >
+            <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
