@@ -48,6 +48,7 @@ interface AiChatPanelProps {
   layout: MindmapLayoutResult;
   queuedPrompt?: string;
   aiRuntime?: EditorAiRuntime;
+  embedded?: boolean;
   onConsumeQueuedPrompt?: () => void;
   onClose: () => void;
 }
@@ -67,6 +68,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   layout,
   queuedPrompt,
   aiRuntime,
+  embedded = false,
   onConsumeQueuedPrompt,
   onClose,
 }) => {
@@ -288,98 +290,97 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const subtleTextCls = isDark ? "text-[#9ca3b0]" : "text-[#525b6b]";
   const mutedTextCls = isDark ? "text-[#646b78]" : "text-[#8c95a4]";
 
-  return (
-    <aside
-      className={`fixed left-0 top-11 bottom-8 z-40 flex w-[340px] max-w-[88vw] shrink-0 flex-col border-r text-[12.5px] shadow-2xl md:static md:h-full md:shadow-none ${
-        isDark
-          ? "border-white/[0.075] bg-[#121419] text-[#f4f5f8]"
-          : "border-slate-900/[0.08] bg-[#fafbfc] text-[#111318]"
-      }`}
-      aria-label={t.aiChat.ariaLabel}
-    >
-      {/* Header */}
-      <div className={`flex h-10 shrink-0 items-center justify-between border-b px-3 ${borderCls}`}>
-        <div className="flex items-center gap-2">
-          <span
-            className={`inline-flex h-5 w-5 items-center justify-center rounded-[5px] border ${
-              isDark
-                ? "border-white/[0.1] bg-white/[0.06] text-[#d5d9e2]"
-                : "border-slate-900/[0.1] bg-slate-900/[0.05] text-[#2c3340]"
-            }`}
-          >
-            <Sparkles className="h-3 w-3" />
-          </span>
-          <span className="font-medium">{t.aiChat.title}</span>
+  const content = (
+    <>
+      {/* Header (shown when standalone, or compact new-chat bar when embedded in unified sidebar) */}
+      {!embedded && (
+        <div className={`flex h-10 shrink-0 items-center justify-between border-b px-3 ${borderCls}`}>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex h-5 w-5 items-center justify-center rounded-[5px] border ${
+                isDark
+                  ? "border-white/[0.1] bg-white/[0.06] text-[#d5d9e2]"
+                  : "border-slate-900/[0.1] bg-slate-900/[0.05] text-[#2c3340]"
+              }`}
+            >
+              <Sparkles className="h-3 w-3" />
+            </span>
+            <span className="font-medium">{t.aiChat.title}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              title={t.aiChat.newChat}
+              onClick={() => setMessages([])}
+              className={`inline-flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[11px] transition ${
+                isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
+              }`}
+            >
+              <Plus className="h-3 w-3" /> {t.aiChat.newChat}
+            </button>
+            <button
+              type="button"
+              aria-label={t.aiChat.closeAria}
+              onClick={onClose}
+              className={`inline-grid h-6 w-6 place-items-center rounded-[5px] transition ${
+                isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
+              }`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            title={t.aiChat.newChat}
-            onClick={() => setMessages([])}
-            className={`inline-flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[11px] transition ${
-              isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
-            }`}
-          >
-            <Plus className="h-3 w-3" /> {t.aiChat.newChat}
-          </button>
-          <button
-            type="button"
-            aria-label={t.aiChat.closeAria}
-            onClick={onClose}
-            className={`inline-grid h-6 w-6 place-items-center rounded-[5px] transition ${
-              isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-100"
-            }`}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Tier & Quota Status Strip */}
-      {aiRuntime && (
+      {(aiRuntime || (embedded && messages.length > 0)) && (
         <div
           className={`flex shrink-0 flex-wrap items-center justify-between gap-1.5 border-b px-3 py-1.5 text-[10.5px] ${borderCls} ${
             isDark ? "bg-white/[0.025]" : "bg-slate-900/[0.025]"
           }`}
         >
           <div className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${
-                aiRuntime.tier === "pro"
-                  ? isDark
-                    ? "bg-indigo-500/20 text-indigo-200"
-                    : "bg-indigo-100 text-indigo-800"
-                  : isDark
-                    ? "bg-emerald-500/15 text-emerald-300"
-                    : "bg-emerald-100 text-emerald-800"
-              }`}
-            >
-              {aiRuntime.tier === "pro" ? t.aiChat.tierProBadge : t.aiChat.tierFreeBadge}
-            </span>
-            {aiRuntime.config?.modelLabel && (
-              <span className={`truncate ${mutedTextCls}`} title={aiRuntime.config.modelLabel}>
-                {aiRuntime.config.modelLabel}
-              </span>
-            )}
-            {aiRuntime.config?.isMock && (
-              <span
-                className={`rounded border px-1 py-0.25 text-[9.5px] ${
-                  isDark
-                    ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                    : "border-amber-500/30 bg-amber-50 text-amber-800"
-                }`}
-              >
-                {t.aiChat.mockBadge}
-              </span>
+            {aiRuntime && (
+              <>
+                <span
+                  className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${
+                    aiRuntime.tier === "pro"
+                      ? isDark
+                        ? "bg-indigo-500/20 text-indigo-200"
+                        : "bg-indigo-100 text-indigo-800"
+                      : isDark
+                        ? "bg-emerald-500/15 text-emerald-300"
+                        : "bg-emerald-100 text-emerald-800"
+                  }`}
+                >
+                  {aiRuntime.tier === "pro" ? t.aiChat.tierProBadge : t.aiChat.tierFreeBadge}
+                </span>
+                {aiRuntime.config?.modelLabel && (
+                  <span className={`truncate ${mutedTextCls}`} title={aiRuntime.config.modelLabel}>
+                    {aiRuntime.config.modelLabel}
+                  </span>
+                )}
+                {aiRuntime.config?.isMock && (
+                  <span
+                    className={`rounded border px-1 py-0.25 text-[9.5px] ${
+                      isDark
+                        ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                        : "border-amber-500/30 bg-amber-50 text-amber-800"
+                    }`}
+                  >
+                    {t.aiChat.mockBadge}
+                  </span>
+                )}
+              </>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {aiRuntime.config && (
+            {aiRuntime?.config && (
               <span className={mutedTextCls}>
                 {t.aiChat.quotaLabel(aiRuntime.config.remainingToday, aiRuntime.config.dailyLimit)}
               </span>
             )}
-            {aiRuntime.tier === "free" && aiRuntime.onUpgradeToPro && (
+            {aiRuntime?.tier === "free" && aiRuntime.onUpgradeToPro && (
               <button
                 type="button"
                 onClick={aiRuntime.onUpgradeToPro}
@@ -388,6 +389,18 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 }`}
               >
                 {t.aiChat.upgradeCta}
+              </button>
+            )}
+            {embedded && messages.length > 0 && (
+              <button
+                type="button"
+                title={t.aiChat.newChat}
+                onClick={() => setMessages([])}
+                className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10.5px] transition ${
+                  isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-200/70"
+                }`}
+              >
+                <Plus className="h-3 w-3" /> {t.aiChat.newChat}
               </button>
             )}
           </div>
@@ -653,6 +666,23 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           </div>
         </div>
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{content}</div>;
+  }
+
+  return (
+    <aside
+      className={`fixed left-0 top-11 bottom-8 z-40 flex w-[340px] max-w-[88vw] shrink-0 flex-col border-r text-[12.5px] shadow-2xl md:static md:h-full md:shadow-none ${
+        isDark
+          ? "border-white/[0.075] bg-[#121419] text-[#f4f5f8]"
+          : "border-slate-900/[0.08] bg-[#fafbfc] text-[#111318]"
+      }`}
+      aria-label={t.aiChat.ariaLabel}
+    >
+      {content}
     </aside>
   );
 };

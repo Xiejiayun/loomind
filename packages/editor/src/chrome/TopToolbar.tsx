@@ -17,10 +17,11 @@ import { useEditorI18n } from "../i18n.js";
 interface TopToolbarProps {
   isDark: boolean;
   accountControl?: React.ReactNode;
-  aiOpen?: boolean;
+  leftPanel?: "none" | "ai" | "outline";
   readOnly?: boolean;
   onOpenTemplates: () => void;
   onToggleAi?: () => void;
+  onToggleOutlineSidebar?: () => void;
   onToggleFormat?: () => void;
   onOpenExport?: () => void;
 }
@@ -28,10 +29,11 @@ interface TopToolbarProps {
 export const TopToolbar: React.FC<TopToolbarProps> = ({
   isDark,
   accountControl,
-  aiOpen = false,
+  leftPanel = "none",
   readOnly = false,
   onOpenTemplates,
   onToggleAi,
+  onToggleOutlineSidebar,
   onToggleFormat,
   onOpenExport,
 }) => {
@@ -84,8 +86,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           : "border-slate-900/[0.08] bg-[#f7f8fa] text-[#111318]"
       }`}
     >
-      {/* Left: Account / Navigation + Left AI Chat Toggle */}
-      <div className="flex min-w-0 items-center gap-2">
+      {/* Left: Account / Navigation + Left AI Chat / Outline Sidebar Toggles */}
+      <div className="flex min-w-0 items-center gap-1.5">
         {accountControl}
         {onToggleAi && !readOnly && (
           <button
@@ -93,7 +95,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             onClick={onToggleAi}
             title={t.toolbar.toggleAiTitle}
             className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
-              aiOpen
+              leftPanel === "ai"
                 ? isDark
                   ? "border-white/[0.14] bg-white/[0.1] text-[#f4f5f8]"
                   : "border-slate-900/[0.14] bg-slate-900/[0.08] text-[#111318]"
@@ -102,6 +104,23 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           >
             <Sparkles className="h-3 w-3 opacity-80" />
             <span>{t.toolbar.chat}</span>
+          </button>
+        )}
+        {onToggleOutlineSidebar && viewMode === "canvas" && (
+          <button
+            type="button"
+            onClick={onToggleOutlineSidebar}
+            title={t.toolbar.toggleOutlineTitle}
+            className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
+              leftPanel === "outline"
+                ? isDark
+                  ? "border-white/[0.14] bg-white/[0.1] text-[#f4f5f8]"
+                  : "border-slate-900/[0.14] bg-slate-900/[0.08] text-[#111318]"
+                : borderBtnCls
+            }`}
+          >
+            <ListTree className="h-3 w-3 opacity-80" />
+            <span className="hidden sm:inline">{t.toolbar.outlineSidebar}</span>
           </button>
         )}
       </div>
@@ -208,7 +227,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           </button>
         )}
 
-        {!readOnly && (
+        {!readOnly && viewMode === "canvas" && (
           <button
             type="button"
             onClick={() => (onToggleFormat ? onToggleFormat() : setFormatPanelOpen(!formatPanelOpen))}
