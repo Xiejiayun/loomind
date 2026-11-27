@@ -16,6 +16,7 @@ import { MARKER_BY_ID, STICKER_BY_ID } from "../chrome/markers-catalog.js";
 import { useEditorI18n } from "../i18n.js";
 import { buildTopicAriaLabel } from "./a11y.js";
 import { EquationView } from "./EquationView.js";
+import { computeHoverOverlayRadius, computeSelectionOverlay } from "./selection-visual.js";
 import { TopicEditor } from "./TopicEditor.js";
 
 const MARKER_MAP: Record<string, { label: string; bg: string; fg: string }> = {
@@ -84,6 +85,7 @@ function renderRichText(doc: RichTextDoc, nowrap: boolean): React.ReactNode {
 export interface TopicCardProps {
   topic: MindmapTopic;
   layoutNode: LayoutNode;
+  isDarkCanvas?: boolean;
   previewWidth?: number;
   selected: boolean;
   remotePeer?: PeerPresence;
@@ -108,6 +110,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
   ({
     topic,
     layoutNode,
+    isDarkCanvas = false,
     previewWidth,
     selected,
     remotePeer,
@@ -206,6 +209,15 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
 
     const centerAlign = !layoutNode.underlineMode && !isTransparentFill;
     const ariaLabel = buildTopicAriaLabel(topic, layoutNode, t.a11y);
+    const selectionOverlay = computeSelectionOverlay({
+      layoutNode,
+      selected,
+      editing,
+      isDarkCanvas,
+      searchHighlight,
+      remotePeer,
+    });
+    const hoverRadius = computeHoverOverlayRadius(layoutNode);
 
     return (
       <div
@@ -305,25 +317,39 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
 
         {/* Main Topic Card */}
         <div
-          className={`relative box-border flex flex-col justify-center ${
-            searchHighlight === "active"
-              ? "rounded-md ring-2 ring-amber-400 ring-offset-2"
-              : searchHighlight === "match"
-                ? "rounded-md ring-2 ring-amber-400/70"
-                : selected
-                  ? layoutNode.underlineMode
-                    ? "rounded-md ring-2 ring-blue-500/80 ring-offset-0"
-                    : "ring-2 ring-blue-500 ring-offset-2"
-                  : "hover:ring-1 hover:ring-blue-300/70"
-          }`}
+          className="relative box-border flex flex-col justify-center"
           style={{
             ...cardStyle,
-            outline: !selected && remotePeer ? `2px solid ${hex8ToCss(remotePeer.color)}` : undefined,
-            outlineOffset: !selected && remotePeer ? 2 : undefined,
             padding: `${layoutNode.paddingY + padExtraY}px ${layoutNode.paddingX + padExtraX}px`,
             alignItems: centerAlign ? "center" : undefined,
           }}
         >
+          {/* Dedicated Selection / Search / Collaborator Highlight Ring (immune to card boxShadow & borderRadius) */}
+          {selectionOverlay ? (
+            <div
+              data-selection-ring={selectionOverlay.kind}
+              aria-hidden="true"
+              className="pointer-events-none absolute z-20 transition-all duration-150"
+              style={{
+                inset: selectionOverlay.inset,
+                borderRadius: selectionOverlay.borderRadius,
+                border: selectionOverlay.border,
+                boxShadow: selectionOverlay.boxShadow,
+                backgroundColor: selectionOverlay.backgroundColor,
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -inset-[2px] z-20 opacity-0 transition-opacity duration-120 group-hover:opacity-100"
+              style={{
+                borderRadius: hoverRadius,
+                border: isDarkCanvas
+                  ? "1.5px solid rgba(147, 197, 253, 0.55)"
+                  : "1.5px solid rgba(59, 130, 246, 0.45)",
+              }}
+            />
+          )}
           {/* Crisp SVG vector background for Diamond / Hexagon / Cloud */}
           {isSvgShape && (
             <svg

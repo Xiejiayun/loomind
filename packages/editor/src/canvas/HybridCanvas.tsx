@@ -1048,6 +1048,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
 
         <NodeLayer
           sheetTitle={sheet.title}
+          isDarkCanvas={palette.isDark}
           layout={layout}
           topicMap={topicMap}
           assets={doc.assets}
