@@ -134,7 +134,11 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
   }, [owner, map.id, map.workspaceId, map.access]);
 
   const edit = useCallback((document: MindmapDocument) => {
-    workspace.current?.edit(document);
+    if (collabRef.current?.isApplyingRemote()) {
+      workspace.current?.acceptRemoteDocument(document);
+    } else {
+      workspace.current?.edit(document);
+    }
     onRename(map.id, mapTitle(document));
   }, [map.id, onRename]);
 
@@ -224,6 +228,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
           onSessionChange={(next) => { changeSession(next); if (!next.user) navigate("/", true); }}
           sync={sync}
           onSync={(useCloud) => void workspace.current?.sync(useCloud)}
+          onKeepLocal={() => void workspace.current?.resolveConflictKeepLocal()}
           onLogin={() => navigate("/login")}
           onSaveAsNew={() => void workspace.current?.saveAsNewMap().then((newId) => { if (newId) navigate(`/app/mindmaps/${newId}`); })}
           onExportBackup={() => downloadJson(`loomind-backup-${map.id}.json`, workspace.current?.exportCurrentJson() ?? null)}
