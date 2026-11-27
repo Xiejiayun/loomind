@@ -76,6 +76,16 @@ export function App() {
   return <div className="lm-theme" data-theme={theme}><NotFound to="/" /></div>;
 }
 
+function PublicAtmosphere({ showRails = false }: { showRails?: boolean }) {
+  return <>
+    <div className="lm-public-atmosphere" aria-hidden="true">
+      <div className="lm-ambient-glow" />
+      <div className="lm-public-dotgrid" />
+    </div>
+    {showRails && <div className="lm-public-rails" aria-hidden="true" />}
+  </>;
+}
+
 function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
   const { t, locale } = useI18n();
   const [activePreviewNode, setActivePreviewNode] = useState<"leftTop" | "leftBottom" | "rightTop" | "rightBottom" | null>(null);
@@ -84,9 +94,9 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
     setActivePreviewNode((cur) => (cur === key ? null : key));
   };
   return <div className="lm-public">
-    <div className="lm-ambient-glow" aria-hidden="true" />
+    <PublicAtmosphere showRails />
     <header className="lm-site-header">
-      <div className="lm-container lm-site-header-inner">
+      <div className="lm-header-wide lm-site-header-inner">
         <Brand to="/"/>
         <nav aria-label={t.landing.navAria}>
           <AppLink href="/try">{t.landing.tryFreeCta}</AppLink>
@@ -96,7 +106,7 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         </nav>
       </div>
     </header>
-    <main>
+    <main className="lm-public-main">
       <section className="lm-hero lm-container">
         <div className="lm-hero-pill"><span className="lm-live-dot"/>{t.landing.heroPill}</div>
         <h1>{t.landing.heroTitleLine1}{locale === "en" ? " " : ""}<span>{t.landing.heroTitleLine2}</span></h1>
@@ -108,7 +118,7 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         </div>
       </section>
 
-      <section className="lm-preview lm-container" aria-label={t.landing.previewAria}>
+      <section className="lm-preview lm-preview-wide" aria-label={t.landing.previewAria}>
         <div className="lm-preview-bar">
           <div className="lm-preview-bar-left">
             <LoomindMark size={18}/>
@@ -174,33 +184,37 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         </div>
       </section>
 
-      <section id="features" className="lm-features lm-container">
-        <div className="lm-section-heading">
-          <span className="lm-eyebrow">{t.landing.featuresEyebrow}</span>
-          <h2>{t.landing.featuresTitleLine1}<br/>{t.landing.featuresTitleLine2}</h2>
-        </div>
-        <div className="lm-feature-grid">
-          {t.landing.features.map((feat, idx) => {
-            const Icon = featureIcons[idx] ?? Sparkles;
-            return (
-              <article key={feat.num}>
-                <span className="lm-feature-number">{feat.num}</span>
-                <Icon size={18}/>
-                <h3>{feat.title}</h3>
-                <p>{feat.desc}</p>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+      <div className="lm-band">
+        <section id="features" className="lm-features lm-container lm-framed-section">
+          <div className="lm-section-heading">
+            <span className="lm-eyebrow">{t.landing.featuresEyebrow}</span>
+            <h2>{t.landing.featuresTitleLine1}<br/>{t.landing.featuresTitleLine2}</h2>
+          </div>
+          <div className="lm-feature-grid">
+            {t.landing.features.map((feat, idx) => {
+              const Icon = featureIcons[idx] ?? Sparkles;
+              return (
+                <article key={feat.num}>
+                  <span className="lm-feature-number">{feat.num}</span>
+                  <Icon size={18}/>
+                  <h3>{feat.title}</h3>
+                  <p>{feat.desc}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
 
-      <section className="lm-closing lm-container">
-        <div>
-          <h2>{t.landing.closingTitle}</h2>
-          <p className="lm-closing-sub">{t.landing.closingSub}</p>
-        </div>
-        <AppLink href="/login" className="lm-primary-button">{t.landing.closingCta} <ArrowRight size={15}/></AppLink>
-      </section>
+      <div className="lm-band">
+        <section className="lm-closing lm-container lm-framed-section">
+          <div>
+            <h2>{t.landing.closingTitle}</h2>
+            <p className="lm-closing-sub">{t.landing.closingSub}</p>
+          </div>
+          <AppLink href="/login" className="lm-primary-button">{t.landing.closingCta} <ArrowRight size={15}/></AppLink>
+        </section>
+      </div>
     </main>
   </div>;
 }
@@ -208,13 +222,14 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
 function LoginPage({ theme, toggle, next, changeSession }: { theme: UiTheme; toggle: () => void; next: string; changeSession: (session: Session) => void }) {
   const { t } = useI18n();
   return <div className="lm-public lm-login-page">
+    <PublicAtmosphere />
     <header className="lm-site-header">
-      <div className="lm-container lm-site-header-inner">
+      <div className="lm-header-wide lm-site-header-inner">
         <Brand to="/"/>
         <div className="lm-header-actions"><AppLink href="/">{t.login.backHome}</AppLink><LanguageToggle/><ThemeToggle theme={theme} toggle={toggle}/></div>
       </div>
     </header>
-    <main className="lm-login-main"><div className="lm-login-card"><div className="lm-login-symbol"><LoomindMark size={38}/></div>
+    <main className="lm-login-main lm-public-main"><div className="lm-login-card"><div className="lm-login-symbol"><LoomindMark size={38}/></div>
       <p className="lm-eyebrow">LOOMIND</p><h1>{t.login.title}</h1><p className="lm-login-intro">{t.login.intro}</p>
       <LoginForm theme={theme} onSessionChange={changeSession} onSuccess={() => navigate(next, true)}/>
     </div></main>
@@ -243,13 +258,14 @@ function InvitePage({ token, session, theme, toggle }: { token: string; session:
     finally { setBusy(false); }
   }
   return <div className="lm-public lm-login-page">
+    <PublicAtmosphere />
     <header className="lm-site-header">
-      <div className="lm-container lm-site-header-inner">
+      <div className="lm-header-wide lm-site-header-inner">
         <Brand to={session.user ? "/app" : "/"}/>
         <div className="lm-header-actions"><LanguageToggle/><ThemeToggle theme={theme} toggle={toggle}/></div>
       </div>
     </header>
-    <main className="lm-login-main"><div className="lm-login-card lm-invite-card"><div className="lm-login-symbol"><Boxes size={22}/></div><p className="lm-eyebrow">{t.invite.eyebrow}</p>
+    <main className="lm-login-main lm-public-main"><div className="lm-login-card lm-invite-card"><div className="lm-login-symbol"><Boxes size={22}/></div><p className="lm-eyebrow">{t.invite.eyebrow}</p>
       <h1>{invite ? (invite.type === "workspace" ? t.invite.joinWorkspace : t.invite.joinMap) : t.invite.defaultTitle}</h1>
       {invite && <div className="lm-invite-detail"><strong>{invite.name}</strong><span>{invite.role === "editor" ? t.common.canEdit : t.common.canView} · {t.invite.validSevenDays}</span></div>}
       {error && <p className="lm-form-error" role="alert">{error}</p>}
