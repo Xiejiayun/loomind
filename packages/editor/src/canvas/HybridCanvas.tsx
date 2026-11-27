@@ -778,9 +778,9 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       style={{
         backgroundColor: hex8ToCss(palette.canvasBg),
         backgroundImage: palette.isDark
-          ? "radial-gradient(rgba(148,163,184,0.14) 1px, transparent 1px)"
+          ? "radial-gradient(ellipse 65% 55% at 50% 45%, rgba(122,162,247,0.06), transparent 72%), radial-gradient(rgba(148,163,184,0.13) 1px, transparent 1px)"
           : "radial-gradient(rgba(15,23,42,0.08) 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
+        backgroundSize: palette.isDark ? "100% 100%, 24px 24px" : "24px 24px",
       }}
       onPointerDown={handleCanvasPointerDown}
       onClick={() => {

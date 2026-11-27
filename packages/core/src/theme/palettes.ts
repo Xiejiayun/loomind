@@ -3,10 +3,18 @@ import type { PaletteSpec } from "./tokens.js";
 
 export const PALETTES: Record<PaletteId, PaletteSpec> = {
   workspace: {
-    id: "workspace", name: "工作区", isDark: false, canvasBg: "#F8F9FBFF",
-    rootFill: "#FFFFFFFF", rootText: "#17191FFF", rootStroke: "#AEB5BDFF",
-    branches: ["#64748BFF", "#566778FF", "#73808EFF"], cardBg: "#FFFFFFFF",
-    cardBorder: "#D4D8DFFF", textPrimary: "#17191FFF", textMuted: "#5D6571FF",
+    id: "workspace",
+    name: "工作区",
+    isDark: false,
+    canvasBg: "#F7F8FAFF",
+    rootFill: "#151923FF",
+    rootText: "#FFFFFFFF",
+    rootStroke: "#2A3244FF",
+    branches: ["#3B6CE8FF", "#0F9D76FF", "#C87D20FF", "#7C52D8FF", "#D95555FF", "#0284C7FF"],
+    cardBg: "#FFFFFFFF",
+    cardBorder: "#D8DEE9FF",
+    textPrimary: "#111622FF",
+    textMuted: "#5E697BFF",
   },
   "xmind-rainbow": {
     id: "xmind-rainbow",
@@ -154,9 +162,17 @@ export const PALETTES: Record<PaletteId, PaletteSpec> = {
 export const PALETTE_LIST: PaletteSpec[] = Object.values(PALETTES);
 
 const darkWorkspace: PaletteSpec = {
-  ...PALETTES.workspace, isDark: true, canvasBg: "#0D0F13FF", rootFill: "#20242CFF",
-  rootText: "#F2F3F5FF", rootStroke: "#555C69FF", branches: ["#ACB8C6FF", "#899AAFFF", "#B5B9C3FF"],
-  cardBg: "#191C22FF", cardBorder: "#484D58FF", textPrimary: "#F2F3F5FF", textMuted: "#A0A4ADFF",
+  ...PALETTES.workspace,
+  isDark: true,
+  canvasBg: "#0E1015FF",
+  rootFill: "#1E2433FF",
+  rootText: "#F8FAFCFF",
+  rootStroke: "#5E6E91FF",
+  branches: ["#7AA2F7FF", "#4FD1A5FF", "#E5A95CFF", "#B48EADFF", "#F28B82FF", "#64B5F6FF"],
+  cardBg: "#161A22FF",
+  cardBorder: "#2E3545FF",
+  textPrimary: "#EEF2F7FF",
+  textMuted: "#8F9BB0FF",
 };
 
 export function getPalette(id: PaletteId, appearance?: "dark" | "light"): PaletteSpec {

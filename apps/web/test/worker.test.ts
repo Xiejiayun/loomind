@@ -324,6 +324,20 @@ describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
     expect(run).toHaveBeenCalledWith(model, expect.objectContaining({ stream: true }));
     expect(stream).toContain(`event: commands\ndata: ${JSON.stringify({ ops })}`);
     expect(stream).toContain("event: done");
+
+    // Tolerates leading/trailing prose wrapped around structured JSON (e.g. Gemma-4)
+    const proseRun = vi.fn(async () =>
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: `Sure! Here is the JSON:\n${JSON.stringify({ ops, message: "Expanded 4 subtopics" })}\nHope this helps.` } }] })}\n\ndata: [DONE]\n\n`,
+      ).body,
+    );
+    const proseRes = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.55" },
+      body: JSON.stringify({ tier: "free", intent: "expand", prompt: "Expand 4 subtopics", targetTopicId: "root", locale: "en" }),
+    }), { ...env, AI: { run: proseRun } as unknown as Ai, AI_ALLOW_MOCK: "false" });
+    const proseStream = await proseRes.text();
+    expect(proseStream).toContain(`event: commands\ndata: ${JSON.stringify({ ops })}`);
+    expect(proseStream).not.toContain("event: error");
   });
 
   it("reports free config for guests and enforces auth + origin + quota + streaming", async () => {
