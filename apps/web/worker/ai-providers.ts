@@ -9,6 +9,13 @@ export type WorkerAiIntent =
   | "restyle"
   | "chat";
 
+export interface WorkerAiHistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+  planSummary?: string;
+  resultSummary?: string;
+}
+
 export interface WorkerAiRequest {
   tier: WorkerAiTier;
   intent: WorkerAiIntent;
@@ -23,6 +30,7 @@ export interface WorkerAiRequest {
     outline?: unknown;
     truncated?: boolean;
   };
+  history?: WorkerAiHistoryTurn[];
 }
 
 export interface ProviderMeta {
@@ -70,9 +78,9 @@ function buildSystemPrompt(req: WorkerAiRequest): string {
     return [
       "You are Loomind AI, an expert mind-mapping architect.",
       langRule,
-      "Output ONLY a single valid JSON object (no markdown fences, no commentary) matching this exact shape:",
-      '{"title":"string","recommendedStructure":"mindmap|logic|org|brace|timeline|fishbone|treeTable","recommendedPalette":"xmind-rainbow|aurora|warm-paper|midnight-neon|forest-calm","root":{"title":"string","subtitle":"optional string","children":[{"title":"string","labels":["optional short tag"],"children":[{"title":"string","task":"optional todo"}]}]}}',
-      "Create 4 to 5 well-organized top-level branches, each with 2 to 4 concrete child nodes. Keep every title concise (<= 40 chars). Never exceed 40 total nodes or depth 4.",
+      "Output ONLY a single valid JSON object (no markdown fences, no commentary) with keys in this exact order so the plan streams first:",
+      '{"plan":{"goal":"concise goal","approach":"brief structuring rationale","steps":["step 1","step 2","step 3"]},"title":"string","recommendedStructure":"mindmap|logic|org|brace|timeline|fishbone|treeTable","recommendedPalette":"xmind-rainbow|aurora|warm-paper|midnight-neon|forest-calm","root":{"title":"string","subtitle":"optional string","children":[{"title":"string","labels":["optional short tag"],"children":[{"title":"string","task":"optional todo"}]}]}}',
+      "Keep plan.steps to 3-5 concrete steps. Create 4 to 5 well-organized top-level branches, each with 2 to 4 concrete child nodes. Keep every title concise (<= 40 chars). Never exceed 40 total nodes or depth 4.",
     ].join("\n");
   }
 
@@ -80,8 +88,8 @@ function buildSystemPrompt(req: WorkerAiRequest): string {
     "You are Loomind AI, an expert mind-mapping co-creator.",
     langRule,
     `Target topic ID is "${req.targetTopicId}".`,
-    "Output ONLY a single valid JSON object (no markdown fences, no commentary) matching this shape:",
-    '{"message":"short user-facing explanation","summary":"short mutation summary","ops":[...]}',
+    "Output ONLY a single valid JSON object (no markdown fences, no commentary) with keys in this exact order so the plan streams first:",
+    '{"plan":{"goal":"concise goal","approach":"brief execution strategy","steps":["step 1","step 2"]},"message":"short user-facing explanation of the result","summary":"short mutation summary","ops":[...]}',
     "Allowed op shapes in ops array:",
     '- {"kind":"addChildren","targetTopicId":"<id>","items":[{"title":"...","subtitle":"optional","labels":["optional"],"task":"optional todo"}]}',
     '- {"kind":"setSummary","targetTopicId":"<id>","title":"...","note":"optional markdown"}',
@@ -97,11 +105,65 @@ function buildUserPrompt(req: WorkerAiRequest): string {
     `Intent: ${req.intent}`,
     `User request: ${req.prompt}`,
   ];
+  if (req.history && req.history.length > 0) {
+    const historyLines = req.history.slice(-6).map((turn) => {
+      const prefix = turn.role === "user" ? "User" : "Assistant";
+      const extras = [
+        turn.planSummary ? `plan=${turn.planSummary}` : "",
+        turn.resultSummary ? `result=${turn.resultSummary}` : "",
+      ].filter(Boolean);
+      return `${prefix}: ${turn.content}${extras.length ? ` (${extras.join("; ")})` : ""}`;
+    });
+    parts.push(`Recent conversation history:\n${historyLines.join("\n")}`);
+  }
   if (req.context?.outline) {
     const serialized = JSON.stringify(req.context.outline).slice(0, 10_000);
     parts.push(`Current mind map outline JSON: ${serialized}`);
   }
   return parts.join("\n\n");
+}
+
+function sanitizeWorkerPlan(raw: unknown): { goal: string; approach?: string; steps: string[] } | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  const goal = typeof obj.goal === "string" ? obj.goal.trim().slice(0, 220) : "";
+  const approach = typeof obj.approach === "string" && obj.approach.trim()
+    ? obj.approach.trim().slice(0, 280)
+    : undefined;
+  const steps = Array.isArray(obj.steps)
+    ? obj.steps
+        .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        .map((s) => s.trim().slice(0, 120))
+        .slice(0, 8)
+    : [];
+  if (!goal && steps.length === 0) return null;
+  return { goal: goal || steps[0] || "", ...(approach ? { approach } : {}), steps };
+}
+
+function synthesizeFallbackPlan(req: WorkerAiRequest, finalObj: Record<string, unknown>): { goal: string; approach?: string; steps: string[] } {
+  const isEn = req.locale === "en";
+  if (req.intent === "generate_map") {
+    const title = typeof finalObj.title === "string" && finalObj.title.trim() ? finalObj.title.trim() : req.prompt.slice(0, 60);
+    const root = finalObj.root as { children?: Array<{ title?: string }> } | undefined;
+    const branchSteps = (root?.children ?? [])
+      .map((c) => (typeof c?.title === "string" ? c.title.trim() : ""))
+      .filter(Boolean)
+      .slice(0, 5)
+      .map((t) => (isEn ? `Build branch "${t}"` : `构建分支「${t}」`));
+    return {
+      goal: isEn ? `Create structured mind map for "${title}"` : `围绕「${title}」构建结构化思维导图`,
+      approach: isEn
+        ? `Organize core themes into ${Math.max(1, branchSteps.length)} primary branches with actionable subtopics.`
+        : `按核心维度拆解为 ${Math.max(1, branchSteps.length)} 个一级分支并细化子节点。`,
+      steps: branchSteps.length > 0 ? branchSteps : [isEn ? "Build central topic and core branches" : "构建中心主题与核心分支"],
+    };
+  }
+  return {
+    goal: isEn ? `Execute "${req.intent}" for: ${req.prompt.slice(0, 80)}` : `执行「${req.prompt.slice(0, 60)}」`,
+    steps: isEn
+      ? ["Analyze selected topic context", "Generate structured canvas updates", "Apply and verify changes"]
+      : ["分析选中节点上下文", "生成结构化画布改动", "写入画布并校验结果"],
+  };
 }
 
 function extractBalancedJsonObjects(text: string): string[] {
@@ -227,6 +289,8 @@ async function consumeTextTokenStream(
   let accumulated = "";
   let lastPatchAt = 0;
   let lastPatchJson = "";
+  let lastPlanAt = 0;
+  let lastPlanJson = "";
   let emittedPatches = 0;
 
   emit("status", { stage: "streaming" });
@@ -235,11 +299,22 @@ async function consumeTextTokenStream(
     if (!delta) continue;
     accumulated += delta;
 
-    if (req.intent === "generate_map") {
-      const now = Date.now();
-      if (now - lastPatchAt >= 60) {
-        const partial = parsePartialJsonLoose(accumulated) as Record<string, unknown> | null;
-        if (partial && typeof partial === "object" && partial.root) {
+    const now = Date.now();
+    if (now - lastPlanAt >= 80 || (req.intent === "generate_map" && now - lastPatchAt >= 60)) {
+      const partial = parsePartialJsonLoose(accumulated) as Record<string, unknown> | null;
+      if (partial && typeof partial === "object") {
+        if (partial.plan && now - lastPlanAt >= 80) {
+          const cleanPlan = sanitizeWorkerPlan(partial.plan);
+          if (cleanPlan) {
+            const planStr = JSON.stringify(cleanPlan);
+            if (planStr !== lastPlanJson) {
+              lastPlanJson = planStr;
+              lastPlanAt = now;
+              emit("plan", cleanPlan);
+            }
+          }
+        }
+        if (req.intent === "generate_map" && partial.root && now - lastPatchAt >= 60) {
           const serialized = JSON.stringify(partial);
           if (serialized !== lastPatchJson) {
             lastPatchJson = serialized;
@@ -255,6 +330,12 @@ async function consumeTextTokenStream(
   const finalObj = parsePartialJsonLoose(accumulated) as Record<string, unknown> | null;
   if (!finalObj || typeof finalObj !== "object") {
     throw new Error(req.locale === "en" ? "Model returned invalid structured JSON." : "模型未返回有效的导图 JSON 结构。");
+  }
+
+  const finalPlan = sanitizeWorkerPlan(finalObj.plan) ?? synthesizeFallbackPlan(req, finalObj);
+  const finalPlanStr = JSON.stringify(finalPlan);
+  if (finalPlanStr !== lastPlanJson) {
+    emit("plan", finalPlan);
   }
 
   if (req.intent === "generate_map") {
@@ -601,6 +682,15 @@ export async function runMockAiStream(
       },
     };
 
+    emit("plan", {
+      goal: isEn ? `Structure "${topic}" into a multi-level mind map` : `围绕「${topic}」构建结构化思维导图`,
+      approach: isEn
+        ? "Decompose into 4 pillars covering goals, architecture, roadmap, and risks, then stream each branch."
+        : "按「目标定义 → 模块拆解 → 执行路线 → 风险指标」四个维度逐层展开并流式写入画布。",
+      steps: branches.map((b) => (isEn ? `Build branch "${b.title}"` : `展开分支「${b.title}」`)),
+    });
+    await delay(40);
+
     for (const branch of branches) {
       if (signal.aborted) return;
       const bNode = { title: branch.title, labels: branch.labels, children: [] as unknown[] };
@@ -729,6 +819,16 @@ export async function runMockAiStream(
       break;
     }
   }
+
+  emit("plan", {
+    goal: isEn ? `Apply "${req.intent}" to "${topic}"` : `针对「${topic}」执行 ${req.intent}`,
+    approach: isEn
+      ? "Inspect selected node context and apply structured canvas mutations in one undoable transaction."
+      : "结合当前节点上下文生成结构化改动，并合并为单次可撤销事务写入画布。",
+    steps: isEn
+      ? ["Analyze selected topic context", `Generate ${req.intent} operations`, "Write updates to canvas"]
+      : ["分析目标节点上下文", "生成结构化画布指令", "写入画布并汇总结果"],
+  });
 
   await delay(80);
   if (signal.aborted) return;

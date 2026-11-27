@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { ArrowRight, RotateCcw } from "lucide-react";
 import { richTextToPlainText, type MindmapDocument } from "@mindmap/core";
-import { MindmapEditor } from "@mindmap/editor";
+import { MindmapEditor, type AiChatMessage } from "@mindmap/editor";
 import { useWebAiRuntime } from "./ai.js";
 import type { Session } from "./auth/shared.js";
 import { useI18n } from "./i18n.js";
 import { navigate } from "./navigation.js";
 import { documentFromTopic } from "./outline.js";
-import { stageTryDocumentForImport } from "./try-handoff.js";
+import { stageTryChatForImport, stageTryDocumentForImport } from "./try-handoff.js";
 import { Brand, LanguageToggle, ThemeToggle, type UiTheme } from "./ui.js";
 
 const LEGACY_TRY_STORAGE_KEY = "loomind:try-playground:v1";
@@ -42,6 +42,7 @@ export function TryPlaygroundPage({
     createFreshTryDocument(initialRootTitleRef.current),
   );
   const latestDocRef = useRef<MindmapDocument>(initialDoc);
+  const latestAiMessagesRef = useRef<AiChatMessage[]>([]);
   const [hasContent, setHasContent] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const leavingIntentionallyRef = useRef(false);
@@ -70,6 +71,9 @@ export function TryPlaygroundPage({
   const handleSignInAndSave = useCallback(() => {
     leavingIntentionallyRef.current = true;
     const shouldImport = hasContent && stageTryDocumentForImport(latestDocRef.current);
+    if (shouldImport) {
+      stageTryChatForImport(latestAiMessagesRef.current);
+    }
     const target = shouldImport ? "/app?importTry=1" : "/app";
     navigate(session.user ? target : `/login?next=${encodeURIComponent(target)}`);
   }, [hasContent, session.user]);
@@ -86,6 +90,7 @@ export function TryPlaygroundPage({
     initialRootTitleRef.current = t.tryPage.defaultRootTitle;
     const fresh = createFreshTryDocument(initialRootTitleRef.current);
     latestDocRef.current = fresh;
+    latestAiMessagesRef.current = [];
     setHasContent(false);
     setInitialDoc(fresh);
     setDocKey((k) => k + 1);
@@ -138,6 +143,7 @@ export function TryPlaygroundPage({
           initialFormatPanelOpen={false}
           locale={locale}
           aiRuntime={freeAiRuntime}
+          onAiMessagesChange={(msgs) => { latestAiMessagesRef.current = msgs; }}
         />
       </div>
 

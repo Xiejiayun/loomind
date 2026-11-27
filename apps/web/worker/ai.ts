@@ -252,8 +252,26 @@ function parseStreamBody(raw: unknown): WorkerAiRequest {
     obj.context && typeof obj.context === "object" && !Array.isArray(obj.context)
       ? (obj.context as WorkerAiRequest["context"])
       : undefined;
+  const history = Array.isArray(obj.history)
+    ? obj.history
+        .filter((h): h is Record<string, unknown> => Boolean(h && typeof h === "object" && !Array.isArray(h)))
+        .slice(-6)
+        .map((h) => {
+          const role = h.role === "assistant" ? ("assistant" as const) : ("user" as const);
+          const content = typeof h.content === "string" ? h.content.trim().slice(0, 400) : "";
+          const planSummary = typeof h.planSummary === "string" ? h.planSummary.trim().slice(0, 220) : undefined;
+          const resultSummary = typeof h.resultSummary === "string" ? h.resultSummary.trim().slice(0, 220) : undefined;
+          return {
+            role,
+            content,
+            ...(planSummary ? { planSummary } : {}),
+            ...(resultSummary ? { resultSummary } : {}),
+          };
+        })
+        .filter((h) => h.content.length > 0)
+    : undefined;
 
-  return { tier, intent, prompt, locale, targetTopicId, context };
+  return { tier, intent, prompt, locale, targetTopicId, context, ...(history?.length ? { history } : {}) };
 }
 
 export async function handleAi(

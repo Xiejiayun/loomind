@@ -117,6 +117,31 @@ const zh = {
     trialExhaustedTitle: "体验次数已用完",
     trialExhaustedDesc: "登录即可保存当前导图至云端，并继续使用 AI 创作。",
     upgradeCta: "登录并保存导图",
+    clearConfirm: "确定清空当前导图的 AI 对话记录吗？清空后将同步移除云端与本机历史。",
+    readOnlyHint: "只读视图 · 可回看此导图的完整 AI 规划与执行历史",
+    emptyReadOnlyTitle: "暂无 AI 对话记录",
+    planHeading: "执行规划",
+    stepsHeading: "执行过程",
+    resultHeading: "最终结果",
+    runningSummary: (done: number, total: number) => `执行中 · 已完成 ${done}/${Math.max(1, total)} 步`,
+    doneSummary: (steps: number, added: number, updated: number, durationMs?: number) => {
+      const parts = [`已完成 ${steps} 步`];
+      if (added > 0) parts.push(`新增 ${added} 节点`);
+      else if (updated > 0) parts.push(`更新 ${updated} 处`);
+      if (durationMs && durationMs >= 100) parts.push(`${(durationMs / 1000).toFixed(1)}s`);
+      return parts.join(" · ");
+    },
+    stoppedSummary: (steps: number) => `已中止 · 已完成 ${steps} 步`,
+    errorSummary: (steps: number) => `执行异常 · 已完成 ${steps} 步`,
+    phaseLabels: {
+      analyze: "分析",
+      plan: "规划",
+      execute: "执行",
+      verify: "校验",
+    },
+    statsAdded: (n: number) => `+${n} 节点`,
+    statsUpdated: (n: number) => `更新 ${n} 处`,
+    statsLayout: (name: string) => `结构 ${name}`,
   },
   inlineAi: {
     currentNodeFallback: "当前节点",
@@ -507,6 +532,31 @@ const en: typeof zh = {
     trialExhaustedTitle: "Trial limit reached",
     trialExhaustedDesc: "Sign in to save this map to the cloud and keep creating with AI.",
     upgradeCta: "Sign in & save map",
+    clearConfirm: "Clear this mind map's AI conversation history? This removes both cloud and local history.",
+    readOnlyHint: "Read-only · Inspect the full AI planning and execution history for this map",
+    emptyReadOnlyTitle: "No AI conversation history yet",
+    planHeading: "Execution Plan",
+    stepsHeading: "Execution Steps",
+    resultHeading: "Outcome",
+    runningSummary: (done: number, total: number) => `Running · ${done}/${Math.max(1, total)} steps`,
+    doneSummary: (steps: number, added: number, updated: number, durationMs?: number) => {
+      const parts = [`${steps} ${steps === 1 ? "step" : "steps"}`];
+      if (added > 0) parts.push(`+${added} ${added === 1 ? "node" : "nodes"}`);
+      else if (updated > 0) parts.push(`${updated} updated`);
+      if (durationMs && durationMs >= 100) parts.push(`${(durationMs / 1000).toFixed(1)}s`);
+      return parts.join(" · ");
+    },
+    stoppedSummary: (steps: number) => `Stopped · ${steps} ${steps === 1 ? "step" : "steps"} completed`,
+    errorSummary: (steps: number) => `Failed · ${steps} ${steps === 1 ? "step" : "steps"} completed`,
+    phaseLabels: {
+      analyze: "Analyze",
+      plan: "Plan",
+      execute: "Execute",
+      verify: "Verify",
+    },
+    statsAdded: (n: number) => `+${n} ${n === 1 ? "node" : "nodes"}`,
+    statsUpdated: (n: number) => `${n} updated`,
+    statsLayout: (name: string) => `Layout: ${name}`,
   },
   inlineAi: {
     currentNodeFallback: "Current node",

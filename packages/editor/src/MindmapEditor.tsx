@@ -13,10 +13,11 @@ import {
   type SyncAdapter,
 } from "@mindmap/core";
 import { DomTextMeasurer } from "./canvas/DomMeasurer.js";
-import type { EditorAiRuntime } from "./ai-runtime.js";
+import type { AiChatMessage, AiChatPersistence, EditorAiRuntime } from "./ai-runtime.js";
 import { HybridCanvas } from "./canvas/HybridCanvas.js";
 import { Minimap } from "./canvas/Minimap.js";
-import { AiChatPanel } from "./chrome/AiChatPanel.js";
+import { AiChatPanel, type QueuedAiRequest } from "./chrome/AiChatPanel.js";
+import type { NodeAiActionKind } from "@mindmap/ai";
 import { CanvasDock } from "./chrome/CanvasDock.js";
 import { CommandK } from "./chrome/CommandK.js";
 import { ContextMenu } from "./chrome/ContextMenu.js";
@@ -46,13 +47,36 @@ export interface MindmapEditorProps {
   readOnly?: boolean;
   locale?: Locale;
   aiRuntime?: EditorAiRuntime;
+  chatPersistence?: AiChatPersistence;
+  onAiMessagesChange?: (messages: AiChatMessage[]) => void;
   remotePeers?: PeerPresence[];
   onSelectionChange?: (topicIds: string[]) => void;
 }
 
 const MindmapEditorInner: React.FC<
-  Pick<MindmapEditorProps, "accountControl" | "chromeTheme" | "initialAiPrompt" | "initialRightPanel" | "readOnly" | "aiRuntime" | "remotePeers">
-> = ({ accountControl, chromeTheme, initialAiPrompt, initialRightPanel, readOnly = false, aiRuntime, remotePeers }) => {
+  Pick<
+    MindmapEditorProps,
+    | "accountControl"
+    | "chromeTheme"
+    | "initialAiPrompt"
+    | "initialRightPanel"
+    | "readOnly"
+    | "aiRuntime"
+    | "chatPersistence"
+    | "onAiMessagesChange"
+    | "remotePeers"
+  >
+> = ({
+  accountControl,
+  chromeTheme,
+  initialAiPrompt,
+  initialRightPanel,
+  readOnly = false,
+  aiRuntime,
+  chatPersistence,
+  onAiMessagesChange,
+  remotePeers,
+}) => {
   const doc = useMindmapStore((s) => s.doc);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
   const viewMode = useMindmapStore((s) => s.viewMode);
@@ -78,14 +102,19 @@ const MindmapEditorInner: React.FC<
     if (initialAiPrompt || initialRightPanel === "ai") return "ai";
     return typeof window === "undefined" ? "ai" : window.innerWidth >= 900 ? "ai" : "none";
   });
-  const [queuedAiPrompt, setQueuedAiPrompt] = useState<string | undefined>(initialAiPrompt);
+  const [queuedAiRequest, setQueuedAiRequest] = useState<QueuedAiRequest | undefined>(() =>
+    initialAiPrompt ? { prompt: initialAiPrompt } : undefined,
+  );
   const [inlineAiOpen, setInlineAiOpen] = useState(false);
+  const canOpenAiPanel = !readOnly || Boolean(chatPersistence);
 
   // Sync initial panels & mobile collapse
   useEffect(() => {
     if (readOnly) {
       setFormatPanelOpen(false);
-      setLeftPanel((prev) => (prev === "ai" ? "none" : prev));
+      if (!chatPersistence) {
+        setLeftPanel((prev) => (prev === "ai" ? "none" : prev));
+      }
       return;
     }
     if (initialAiPrompt || initialRightPanel === "ai") {
@@ -93,7 +122,7 @@ const MindmapEditorInner: React.FC<
     } else if (typeof window !== "undefined" && window.innerWidth < 768) {
       setFormatPanelOpen(false);
     }
-  }, [initialAiPrompt, initialRightPanel, readOnly, setFormatPanelOpen]);
+  }, [initialAiPrompt, initialRightPanel, readOnly, chatPersistence, setFormatPanelOpen]);
 
   // Auto-collapse irrelevant right Format panel & duplicate left outline in fullscreen Outline mode
   useEffect(() => {
@@ -148,7 +177,7 @@ const MindmapEditorInner: React.FC<
   );
 
   const toggleAiPanel = () => {
-    if (readOnly) return;
+    if (!canOpenAiPanel) return;
     setLeftPanel((prev) => (prev === "ai" ? "none" : "ai"));
   };
 
@@ -166,10 +195,10 @@ const MindmapEditorInner: React.FC<
     setFormatPanelOpen(!formatPanelOpen);
   };
 
-  const openAiWithPrompt = (prompt?: string) => {
+  const openAiWithPrompt = (prompt?: string, action?: NodeAiActionKind) => {
     if (readOnly) return;
     setLeftPanel("ai");
-    if (prompt) setQueuedAiPrompt(prompt);
+    if (prompt) setQueuedAiRequest({ prompt, action });
   };
 
   const focusTopicOnCanvas = useCallback(
@@ -222,7 +251,7 @@ const MindmapEditorInner: React.FC<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zenMode, formatPanelOpen, readOnly, viewMode]);
 
-  const showLeftSidebar = !zenMode && leftPanel !== "none" && !(leftPanel === "ai" && readOnly);
+  const showLeftSidebar = !zenMode && leftPanel !== "none" && !(leftPanel === "ai" && !canOpenAiPanel);
 
   return (
     <div
@@ -235,7 +264,7 @@ const MindmapEditorInner: React.FC<
         accountControl={accountControl}
         leftPanel={showLeftSidebar ? leftPanel : "none"}
         readOnly={readOnly}
-        onToggleAi={toggleAiPanel}
+        onToggleAi={canOpenAiPanel ? toggleAiPanel : undefined}
         onToggleOutlineSidebar={toggleOutlineSidebar}
         onToggleFormat={toggleFormatPanel}
         onOpenExport={() => setExportOpen(true)}
@@ -251,15 +280,18 @@ const MindmapEditorInner: React.FC<
             }`}
             aria-label={leftPanel === "ai" ? t.aiChat.ariaLabel : t.outliner.title}
           >
-            {leftPanel === "ai" && !readOnly ? (
+            {leftPanel === "ai" && canOpenAiPanel ? (
               <AiChatPanel
                 open
                 embedded
                 isDark={isDark}
                 layout={layout}
-                queuedPrompt={queuedAiPrompt}
+                queuedRequest={queuedAiRequest}
                 aiRuntime={aiRuntime}
-                onConsumeQueuedPrompt={() => setQueuedAiPrompt(undefined)}
+                chatPersistence={chatPersistence}
+                readOnly={readOnly}
+                onConsumeQueuedPrompt={() => setQueuedAiRequest(undefined)}
+                onMessagesChange={onAiMessagesChange}
                 onClose={() => setLeftPanel("none")}
               />
             ) : (
@@ -319,7 +351,7 @@ const MindmapEditorInner: React.FC<
                     isDark={isDark}
                     aiRuntime={aiRuntime}
                     onClose={() => setInlineAiOpen(false)}
-                    onContinueInPanel={(p) => openAiWithPrompt(p)}
+                    onContinueInPanel={(p, action) => openAiWithPrompt(p, action)}
                   />
                 </>
               )}
@@ -383,6 +415,8 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
   readOnly = false,
   locale,
   aiRuntime,
+  chatPersistence,
+  onAiMessagesChange,
   remotePeers,
   onSelectionChange,
 }) => {
@@ -428,6 +462,8 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
         initialRightPanel={initialRightPanel}
         readOnly={readOnly}
         aiRuntime={aiRuntime}
+        chatPersistence={chatPersistence}
+        onAiMessagesChange={onAiMessagesChange}
         remotePeers={remotePeers}
       />
     </MindmapStoreContext.Provider>
