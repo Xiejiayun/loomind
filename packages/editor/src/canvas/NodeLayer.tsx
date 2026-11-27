@@ -83,7 +83,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
               key={id}
               className="mindmap-node-motion pointer-events-auto absolute"
               style={{
-                transform: `translate3d(${layoutNode.box.x}px, ${layoutNode.box.y}px, 0)`,
+                transform: `translate(${layoutNode.box.x}px, ${layoutNode.box.y}px)`,
                 zIndex: isEditing ? 40 : isSelected ? 20 : 10,
               }}
             >
