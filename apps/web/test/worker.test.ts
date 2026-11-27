@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { getPlatformProxy, type PlatformProxy } from "wrangler";
+import { getPlatformProxy, unstable_readConfig, type PlatformProxy } from "wrangler";
 import { getTemplate } from "@mindmap/core";
 import worker from "../worker/auth.js";
 import { DRAFT_LIMIT, OWNER_HEADER } from "../src/drafts/shared.js";
@@ -307,6 +307,25 @@ describe("mindmaps API (local workerd D1)", () => {
 });
 
 describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
+  it("uses the deployed Workers AI model by default for guest node expansion", async () => {
+    const config = unstable_readConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) });
+    const model = "@cf/google/gemma-4-26b-a4b-it";
+    expect(config.vars.AI_FREE_MODEL).toBe(model);
+
+    const ops = [{ kind: "addChildren", targetTopicId: "root", items: ["选址", "馆藏", "服务", "活动"].map(title => ({ title })) }];
+    const chunk = { choices: [{ delta: { content: JSON.stringify({ ops }) } }] };
+    const run = vi.fn(async () => new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`).body);
+    const response = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST", headers: { Origin: origin, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "free", intent: "expand", prompt: "为当前节点扩展 4 个关键子主题", targetTopicId: "root" }),
+    }), { ...env, AI: { run } as unknown as Ai, AI_ALLOW_MOCK: "false" });
+
+    const stream = await response.text();
+    expect(run).toHaveBeenCalledWith(model, expect.objectContaining({ stream: true }));
+    expect(stream).toContain(`event: commands\ndata: ${JSON.stringify({ ops })}`);
+    expect(stream).toContain("event: done");
+  });
+
   it("reports free config for guests and enforces auth + origin + quota + streaming", async () => {
     const guestFreeCfg = await (await request("ai/config?tier=free")).json() as { tier: string; available: boolean; isMock: boolean; requiresLogin: boolean };
     expect(guestFreeCfg).toMatchObject({ tier: "free", available: true, isMock: true, requiresLogin: false });

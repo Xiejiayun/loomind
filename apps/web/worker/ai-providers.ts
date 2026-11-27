@@ -39,7 +39,7 @@ export interface StreamEmit {
   (event: string, data: unknown): void;
 }
 
-const DEFAULT_FREE_MODEL = "@cf/qwen/qwen2.5-7b-instruct";
+const DEFAULT_FREE_MODEL = "@cf/google/gemma-4-26b-a4b-it" satisfies keyof AiModels;
 const DEFAULT_PRO_MODEL = "gpt-6.2-sol";
 
 export function resolveFreeModel(env: Env): string {
