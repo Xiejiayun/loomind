@@ -75,12 +75,35 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const drawerClose = useRef<HTMLButtonElement>(null);
 
   const editorMatch = /^\/app\/mindmaps\/([^/]+)$/.exec(route.pathname);
   const mapId = editorMatch?.[1] ?? null;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(Boolean(mapId));
+
+  const toggleSidebar = useCallback(() => {
+    if (window.matchMedia("(max-width: 800px)").matches) setMobileOpen((open) => !open);
+    else setSidebarCollapsed((collapsed) => !collapsed);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const opener = document.querySelector<HTMLButtonElement>('.lm-app-column [aria-controls="lm-workspace-sidebar"]');
+    const drawer = drawerClose.current?.closest("aside");
+    drawerClose.current?.focus();
+    const mobile = window.matchMedia("(max-width: 800px)");
+    const closeOnDesktop = () => { if (!mobile.matches) setMobileOpen(false); };
+    mobile.addEventListener("change", closeOnDesktop);
+    return () => {
+      mobile.removeEventListener("change", closeOnDesktop);
+      const focused = document.activeElement;
+      if (mobile.matches && opener?.isConnected && (focused === document.body || drawer?.contains(focused))) {
+        opener.focus({ preventScroll: true });
+      }
+    };
+  }, [mobileOpen]);
 
   // Auto-collapse sidebar when entering editor to maximize canvas; restore on workspace pages
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(Boolean(mapId));
   const prevInEditor = useRef(Boolean(mapId));
   useEffect(() => {
     const inEditor = Boolean(mapId);
@@ -164,7 +187,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
         setCmdkOpen((open) => !open);
       } else if (event.key === "[" && !event.ctrlKey && !event.metaKey && !event.altKey && !inInput) {
         event.preventDefault();
-        setSidebarCollapsed((v) => !v);
+        toggleSidebar();
       } else if (event.key.toLowerCase() === "n" && !event.ctrlKey && !event.metaKey && !event.altKey && !inInput && !mapId) {
         event.preventDefault();
         navigate("/app");
@@ -173,7 +196,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
     };
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
-  }, [mapId]);
+  }, [mapId, toggleSidebar]);
 
   const recent = useMemo(() => sortMaps(maps.filter((map) => map.workspaceId === activeWorkspaceId)).slice(0, 6), [maps, activeWorkspaceId]);
 
@@ -238,20 +261,13 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
 
   const activeMap = mapId && MAP_ID.test(mapId) ? maps.find((item) => item.id === mapId) : undefined;
 
-  const toggleSidebar = () => {
-    if (typeof window !== "undefined" && window.innerWidth <= 800) {
-      setMobileOpen((v) => !v);
-    } else {
-      setSidebarCollapsed((v) => !v);
-    }
-  };
-
   return <div className={`lm-app-shell ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
-    <aside className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label={t.workspace.sidebarAria}>
+    <aside id="lm-workspace-sidebar" className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label={t.workspace.sidebarAria}
+      onKeyDown={(event) => { if (mobileOpen && event.key === "Escape") setMobileOpen(false); }}>
       <div className="lm-sidebar-head">
         <Brand to="/app" compact onClick={() => setMobileOpen(false)}/>
         <button type="button" className="lm-icon-button-sm lm-sidebar-collapse-btn" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={() => setSidebarCollapsed(true)}><PanelLeft size={15}/></button>
-        <button type="button" className="lm-mobile-close" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}><X size={15}/></button>
+        <button ref={drawerClose} type="button" className="lm-mobile-close" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}><X size={15}/></button>
       </div>
 
       <nav className="lm-sidebar-nav" aria-label={t.workspace.mainNavAria}>
@@ -356,9 +372,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
       </div>
     </aside>
 
-    {mobileOpen && <button type="button" className="lm-sidebar-scrim" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}/>}
+    {mobileOpen && <button type="button" tabIndex={-1} className="lm-sidebar-scrim" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}/>}
 
-    <div className="lm-app-column">
+    <div className="lm-app-column" inert={mobileOpen}>
       {mapId ? (
         activeMap ? (
           <Suspense fallback={<div className="lm-loading">{t.common.openingMap}</div>}>
@@ -387,7 +403,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
         )
       ) : (
         <main className="lm-main-area">
-          <button type="button" className="lm-floating-sidebar-btn lm-mobile-menu" aria-label={t.workspace.openSidebarAria} onClick={() => setMobileOpen(true)}><Menu size={16}/></button>
+          <button type="button" className="lm-floating-sidebar-btn lm-mobile-menu" aria-label={t.workspace.openSidebarAria} aria-controls="lm-workspace-sidebar" aria-expanded={mobileOpen} onClick={toggleSidebar}><Menu size={16}/></button>
           {sidebarCollapsed && (
             <button type="button" className="lm-floating-sidebar-btn lm-desktop-expand" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={() => setSidebarCollapsed(false)}><PanelLeft size={15}/></button>
           )}

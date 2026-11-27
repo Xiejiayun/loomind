@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { StoreApi } from "zustand";
 import {
   createMindmapStore,
@@ -33,6 +33,14 @@ import { MindmapStoreContext, useMindmapStore } from "./context.js";
 import { useEditorI18n } from "./i18n.js";
 import { OutlinerView } from "./outline/OutlinerView.js";
 import { PitchOverlay } from "./pitch/PitchOverlay.js";
+
+const compactEditorQuery = "(width < 48rem)";
+const isCompactEditor = () => window.matchMedia(compactEditorQuery).matches;
+function subscribeToEditorWidth(notify: () => void) {
+  const media = window.matchMedia(compactEditorQuery);
+  media.addEventListener("change", notify);
+  return () => media.removeEventListener("change", notify);
+}
 
 export interface MindmapEditorProps {
   initialDoc?: MindmapDocument;
@@ -87,6 +95,8 @@ const MindmapEditorInner: React.FC<
   const setZenMode = useMindmapStore((s) => s.setZenMode);
   const formatPanelOpen = useMindmapStore((s) => s.formatPanelOpen);
   const setFormatPanelOpen = useMindmapStore((s) => s.setFormatPanelOpen);
+  const compact = useSyncExternalStore(subscribeToEditorWidth, isCompactEditor, () => false);
+  const formatCoversLeft = compact && formatPanelOpen;
   const lastRejection = useMindmapStore((s) => s.lastRejection);
   const clearRejection = useMindmapStore((s) => s.clearRejection);
   const { t } = useEditorI18n();
@@ -200,16 +210,18 @@ const MindmapEditorInner: React.FC<
 
   const toggleAiPanel = () => {
     if (!canOpenAiPanel) return;
-    setLeftPanel((prev) => (prev === "ai" ? "none" : "ai"));
+    if (formatCoversLeft) setFormatPanelOpen(false);
+    setLeftPanel((prev) => (prev === "ai" && !formatCoversLeft ? "none" : "ai"));
   };
 
   const toggleOutlineSidebar = () => {
+    if (formatCoversLeft) setFormatPanelOpen(false);
     if (viewMode === "outline") {
       setViewMode("canvas");
       setLeftPanel("outline");
       return;
     }
-    setLeftPanel((prev) => (prev === "outline" ? "none" : "outline"));
+    setLeftPanel((prev) => (prev === "outline" && !formatCoversLeft ? "none" : "outline"));
   };
 
   const toggleFormatPanel = () => {
@@ -219,6 +231,7 @@ const MindmapEditorInner: React.FC<
 
   const openAiWithPrompt = (prompt?: string, action?: NodeAiActionKind) => {
     if (readOnly) return;
+    if (formatCoversLeft) setFormatPanelOpen(false);
     setLeftPanel("ai");
     if (prompt) setQueuedAiRequest({ prompt, action });
   };
@@ -271,7 +284,7 @@ const MindmapEditorInner: React.FC<
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zenMode, formatPanelOpen, readOnly, viewMode]);
+  }, [zenMode, formatPanelOpen, formatCoversLeft, canOpenAiPanel, readOnly, viewMode]);
 
   const showLeftSidebar = !zenMode && leftPanel !== "none" && !(leftPanel === "ai" && !canOpenAiPanel);
 
@@ -285,7 +298,7 @@ const MindmapEditorInner: React.FC<
       <TopToolbar
         isDark={isDark}
         accountControl={accountControl}
-        leftPanel={showLeftSidebar ? leftPanel : "none"}
+        leftPanel={showLeftSidebar && !formatCoversLeft ? leftPanel : "none"}
         readOnly={readOnly}
         onToggleAi={canOpenAiPanel ? toggleAiPanel : undefined}
         onToggleOutlineSidebar={toggleOutlineSidebar}
@@ -296,7 +309,7 @@ const MindmapEditorInner: React.FC<
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {showLeftSidebar && (
           <aside
-            className={`fixed left-0 top-11 bottom-8 z-40 flex w-[340px] max-w-[88vw] shrink-0 flex-col border-r text-[12.5px] shadow-2xl md:static md:h-full md:shadow-none ${
+            className={`absolute inset-y-0 left-0 z-40 ${formatCoversLeft ? "hidden" : "flex"} w-[340px] max-w-full shrink-0 flex-col border-r text-[12.5px] shadow-2xl md:static md:h-full md:shadow-none ${
               isDark
                 ? "border-white/[0.075] bg-[#121419] text-[#f4f5f8]"
                 : "border-slate-900/[0.08] bg-[#fafbfc] text-[#111318]"

@@ -306,6 +306,7 @@ const zh = {
     outlineMode: "大纲写作模式",
   },
   canvas: {
+    startTouchHint: "轻点下方的「子主题」，添加第一个分支。",
     startHintPrefix: "双击中心主题编辑",
     startHintMiddle: "选中后按",
     startHintSuffix: "添加分支",
@@ -721,6 +722,7 @@ const en: typeof zh = {
     outlineMode: "Outline Mode",
   },
   canvas: {
+    startTouchHint: "Tap Subtopic below to add your first branch.",
     startHintPrefix: "Double-click central topic to edit",
     startHintMiddle: "Select and press",
     startHintSuffix: "to add a branch",

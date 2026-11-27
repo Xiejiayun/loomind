@@ -49,7 +49,7 @@ export const Minimap: React.FC<MinimapProps> = ({ layout, appearance }) => {
 
   return (
     <div
-      className={`fixed bottom-11 z-30 overflow-hidden rounded-xl border p-1.5 shadow-lg backdrop-blur transition-all ${
+      className={`fixed bottom-11 z-30 overflow-hidden rounded-xl border p-1.5 shadow-lg backdrop-blur transition-all max-sm:absolute max-sm:right-2 max-sm:bottom-16 ${
         formatPanelOpen ? "right-4 md:right-[296px]" : "right-4"
       } ${
         palette.isDark

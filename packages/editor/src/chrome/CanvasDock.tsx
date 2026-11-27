@@ -165,14 +165,16 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
     ? "text-[#d5d9e2] hover:bg-white/[0.08] hover:text-white"
     : "text-[#2c3340] hover:bg-slate-900/[0.06] hover:text-[#111318]";
 
-  const sepCls = isDark ? "mx-1 h-4 w-px shrink-0 bg-white/[0.08]" : "mx-1 h-4 w-px shrink-0 bg-slate-900/[0.08]";
+  const sepCls = `mx-1 h-4 w-px shrink-0 max-sm:hidden ${isDark ? "bg-white/[0.08]" : "bg-slate-900/[0.08]"}`;
   const groupTitleCls = `px-2.5 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wider ${
     isDark ? "text-[#646b78]" : "text-[#8c95a4]"
   }`;
 
   return (
     <div
-      className={`pointer-events-auto absolute bottom-3 left-1/2 z-30 flex h-9 w-max max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto whitespace-nowrap rounded-[9px] border px-1.5 text-[12px] shadow-2xl backdrop-blur-md sm:max-w-[calc(100%-96px)] ${
+      className={`pointer-events-auto absolute bottom-3 left-1/2 z-30 flex h-9 w-max -translate-x-1/2 items-center gap-0.5 overflow-x-auto whitespace-nowrap rounded-[9px] border px-1.5 text-[12px] shadow-2xl backdrop-blur-md sm:max-w-[calc(100%-96px)]
+        max-sm:bottom-2 max-sm:grid max-sm:h-auto max-sm:w-[calc(100%-1rem)] max-sm:max-w-96 max-sm:auto-cols-fr max-sm:grid-flow-col max-sm:px-1
+        max-sm:[&>button]:min-h-11 max-sm:[&>button]:flex-col max-sm:[&>button]:justify-center max-sm:[&>button]:gap-0.5 max-sm:[&>button]:px-0 ${
         isDark
           ? "border-white/[0.1] bg-[#15171c]/95 text-[#f4f5f8]"
           : "border-slate-900/[0.1] bg-white/95 text-[#111318]"
@@ -217,8 +219,8 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
             type="button"
             className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-[6px] px-2.5 py-1 font-medium transition ${hoverCls}`}
           >
+            <ChevronDown className="order-last h-3 w-3 opacity-65 max-sm:order-first" />
             <span>{t.dock.insertElement}</span>
-            <ChevronDown className="h-3 w-3 opacity-65" />
           </button>
         </Popover.Trigger>
         <Popover.Portal>

@@ -222,17 +222,17 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
       aiRuntime={proAiRuntime}
       chatPersistence={chatPersistence}
       accountControl={<div className="lm-editor-navigation">
-        <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={onToggleSidebar}>
+        <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} aria-controls="lm-workspace-sidebar" onClick={onToggleSidebar}>
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
         <PeerPresenceStrip peers={remotePeers} label={t.editorWorkspace.onlinePeers} />
         <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryOpen(true)} title={t.editorWorkspace.historyBtn}>
-          <History size={12}/> {t.editorWorkspace.historyBtn}
+          <History size={12}/> <span className="max-sm:sr-only">{t.editorWorkspace.historyBtn}</span>
         </button>
         {map.access === "owner" && (
-          <button type="button" className="lm-editor-nav-btn" onClick={onShare}>
-            <Share2 size={12}/> {t.editorWorkspace.shareBtn}
+          <button type="button" className="lm-editor-nav-btn" onClick={onShare} title={t.editorWorkspace.shareBtn}>
+            <Share2 size={12}/> <span className="max-sm:sr-only">{t.editorWorkspace.shareBtn}</span>
           </button>
         )}
         <AccountControl
@@ -309,7 +309,7 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
   if (!adapter) return <div className="lm-loading">{t.editorWorkspace.loadingShared}</div>;
   return <div className="lm-editor-host lm-viewer-editor">
     {listError && <div className="lm-editor-error" role="alert">{listError}</div>}
-    <span className="lm-readonly-badge">{t.editorWorkspace.readonlyBanner}</span>
+    <span className="lm-readonly-badge max-md:sr-only">{t.editorWorkspace.readonlyBanner}</span>
     <MindmapEditor
       adapter={adapter}
       chromeTheme={theme}
@@ -317,12 +317,12 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
       chatPersistence={chatPersistence}
       initialFormatPanelOpen={false}
       accountControl={<div className="lm-editor-navigation">
-        <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={onToggleSidebar}>
+        <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} aria-controls="lm-workspace-sidebar" onClick={onToggleSidebar}>
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
         <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryOpen(true)} title={t.editorWorkspace.historyBtn}>
-          <History size={12}/> {t.editorWorkspace.historyBtn}
+          <History size={12}/> <span className="max-sm:sr-only">{t.editorWorkspace.historyBtn}</span>
         </button>
         <span className="lm-editor-viewer-label">{t.common.readOnly}</span>
       </div>}

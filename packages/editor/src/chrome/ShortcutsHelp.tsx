@@ -11,7 +11,7 @@ export const ShortcutsHelp: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         <button
           type="button"
           title={t.shortcuts.buttonTitle}
-          className={`absolute bottom-3 left-3 z-30 flex h-8 w-8 items-center justify-center rounded-[7px] border transition ${
+          className={`absolute bottom-3 left-3 z-30 flex h-8 w-8 items-center justify-center rounded-[7px] border transition max-sm:top-2 max-sm:bottom-auto max-sm:left-2 max-sm:size-11 ${
             isDark
               ? "border-white/[0.1] bg-[#15171c]/90 text-[#9ca3b0] hover:border-white/[0.18] hover:bg-[#1c1f26] hover:text-white"
               : "border-slate-900/[0.1] bg-white/95 text-[#525b6b] hover:border-slate-900/[0.18] hover:text-[#111318]"
