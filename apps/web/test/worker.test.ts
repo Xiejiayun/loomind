@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { getPlatformProxy, unstable_readConfig, type PlatformProxy } from "wrangler";
 import { createRichText, getTemplate } from "@mindmap/core";
 import { LoroSyncAdapter } from "@mindmap/core/loro";
-import { randomBytes } from "node:crypto";
 import worker from "../worker/auth.js";
 import { DRAFT_LIMIT, LIVE_HEADER, OWNER_HEADER, type LiveCheckpoint } from "../src/drafts/shared.js";
 
@@ -665,6 +665,68 @@ describe("revision-bound live checkpoints (local D1)", () => {
 });
 
 describe("Loro CRDT realtime collab API (updates & peer presence)", () => {
+  it("prunes the oldest frames by bytes or by count without touching another map", async () => {
+    const owner = await login("retention-owner");
+    const headers = { [OWNER_HEADER]: "retention-owner" };
+    const initial = getTemplate("blank-organic").create();
+    const { LoroSyncAdapter } = await import("@mindmap/core/loro");
+    const nextFrame = Buffer.from(new LoroSyncAdapter(initial).exportUpdates()).toString("base64");
+    const previousMaps: string[] = [];
+    for (const [count, size] of [[25, 1536 * 1024], [200, 4]]) {
+      const mapId = crypto.randomUUID();
+      expect((await request(`mindmaps/${mapId}`, "PUT", owner, initial, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+      const db = platform.env.DB;
+      await db.prepare(`WITH RECURSIVE items(position) AS (SELECT 1 UNION ALL SELECT position + 1 FROM items WHERE position < ?)
+        INSERT INTO mindmap_crdt_updates (mindmap_id, peer_id, actor, update_b64) SELECT ?, 'fixture', 'retention-owner', ? FROM items`)
+        .bind(count, mapId, "A".repeat(size)).run();
+      const oldest = await db.prepare("SELECT MIN(seq) AS first FROM mindmap_crdt_updates WHERE mindmap_id = ?").bind(mapId).first<number>("first");
+      const push = await request(`mindmaps/${mapId}/collab`, "POST", owner, { peerId: "author", updateB64: nextFrame }, headers);
+      expect(push.status).toBe(200);
+      const { seq } = await push.json() as { seq: number };
+      const retained = await db.prepare("SELECT COUNT(*) AS count, MIN(seq) AS first, MAX(seq) AS latest FROM mindmap_crdt_updates WHERE mindmap_id = ?").bind(mapId).first();
+      expect(retained).toEqual({ count, first: oldest! + 1, latest: seq });
+      previousMaps.push(mapId);
+    }
+    expect(await platform.env.DB.prepare("SELECT COUNT(*) AS count FROM mindmap_crdt_updates WHERE mindmap_id = ?").bind(previousMaps[0]).first<number>("count")).toBe(25);
+  });
+
+  it("pages large valid deltas without skipping their causal predecessor and rejects frames above the row budget", async () => {
+    const { LoroSyncAdapter } = await import("@mindmap/core/loro");
+    const mapId = crypto.randomUUID();
+    const owner = await login("image-owner");
+    const headers = { [OWNER_HEADER]: "image-owner" };
+    const initial = getTemplate("blank-organic").create();
+    expect((await request(`mindmaps/${mapId}`, "PUT", owner, initial, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    const author = new LoroSyncAdapter(initial, 10n);
+    const reviewer = LoroSyncAdapter.fromSnapshot(author.exportSnapshot(), 20n);
+    const endpoint = `mindmaps/${mapId}/collab`;
+    const sequences: number[] = [];
+    for (const topic of initial.sheets[0].rootTopic.children.slice(0, 2)) {
+      const version = author.getVersion();
+      author.applyCommand({ type: "topic/setNote", sheetId: initial.activeSheetId, topicId: topic.id, text: randomBytes(640 * 1024).toString("base64") });
+      const updateB64 = Buffer.from(author.exportUpdates(version)).toString("base64");
+      expect(updateB64.length).toBeGreaterThan(768 * 1024);
+      const pushed = await request(endpoint, "POST", owner, { peerId: "author", updateB64 }, headers);
+      expect(pushed.status).toBe(200);
+      sequences.push((await pushed.json() as { seq: number }).seq);
+    }
+    const overBudget = await request(endpoint, "POST", owner, { peerId: "author", updateB64: "A".repeat(1536 * 1024 + 4) }, headers);
+    expect(overBudget.status).toBe(413);
+    let since = 0;
+    for (const seq of sequences) {
+      const pulled = await request(`${endpoint}?since=${since}`, "GET", owner, undefined, headers);
+      expect(pulled.status).toBe(200);
+      const page = await pulled.json() as { latestSeq: number; updates: Array<{ seq: number; updateB64: string }> };
+      expect(page.updates.map((row) => row.seq)).toEqual([seq]);
+      expect(page.latestSeq).toBe(seq);
+      reviewer.importUpdates(Buffer.from(page.updates[0].updateB64, "base64"));
+      since = page.latestSeq;
+    }
+    expect(reviewer.getDocument()).toEqual(author.getDocument());
+    const empty = await request(`${endpoint}?since=${since}`, "GET", owner, undefined, headers);
+    expect(await empty.json()).toMatchObject({ latestSeq: since, updates: [] });
+  });
+
   it("exchanges binary Loro CRDT updates and live presence between collaborators while blocking viewers from writing", async () => {
     const { LoroSyncAdapter } = await import("@mindmap/core/loro");
     const ownerCookie = await login("collab-owner");
