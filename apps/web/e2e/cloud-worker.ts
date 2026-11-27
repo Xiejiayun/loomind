@@ -11,6 +11,19 @@ interface CloudWorker {
   openPage(context: BrowserContext, subject?: string): Promise<Page>;
 }
 
+export function cloudPages(url: URL, secret: string): CloudWorker {
+  return { origin: url.origin, async openPage(context, subject) {
+    if (subject) {
+      const name = "__Host-loomind-session";
+      const value = await new SignJWT({ email: `${subject}@example.test` }).setProtectedHeader({ alg: "HS256" })
+        .setIssuer(url.origin).setAudience(name).setSubject(subject).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(secret));
+      await context.addCookies([{ name, value, domain: url.hostname, path: "/", secure: true, httpOnly: true, sameSite: "Strict" }]);
+    }
+    await context.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ contentType: "text/css", body: "" }));
+    return context.newPage();
+  } };
+}
+
 export const test = base.extend<{ cloud: CloudWorker }>({
   cloud: async ({}, use) => {
     const secret = randomBytes(32).toString("hex");
@@ -21,16 +34,7 @@ export const test = base.extend<{ cloud: CloudWorker }>({
       const { url } = await server.listen();
       await server.update({ workers: [{ ...worker, vars: { AUTH_ORIGIN: url.origin } }] });
       await server.getWorker().applyD1Migrations("DB");
-      await use({ origin: url.origin, async openPage(context, subject) {
-        if (subject) {
-          const name = "__Host-loomind-session";
-          const value = await new SignJWT({ email: `${subject}@example.test` }).setProtectedHeader({ alg: "HS256" })
-            .setIssuer(url.origin).setAudience(name).setSubject(subject).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(secret));
-          await context.addCookies([{ name, value, domain: url.hostname, path: "/", secure: true, httpOnly: true, sameSite: "Strict" }]);
-        }
-        await context.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ contentType: "text/css", body: "" }));
-        return context.newPage();
-      } });
+      await use(cloudPages(url, secret));
     } finally { await server.close(); }
   },
 });

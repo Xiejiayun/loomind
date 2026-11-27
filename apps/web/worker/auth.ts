@@ -7,6 +7,7 @@ import { handleDraft, handleRevisions } from "./drafts.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import { handleShare, handleInvite } from "./sharing.js";
 import { handleWorkspace } from "./workspaces.js";
+import { handleWebpage } from "./webpage.js";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const challengeCookie = "__Host-loomind-login";
@@ -93,6 +94,10 @@ async function verifyGoogle(env: Env, credential: string, nonce: string): Promis
 async function handle(request: Request, env: Env) {
   const url = new URL(request.url);
   const path = url.pathname;
+  if (path === "/api/sources/webpage") {
+    const session = await readCookie(request, env, sessionCookie);
+    return handleWebpage(request, env, session?.sub);
+  }
   if (path === "/api/mindmaps" || path.startsWith("/api/mindmaps/")) {
     const session = await readCookie(request, env, sessionCookie);
     if (path === "/api/mindmaps") return handleDraft(request, env, session?.sub);

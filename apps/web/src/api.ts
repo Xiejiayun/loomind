@@ -1,4 +1,5 @@
 import { getWebMessages } from "./i18n.js";
+import type { WebpageSource } from "./webpage-contract.js";
 
 export type Access = "owner" | "editor" | "viewer";
 export interface WorkspaceSummary { id: string; name: string; role: Access; createdAt: string }
@@ -32,6 +33,8 @@ function send<T>(path: string, value: unknown, method = "POST") {
 }
 
 export const listWorkspaces = () => request<WorkspaceSummary[]>("/api/workspaces");
+export const webpageOrigins = () => request<string[]>("/api/sources/webpage");
+export const readWebpage = (url: string) => send<WebpageSource>("/api/sources/webpage", { url });
 export const createWorkspace = (name: string) => send<WorkspaceSummary>("/api/workspaces", { name });
 export const moveMindmap = (workspaceId: string, mindmapId: string) => send<{ workspaceId: string }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/mindmaps`, { mindmapId });
 export const createShare = (type: "workspace" | "mindmap", resourceId: string, role: "viewer" | "editor") =>
