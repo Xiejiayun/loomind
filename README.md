@@ -123,13 +123,13 @@ pnpm exec playwright install chromium webkit
 pnpm test:mobile
 ```
 
-The mobile checks serve the built app on loopback and use explicit API fixtures. They exercise real browser layout, touch input and local map storage, not live Google login, AI generation or cloud sync.
+The mobile UI checks use explicit API fixtures for layout, touch input and local storage. The cloud-storage browser test serves the production build and actual Worker on loopback HTTPS with an ephemeral migrated D1 database. It saves in Chromium and reopens in WebKit (and vice versa), then downloads and compares a historical snapshot. Authentication uses a test-only identity; neither suite contacts production or verifies live Google login or AI generation.
 
 ### Login and storage
 
 - **Google:** use a Web application OAuth client with authorized JavaScript origin `https://loomind.jeremyxie.com` (no path). The Google button returns an ID token to a JavaScript popup callback, so no authorized redirect URI or Google client secret is needed. `/api/auth/google` is a same-origin JSON endpoint, not a redirect target.
 - **Turnstile:** use the Managed widget for `loomind.jeremyxie.com`. The Worker checks Siteverify success, hostname and `google_login` action before signing a session. `TURNSTILE_SITE_KEY` is public; `TURNSTILE_SECRET` is server-only. Store `GOOGLE_CLIENT_ID`, `TURNSTILE_SECRET` and an independent, randomly generated production `SESSION_SECRET` (at least 32 random bytes, encoded as hex or base64url) in the Worker's protected configuration. Never put secrets in `VITE_*`, the repository or the browser bundle.
-- **Mindmaps & Sync:** each verified Google account can create and switch between independent mindmaps in the workspace library. D1 stores each map by its own ID, up to 20 historical revision snapshots, and incremental CRDT deltas for live collaboration, paired with per-tab isolated IndexedDB draft caching. Maps larger than 1 MiB remain local.
+- **Mindmaps & Sync:** cloud saves accept up to 4 MiB of UTF-8 document JSON, including embedded images. Oversized edits stay in this browser without replacing the last cloud version; reduce the map size to resume syncing. D1 keeps the latest 20 snapshots. Documents over 1 MiB share content-addressed blocks across revisions of the same map. Current state, blocks, and history commit together. Live CRDT updates have a separate limit.
 - **Cost:** the app runs entirely on Cloudflare Workers, Workers AI, and D1 Free resources and does not require Durable Objects, R2, KV, or a paid plan.
 
 ### Release to Cloudflare Workers

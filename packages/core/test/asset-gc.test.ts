@@ -158,7 +158,7 @@ describe("T4 image MIME validation & full-document zero-reference asset GC", () 
     expect(validateDocumentInvariants(adapter.getDocument())).toEqual([]);
   });
 
-  it("drops serialized UTF-8 byte size back below 1 MiB 413 boundary after clearing a large image", () => {
+  it("drops serialized UTF-8 byte size back below 1 MiB after clearing a large image", () => {
     const DRAFT_LIMIT = 1024 * 1024;
     const base = createDocument();
     const sheetId = base.sheets[0].id;
