@@ -122,48 +122,23 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
         )}
       </div>
 
-      {/* Center: View Switcher + Undo/Redo + Templates */}
+      {/* Center: Back-to-Map (when in fullscreen outline) + Undo/Redo */}
       <div className="flex items-center gap-1.5">
-        <div
-          className={`editor-view-switch flex items-center rounded-[6px] border p-0.5 ${
-            isDark ? "border-white/[0.075] bg-[#15171c]" : "border-slate-900/[0.08] bg-slate-200/60"
-          }`}
-        >
+        {viewMode === "outline" && (
           <button
             type="button"
             onClick={() => setViewMode("canvas")}
-            className={`flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11.5px] font-medium transition ${focusCls} ${
-              viewMode === "canvas"
-                ? isDark
-                  ? "bg-[#22262f] text-white"
-                  : "bg-white text-[#111318] shadow-2xs"
-                : isDark
-                  ? "text-[#9ca3b0] hover:text-white"
-                  : "text-[#525b6b] hover:text-[#111318]"
-            }`}
+            className={`flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-[11.5px] font-medium transition ${borderBtnCls} ${focusCls}`}
           >
-            <GitBranch className="h-3 w-3" /> {t.toolbar.mapView}
+            <GitBranch className="h-3 w-3" /> {t.outliner.backToMap}
           </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("outline")}
-            className={`flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11.5px] font-medium transition ${focusCls} ${
-              viewMode === "outline"
-                ? isDark
-                  ? "bg-[#22262f] text-white"
-                  : "bg-white text-[#111318] shadow-2xs"
-                : isDark
-                  ? "text-[#9ca3b0] hover:text-white"
-                  : "text-[#525b6b] hover:text-[#111318]"
-            }`}
-          >
-            <ListTree className="h-3 w-3" /> {t.toolbar.outlineView}
-          </button>
-        </div>
+        )}
 
         {!readOnly && (
           <>
-            <div className={`h-3.5 w-px ${isDark ? "bg-white/[0.08]" : "bg-slate-900/[0.1]"}`} />
+            {viewMode === "outline" && (
+              <div className={`h-3.5 w-px ${isDark ? "bg-white/[0.08]" : "bg-slate-900/[0.1]"}`} />
+            )}
             <button
               type="button"
               disabled={!canUndo}
