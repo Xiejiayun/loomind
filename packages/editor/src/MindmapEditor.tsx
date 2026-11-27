@@ -168,10 +168,32 @@ const MindmapEditorInner: React.FC<
     searchMatches.length > 0 ? searchMatches[Math.min(findActiveIndex, searchMatches.length - 1)].topicId : null;
 
   const engineRef = useRef<LayoutEngine | null>(null);
+  const editorRootRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   if (!engineRef.current) {
     engineRef.current = new LayoutEngine(new DomTextMeasurer());
   }
+
+  // Prevent mobile browsers from triggering whole-page visual-viewport pinch zoom
+  // when a multi-touch gesture starts near toolbars, dock, or canvas edges.
+  useEffect(() => {
+    const rootEl = editorRootRef.current;
+    if (!rootEl) return;
+    const blockMultiTouch = (e: TouchEvent) => {
+      if (e.touches.length >= 2) e.preventDefault();
+    };
+    const blockGesture = (e: Event) => e.preventDefault();
+    rootEl.addEventListener("touchmove", blockMultiTouch, { passive: false });
+    rootEl.addEventListener("gesturestart", blockGesture, { passive: false });
+    rootEl.addEventListener("gesturechange", blockGesture, { passive: false });
+    rootEl.addEventListener("gestureend", blockGesture, { passive: false });
+    return () => {
+      rootEl.removeEventListener("touchmove", blockMultiTouch);
+      rootEl.removeEventListener("gesturestart", blockGesture);
+      rootEl.removeEventListener("gesturechange", blockGesture);
+      rootEl.removeEventListener("gestureend", blockGesture);
+    };
+  }, []);
 
   const layout = useMemo(
     () => engineRef.current!.compute(doc, doc.activeSheetId, { drillRootId, appearance: chromeTheme }),
@@ -268,7 +290,8 @@ const MindmapEditorInner: React.FC<
 
   return (
     <div
-      className={`flex h-full w-full flex-col overflow-hidden font-sans ${
+      ref={editorRootRef}
+      className={`flex h-full w-full flex-col overflow-hidden overscroll-none touch-manipulation font-sans ${
         isDark ? "bg-[#101114]" : "bg-[#ffffff]"
       }`}
     >

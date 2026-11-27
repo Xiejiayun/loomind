@@ -33,13 +33,13 @@ import { processImageFileForTopic } from "./image-utils.js";
 import { NodeLayer } from "./NodeLayer.js";
 import { SvgLayer } from "./SvgLayer.js";
 import {
-  applyTouchPinchStep,
   applyWheelGesture,
   computeFitCameraForBounds,
-  MAX_CAMERA_SCALE,
-  MIN_CAMERA_SCALE,
+  computePinchCameraStep,
   resetZoomCentered,
+  sanitizeCamera,
   stepZoomCamera,
+  type TouchPinchSample,
 } from "./viewport-camera.js";
 
 interface DragState {
@@ -110,8 +110,13 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
   }, []);
 
   const applyTransformDom = useCallback((c: { x: number; y: number; scale: number }) => {
+    const safe = sanitizeCamera(c, cameraRef.current);
+    cameraRef.current = safe;
     if (worldRef.current) {
-      worldRef.current.style.transform = `translate(${c.x}px, ${c.y}px) scale(${c.scale})`;
+      const tx = Math.round(safe.x * 100) / 100;
+      const ty = Math.round(safe.y * 100) / 100;
+      const sc = Math.round(safe.scale * 10000) / 10000;
+      worldRef.current.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
     }
   }, []);
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
@@ -206,24 +211,120 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
     [camera],
   );
 
-  // Prevent Safari native pinch-zoom from hijacking canvas gestures
+  // Dedicated native 2-finger Touch Pinch-Zoom + Safari Gesture lock:
+  // Prevents mobile browsers (iOS Safari / Android Chrome) from hijacking pinch into
+  // whole-page visual-viewport zoom, keeps camera & RBush culling synced, and always
+  // recovers cleanly on touchend/touchcancel.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const prevent = (e: Event) => e.preventDefault();
-    el.addEventListener("gesturestart", prevent, { passive: false });
-    el.addEventListener("gesturechange", prevent, { passive: false });
-    return () => {
-      el.removeEventListener("gesturestart", prevent);
-      el.removeEventListener("gesturechange", prevent);
-    };
-  }, [containerRef]);
 
-  // Zero-rerender 120fps Pan, Trackpad Pan/Pinch, and Touch Pinch-Zoom via direct GPU DOM transform
+    let activePinch: TouchPinchSample | null = null;
+    let lastCommitAt = 0;
+
+    const readTouchSample = (touches: TouchList): TouchPinchSample | null => {
+      if (touches.length < 2) return null;
+      const rect = el.getBoundingClientRect();
+      const t0 = touches[0];
+      const t1 = touches[1];
+      const x0 = t0.clientX - rect.left;
+      const y0 = t0.clientY - rect.top;
+      const x1 = t1.clientX - rect.left;
+      const y1 = t1.clientY - rect.top;
+      return {
+        distance: Math.hypot(x1 - x0, y1 - y0),
+        cx: (x0 + x1) / 2,
+        cy: (y0 + y1) / 2,
+      };
+    };
+
+    const endPinch = () => {
+      if (!pinchingRef.current && !activePinch) return;
+      activePinch = null;
+      pinchingRef.current = false;
+      setInteractingDom(false);
+      const finalCam = sanitizeCamera(cameraRef.current);
+      applyTransformDom(finalCam);
+      setCamera(finalCam);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        const sample = readTouchSample(e.touches);
+        if (sample) {
+          activePinch = sample;
+          pinchingRef.current = true;
+          userMovedCameraRef.current = true;
+          setInteractingDom(true);
+        }
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        const sample = readTouchSample(e.touches);
+        if (!sample) return;
+        if (!activePinch) {
+          activePinch = sample;
+          pinchingRef.current = true;
+          userMovedCameraRef.current = true;
+          setInteractingDom(true);
+          return;
+        }
+        const next = computePinchCameraStep(cameraRef.current, activePinch, sample);
+        activePinch = sample;
+        applyTransformDom(next);
+
+        // Periodically sync camera into React store so RBush culling stays fresh during large zoom-outs
+        const now = performance.now();
+        if (now - lastCommitAt >= 90) {
+          lastCommitAt = now;
+          setCamera(next);
+        }
+      } else if (pinchingRef.current) {
+        endPinch();
+      }
+    };
+
+    const onTouchEndOrCancel = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        endPinch();
+      } else {
+        activePinch = readTouchSample(e.touches);
+      }
+    };
+
+    const preventGesture = (e: Event) => e.preventDefault();
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEndOrCancel, { passive: true });
+    el.addEventListener("touchcancel", onTouchEndOrCancel, { passive: true });
+    el.addEventListener("gesturestart", preventGesture, { passive: false });
+    el.addEventListener("gesturechange", preventGesture, { passive: false });
+    el.addEventListener("gestureend", preventGesture, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEndOrCancel);
+      el.removeEventListener("touchcancel", onTouchEndOrCancel);
+      el.removeEventListener("gesturestart", preventGesture);
+      el.removeEventListener("gesturechange", preventGesture);
+      el.removeEventListener("gestureend", preventGesture);
+      endPinch();
+    };
+  }, [containerRef, applyTransformDom, setCamera, setInteractingDom]);
+
+  // Smooth Pan & Desktop Trackpad/Wheel Zoom via direct DOM transform
   useGesture(
     {
-      onDrag: ({ delta: [dx, dy], event, first, last, touches }) => {
-        if (pinchingRef.current || touches > 1) return;
+      onDrag: ({ delta: [dx, dy], event, first, last, touches, canceled }) => {
+        if (pinchingRef.current || touches > 1) {
+          if (last || canceled) setInteractingDom(false);
+          return;
+        }
         if ((event.target as HTMLElement)?.closest("[data-topic-id]")) return;
         const me = event as PointerEvent;
         if (me.shiftKey) return;
@@ -231,14 +332,16 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
           userMovedCameraRef.current = true;
           setInteractingDom(true);
         }
-        const next = {
-          x: cameraRef.current.x + dx,
-          y: cameraRef.current.y + dy,
-          scale: cameraRef.current.scale,
-        };
-        cameraRef.current = next;
+        const next = sanitizeCamera(
+          {
+            x: cameraRef.current.x + dx,
+            y: cameraRef.current.y + dy,
+            scale: cameraRef.current.scale,
+          },
+          cameraRef.current,
+        );
         applyTransformDom(next);
-        if (last) {
+        if (last || canceled) {
           setInteractingDom(false);
           setCamera(next);
         }
@@ -251,7 +354,6 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
         const mx = event.clientX - (rect?.left ?? 0);
         const my = event.clientY - (rect?.top ?? 0);
         const next = applyWheelGesture(cameraRef.current, event, { x: mx, y: my });
-        cameraRef.current = next;
         applyTransformDom(next);
 
         const el = containerRef.current as unknown as { _wt?: number };
@@ -261,52 +363,24 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
           setCamera(cameraRef.current);
         }, 120);
       },
-      onPinch: ({ offset: [nextScale], origin: [ox, oy], first, last, memo }) => {
-        const rect = containerRef.current?.getBoundingClientRect();
-        const ax = ox - (rect?.left ?? 0);
-        const ay = oy - (rect?.top ?? 0);
-        if (first) {
-          pinchingRef.current = true;
-          userMovedCameraRef.current = true;
-          setInteractingDom(true);
-          return { x: ax, y: ay };
-        }
-        const prevOrigin = (memo as { x: number; y: number } | undefined) ?? { x: ax, y: ay };
-        const next = applyTouchPinchStep(
-          cameraRef.current,
-          nextScale,
-          { x: ax, y: ay },
-          { dx: ax - prevOrigin.x, dy: ay - prevOrigin.y },
-        );
-        cameraRef.current = next;
-        applyTransformDom(next);
-        if (last) {
-          pinchingRef.current = false;
-          setInteractingDom(false);
-          setCamera(next);
-        }
-        return { x: ax, y: ay };
-      },
     },
     {
       target: containerRef,
       eventOptions: { passive: false },
       drag: { filterTaps: true },
-      pinch: {
-        scaleBounds: { min: MIN_CAMERA_SCALE, max: MAX_CAMERA_SCALE },
-        from: () => [cameraRef.current.scale, 0],
-        pointer: { touch: true },
-      },
     },
   );
 
   // Node drag-to-reparent / detach / Alt-drag manualOffset
   const handleStartDragTopic = useCallback(
     (topicId: string, e: React.PointerEvent) => {
-      if (readOnly || topicId === sheet.rootTopic.id) return;
+      if (readOnly || pinchingRef.current || topicId === sheet.rootTopic.id) return;
+      if (e.pointerType === "touch" && !e.isPrimary) return;
+      const activePointerId = e.pointerId;
       const startX = e.clientX;
       const startY = e.clientY;
       const altKey = e.altKey;
+      const dragThreshold = e.pointerType === "touch" ? 14 : 8;
       const initTopic = topicMap.get(topicId);
       const initOffset = initTopic?.manualOffset ?? { dx: 0, dy: 0 };
 
@@ -326,9 +400,32 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
       let pendingAltDx = 0;
       let pendingAltDy = 0;
 
+      const cleanup = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+      };
+
+      const onCancel = (ev: PointerEvent) => {
+        if (ev.pointerId !== activePointerId) return;
+        cleanup();
+        if (state.active) {
+          if (!pinchingRef.current) setInteractingDom(false);
+          setOffsetPreview(null);
+        }
+        setDragState(null);
+      };
+
       const onMove = (ev: PointerEvent) => {
+        if (pinchingRef.current) {
+          cleanup();
+          setOffsetPreview(null);
+          setDragState(null);
+          return;
+        }
+        if (ev.pointerId !== activePointerId) return;
         const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
-        if (!state.active && dist < 8) return;
+        if (!state.active && dist < dragThreshold) return;
         if (!state.active) {
           state.active = true;
           setInteractingDom(true);
@@ -353,9 +450,9 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
       };
 
       const onUp = (ev: PointerEvent) => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        if (state.active) {
+        if (ev.pointerId !== activePointerId) return;
+        cleanup();
+        if (state.active && !pinchingRef.current) {
           setInteractingDom(false);
           if (altKey) {
             setOffsetPreview(null);
@@ -403,8 +500,9 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
 
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onCancel);
     },
-    [readOnly, sheet, topicMap, camera.scale, dispatch, layout, screenToWorld, setInteractingDom],
+    [readOnly, sheet, topicMap, dispatch, layout, screenToWorld, setInteractingDom],
   );
 
   // Right-edge custom width drag (live preview without per-frame layout recompute)
@@ -1012,8 +1110,10 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
       role="application"
       aria-roledescription={t.a11y.canvasRoleDesc}
       aria-label={t.a11y.canvasLabel(sheet.title, topicMap.size)}
-      className="relative h-full w-full flex-1 overflow-hidden touch-none"
+      className="mindmap-canvas-viewport relative h-full w-full flex-1 overflow-hidden touch-none overscroll-none"
       style={{
+        contain: "layout paint",
+        isolation: "isolate",
         backgroundColor: hex8ToCss(palette.canvasBg),
         backgroundImage: palette.isDark
           ? "radial-gradient(ellipse 65% 55% at 50% 45%, rgba(122,162,247,0.06), transparent 72%), radial-gradient(rgba(148,163,184,0.13) 1px, transparent 1px)"

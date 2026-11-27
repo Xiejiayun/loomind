@@ -172,7 +172,7 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
 
   return (
     <div
-      className={`pointer-events-auto absolute bottom-3 left-1/2 z-30 flex h-9 w-max max-w-[calc(100%-96px)] -translate-x-1/2 items-center gap-0.5 whitespace-nowrap rounded-[9px] border px-1.5 text-[12px] shadow-2xl backdrop-blur-md
+      className={`pointer-events-auto absolute bottom-3 left-1/2 z-30 flex h-9 w-max -translate-x-1/2 items-center gap-0.5 overflow-x-auto whitespace-nowrap rounded-[9px] border px-1.5 text-[12px] shadow-2xl backdrop-blur-md sm:max-w-[calc(100%-96px)]
         max-sm:bottom-2 max-sm:grid max-sm:h-auto max-sm:w-[calc(100%-1rem)] max-sm:max-w-96 max-sm:auto-cols-fr max-sm:grid-flow-col max-sm:px-1
         max-sm:[&>button]:min-h-11 max-sm:[&>button]:flex-col max-sm:[&>button]:justify-center max-sm:[&>button]:gap-0.5 max-sm:[&>button]:px-0 ${
         isDark

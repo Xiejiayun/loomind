@@ -2,11 +2,40 @@ import type { CameraState, LayoutBox } from "@mindmap/core";
 
 export const MIN_CAMERA_SCALE = 0.15;
 export const MAX_CAMERA_SCALE = 3;
+export const MIN_PINCH_DISTANCE = 10;
+export const MAX_PINCH_STEP_RATIO = 1.6;
+export const MAX_PINCH_ORIGIN_JUMP = 160;
 
 export const ZOOM_PRESETS = [0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 0.85, 1, 1.15, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
 
 export function clampCameraScale(scale: number): number {
+  if (!Number.isFinite(scale) || scale <= 0) return 1;
   return Math.max(MIN_CAMERA_SCALE, Math.min(MAX_CAMERA_SCALE, scale));
+}
+
+export function isValidCamera(camera: CameraState): boolean {
+  return (
+    Number.isFinite(camera.x) &&
+    Number.isFinite(camera.y) &&
+    Number.isFinite(camera.scale) &&
+    camera.scale > 0
+  );
+}
+
+export function sanitizeCamera(
+  camera: CameraState,
+  fallback: CameraState = { x: 0, y: 0, scale: 1 },
+): CameraState {
+  if (!isValidCamera(camera)) {
+    return isValidCamera(fallback)
+      ? { x: fallback.x, y: fallback.y, scale: clampCameraScale(fallback.scale) }
+      : { x: 0, y: 0, scale: 1 };
+  }
+  return {
+    x: camera.x,
+    y: camera.y,
+    scale: clampCameraScale(camera.scale),
+  };
 }
 
 /**
@@ -56,14 +85,21 @@ export function zoomAroundPoint(
   anchorX: number,
   anchorY: number,
 ): CameraState {
+  const safeCam = sanitizeCamera(camera);
+  if (!Number.isFinite(nextScale) || nextScale <= 0 || !Number.isFinite(anchorX) || !Number.isFinite(anchorY)) {
+    return safeCam;
+  }
   const clamped = clampCameraScale(nextScale);
-  const wx = (anchorX - camera.x) / camera.scale;
-  const wy = (anchorY - camera.y) / camera.scale;
-  return {
-    scale: clamped,
-    x: anchorX - wx * clamped,
-    y: anchorY - wy * clamped,
-  };
+  const wx = (anchorX - safeCam.x) / safeCam.scale;
+  const wy = (anchorY - safeCam.y) / safeCam.scale;
+  return sanitizeCamera(
+    {
+      scale: clamped,
+      x: anchorX - wx * clamped,
+      y: anchorY - wy * clamped,
+    },
+    safeCam,
+  );
 }
 
 export interface WheelGestureInput {
@@ -119,12 +155,68 @@ export function applyTouchPinchStep(
   anchor: { x: number; y: number },
   originDelta: { dx: number; dy: number },
 ): CameraState {
+  const safeCam = sanitizeCamera(camera);
+  if (
+    !Number.isFinite(nextScale) ||
+    nextScale <= 0 ||
+    !Number.isFinite(anchor.x) ||
+    !Number.isFinite(anchor.y) ||
+    !Number.isFinite(originDelta.dx) ||
+    !Number.isFinite(originDelta.dy)
+  ) {
+    return safeCam;
+  }
   const panned: CameraState = {
-    ...camera,
-    x: camera.x + originDelta.dx,
-    y: camera.y + originDelta.dy,
+    ...safeCam,
+    x: safeCam.x + originDelta.dx,
+    y: safeCam.y + originDelta.dy,
   };
   return zoomAroundPoint(panned, nextScale, anchor.x, anchor.y);
+}
+
+export interface TouchPinchSample {
+  distance: number;
+  cx: number;
+  cy: number;
+}
+
+/**
+ * Computes a safe incremental camera update from two consecutive two-finger
+ * touch samples (in viewport-local pixels). Guards against near-zero finger
+ * spacing, NaN coordinates, and sudden finger-lift origin jumps.
+ */
+export function computePinchCameraStep(
+  camera: CameraState,
+  prev: TouchPinchSample,
+  next: TouchPinchSample,
+): CameraState {
+  const safeCam = sanitizeCamera(camera);
+  if (
+    !Number.isFinite(prev.distance) ||
+    !Number.isFinite(next.distance) ||
+    prev.distance < MIN_PINCH_DISTANCE ||
+    next.distance < MIN_PINCH_DISTANCE ||
+    !Number.isFinite(prev.cx) ||
+    !Number.isFinite(prev.cy) ||
+    !Number.isFinite(next.cx) ||
+    !Number.isFinite(next.cy)
+  ) {
+    return safeCam;
+  }
+
+  const rawRatio = next.distance / prev.distance;
+  const clampedRatio = Math.max(1 / MAX_PINCH_STEP_RATIO, Math.min(MAX_PINCH_STEP_RATIO, rawRatio));
+  const rawDx = next.cx - prev.cx;
+  const rawDy = next.cy - prev.cy;
+  const dx = Math.abs(rawDx) > MAX_PINCH_ORIGIN_JUMP ? 0 : rawDx;
+  const dy = Math.abs(rawDy) > MAX_PINCH_ORIGIN_JUMP ? 0 : rawDy;
+
+  return applyTouchPinchStep(
+    safeCam,
+    safeCam.scale * clampedRatio,
+    { x: next.cx, y: next.cy },
+    { dx, dy },
+  );
 }
 
 /**
@@ -136,17 +228,19 @@ export function computeFitCameraForBounds(
   viewportHeight: number,
   opts?: { pad?: number; minScale?: number; maxScale?: number },
 ): CameraState {
-  const pad = opts?.pad ?? 72;
+  const vw = Math.max(160, Number.isFinite(viewportWidth) ? viewportWidth : 360);
+  const vh = Math.max(160, Number.isFinite(viewportHeight) ? viewportHeight : 360);
+  const pad = Math.min(opts?.pad ?? 72, Math.floor(Math.min(vw, vh) * 0.25));
   const minScale = opts?.minScale ?? 0.25;
   const maxScale = opts?.maxScale ?? 1.6;
-  const scaleX = (viewportWidth - pad) / Math.max(160, bounds.width);
-  const scaleY = (viewportHeight - pad) / Math.max(120, bounds.height);
-  const scale = Math.max(minScale, Math.min(maxScale, scaleX, scaleY));
+  const scaleX = (vw - pad) / Math.max(160, bounds.width);
+  const scaleY = (vh - pad) / Math.max(120, bounds.height);
+  const scale = clampCameraScale(Math.max(minScale, Math.min(maxScale, scaleX, scaleY)));
   const cx = bounds.x + bounds.width / 2;
   const cy = bounds.y + bounds.height / 2;
-  return {
-    x: viewportWidth / 2 - cx * scale,
-    y: viewportHeight / 2 - cy * scale,
+  return sanitizeCamera({
+    x: vw / 2 - cx * scale,
+    y: vh / 2 - cy * scale,
     scale,
-  };
+  });
 }

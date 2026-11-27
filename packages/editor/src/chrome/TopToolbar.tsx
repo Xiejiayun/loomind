@@ -86,46 +86,46 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
       }`}
     >
       {/* Left: Account / Navigation + Left AI Chat / Outline Sidebar Toggles */}
-      <div className="flex min-w-0 items-center gap-1.5 max-md:contents">
+      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto max-md:contents">
         {accountControl && <div className="col-span-full flex min-w-0 md:contents">{accountControl}</div>}
         <div className="flex items-center gap-0.5 md:contents">
-        {onToggleAi && (
-          <button
-            type="button"
-            onClick={onToggleAi}
-            aria-pressed={leftPanel === "ai"}
-            title={t.toolbar.toggleAiTitle}
-            className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
-              leftPanel === "ai"
-                ? isDark
-                  ? "border-white/[0.14] bg-white/[0.1] text-[#f4f5f8]"
-                  : "border-slate-900/[0.14] bg-slate-900/[0.08] text-[#111318]"
-                : borderBtnCls
-            }`}
-          >
-            <Sparkles className="h-3 w-3 opacity-80" />
-            <span>{t.toolbar.chat}</span>
-          </button>
-        )}
-        {onToggleOutlineSidebar && viewMode === "canvas" && (
-          <button
-            type="button"
-            onClick={onToggleOutlineSidebar}
-            aria-label={t.toolbar.outlineSidebar}
-            aria-pressed={leftPanel === "outline"}
-            title={t.toolbar.toggleOutlineTitle}
-            className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
-              leftPanel === "outline"
-                ? isDark
-                  ? "border-white/[0.14] bg-white/[0.1] text-[#f4f5f8]"
-                  : "border-slate-900/[0.14] bg-slate-900/[0.08] text-[#111318]"
-                : borderBtnCls
-            }`}
-          >
-            <ListTree className="h-3 w-3 opacity-80" />
-            <span className="hidden sm:inline">{t.toolbar.outlineSidebar}</span>
-          </button>
-        )}
+          {onToggleAi && (
+            <button
+              type="button"
+              onClick={onToggleAi}
+              aria-pressed={leftPanel === "ai"}
+              title={t.toolbar.toggleAiTitle}
+              className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
+                leftPanel === "ai"
+                  ? isDark
+                    ? "border-white/[0.14] bg-white/[0.1] text-[#f4f5f8]"
+                    : "border-slate-900/[0.14] bg-slate-900/[0.08] text-[#111318]"
+                  : borderBtnCls
+              }`}
+            >
+              <Sparkles className="h-3 w-3 opacity-80" />
+              <span>{t.toolbar.chat}</span>
+            </button>
+          )}
+          {onToggleOutlineSidebar && viewMode === "canvas" && (
+            <button
+              type="button"
+              onClick={onToggleOutlineSidebar}
+              aria-label={t.toolbar.outlineSidebar}
+              aria-pressed={leftPanel === "outline"}
+              title={t.toolbar.toggleOutlineTitle}
+              className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
+                leftPanel === "outline"
+                  ? isDark
+                    ? "border-white/[0.14] bg-white/[0.1] text-[#f4f5f8]"
+                    : "border-slate-900/[0.14] bg-slate-900/[0.08] text-[#111318]"
+                  : borderBtnCls
+              }`}
+            >
+              <ListTree className="h-3 w-3 opacity-80" />
+              <span className="hidden sm:inline">{t.toolbar.outlineSidebar}</span>
+            </button>
+          )}
         </div>
       </div>
 
