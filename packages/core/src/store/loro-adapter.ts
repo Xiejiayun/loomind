@@ -12,16 +12,9 @@ import {
 } from "../model/document.js";
 import type { MindmapCommand } from "./commands.js";
 import { applyMindmapCommand, type CommandRejection } from "./reducer.js";
-import type { SyncAdapter } from "./sync-adapter.js";
+import type { PeerPresence, SyncAdapter } from "./sync-adapter.js";
 
-export interface PeerPresence {
-  peerId: string;
-  name: string;
-  color: string;
-  selectedTopicIds: string[];
-  cursor?: { x: number; y: number };
-  updatedAt: number;
-}
+export type { PeerPresence };
 
 interface SheetMeta {
   id: string;

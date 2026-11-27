@@ -9,6 +9,7 @@ import {
   type InlineAsset,
   type LayoutNode,
   type MindmapTopic,
+  type PeerPresence,
   type RichTextDoc,
 } from "@mindmap/core";
 import { MARKER_BY_ID, STICKER_BY_ID } from "../chrome/markers-catalog.js";
@@ -83,6 +84,7 @@ export interface TopicCardProps {
   topic: MindmapTopic;
   layoutNode: LayoutNode;
   selected: boolean;
+  remotePeer?: PeerPresence;
   searchHighlight?: "match" | "active";
   editing: boolean;
   initialEditChar?: string;
@@ -105,6 +107,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     topic,
     layoutNode,
     selected,
+    remotePeer,
     searchHighlight,
     editing,
     initialEditChar,
@@ -279,6 +282,16 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           </div>
         )}
 
+        {/* Remote Collaborator Presence Pill */}
+        {remotePeer && !lodLow && (
+          <div
+            className="pointer-events-none absolute -top-5 right-0 z-30 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+            style={{ backgroundColor: hex8ToCss(remotePeer.color) }}
+          >
+            <span className="max-w-[90px] truncate">{remotePeer.name}</span>
+          </div>
+        )}
+
         {/* Main Topic Card */}
         <div
           className={`relative box-border flex flex-col justify-center ${
@@ -294,6 +307,8 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           }`}
           style={{
             ...cardStyle,
+            outline: !selected && remotePeer ? `2px solid ${hex8ToCss(remotePeer.color)}` : undefined,
+            outlineOffset: !selected && remotePeer ? 2 : undefined,
             padding: `${layoutNode.paddingY + padExtraY}px ${layoutNode.paddingX + padExtraX}px`,
             alignItems: centerAlign ? "center" : undefined,
           }}

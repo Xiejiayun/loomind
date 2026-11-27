@@ -3,6 +3,15 @@ import type { MindmapDocument } from "../model/document.js";
 import type { MindmapCommand } from "./commands.js";
 import { applyMindmapCommand, type CommandRejection } from "./reducer.js";
 
+export interface PeerPresence {
+  peerId: string;
+  name: string;
+  color: string;
+  selectedTopicIds: string[];
+  cursor?: { x: number; y: number };
+  updatedAt: number;
+}
+
 export interface SyncAdapter {
   getDocument(): MindmapDocument;
   applyCommand(cmd: MindmapCommand, options?: { coalesceKey?: string }): CommandRejection | void;

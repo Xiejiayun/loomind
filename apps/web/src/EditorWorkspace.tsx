@@ -1,17 +1,44 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, History, PanelLeft, Share2 } from "lucide-react";
-import { LocalImmerSyncAdapter, type MindmapDocument, type SyncAdapter } from "@mindmap/core";
+import {
+  hex8ToCss,
+  LocalImmerSyncAdapter,
+  type MindmapDocument,
+  type PeerPresence,
+  type SyncAdapter,
+} from "@mindmap/core";
+import type { LoroSyncAdapter } from "@mindmap/core/loro";
 import { MindmapEditor } from "@mindmap/editor";
 import { useWebAiRuntime } from "./ai.js";
 import { AccountControl } from "./auth/AccountControl.js";
 import type { Session } from "./auth/shared.js";
 import { readCloud } from "./drafts/cloud.js";
+import { CollabSession, randomLoroPeerId } from "./drafts/collab.js";
 import { mapTitle, type MindmapSummary } from "./drafts/shared.js";
 import { DraftWorkspace, type SyncState } from "./drafts/workspace.js";
 import { useI18n } from "./i18n.js";
 import { AppLink, navigate } from "./navigation.js";
 import type { UiTheme } from "./ui.js";
 import { VersionHistoryDialog } from "./VersionHistoryDialog.js";
+
+function PeerPresenceStrip({ peers, label }: { peers: PeerPresence[]; label: (count: number) => string }) {
+  if (peers.length === 0) return null;
+  return (
+    <div className="lm-collab-peers" title={label(peers.length)} aria-label={label(peers.length)}>
+      {peers.slice(0, 4).map((peer) => (
+        <span
+          key={peer.peerId}
+          className="lm-collab-avatar"
+          style={{ backgroundColor: hex8ToCss(peer.color) }}
+          title={peer.name}
+        >
+          {peer.name.slice(0, 1).toUpperCase()}
+        </span>
+      ))}
+      {peers.length > 4 && <span className="lm-collab-more">+{peers.length - 4}</span>}
+    </div>
+  );
+}
 
 function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -64,11 +91,22 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
   const { t } = useI18n();
   const proAiRuntime = useWebAiRuntime("pro");
   const [initial, setInitial] = useState<{ document: MindmapDocument; key: number }>();
+  const [loroReady, setLoroReady] = useState<{ ctor: typeof LoroSyncAdapter | null; loaded: boolean }>({ ctor: null, loaded: false });
+  const [remotePeers, setRemotePeers] = useState<PeerPresence[]>([]);
   const [sync, setSync] = useState<SyncState>(() => ({ label: t.sync.connectingLabel, detail: t.sync.connectingDetail, status: "connecting" }));
   const [localError, setLocalError] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const workspace = useRef<DraftWorkspace | null>(null);
+  const collabRef = useRef<CollabSession | null>(null);
   const promptOnce = useRef(initialAiPrompt);
+
+  useEffect(() => {
+    let active = true;
+    void import("@mindmap/core/loro")
+      .then((mod) => { if (active) setLoroReady({ ctor: mod.LoroSyncAdapter, loaded: true }); })
+      .catch(() => { if (active) setLoroReady({ ctor: null, loaded: true }); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (initialAiPrompt) {
@@ -106,6 +144,42 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
     onRename(map.id, mapTitle(document));
   }, [map.id, onRename]);
 
+  const editorAdapter = useMemo<SyncAdapter | null>(() => {
+    if (!initial || !loroReady.loaded) return null;
+    if (loroReady.ctor) {
+      return new loroReady.ctor(initial.document, randomLoroPeerId());
+    }
+    return new LocalImmerSyncAdapter(initial.document);
+  }, [initial, loroReady]);
+
+  const displayName = session.user?.email.split("@")[0] || "Collaborator";
+
+  useEffect(() => {
+    if (!editorAdapter || !loroReady.ctor || !(editorAdapter instanceof loroReady.ctor)) {
+      setRemotePeers([]);
+      return;
+    }
+    const collab = new CollabSession(
+      owner,
+      map.id,
+      displayName,
+      editorAdapter,
+      false,
+      setRemotePeers,
+      (doc) => onRename(map.id, mapTitle(doc)),
+    );
+    collabRef.current = collab;
+    collab.start();
+    return () => {
+      collab.close();
+      collabRef.current = null;
+    };
+  }, [editorAdapter, loroReady.ctor, owner, map.id, displayName, onRename]);
+
+  const handleSelectionChange = useCallback((topicIds: string[]) => {
+    collabRef.current?.setLocalSelection(topicIds);
+  }, []);
+
   const downloadJson = useCallback((filename: string, json: string | null) => {
     if (!json) return;
     const blob = new Blob([json], { type: "application/json;charset=utf-8" });
@@ -117,14 +191,16 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
     URL.revokeObjectURL(url);
   }, []);
 
-  if (!initial) return <div className="lm-loading">{t.common.openingMap}</div>;
+  if (!initial || !editorAdapter) return <div className="lm-loading">{t.common.openingMap}</div>;
 
   return <div className="lm-editor-host">
     {(localError || listError) && <div className="lm-editor-error" role="alert">{localError || listError}</div>}
     <MindmapEditor
       key={initial.key}
-      initialDoc={initial.document}
+      adapter={editorAdapter}
       onDocumentChange={edit}
+      remotePeers={remotePeers}
+      onSelectionChange={handleSelectionChange}
       chromeTheme={theme}
       initialFormatPanelOpen={false}
       initialAiPrompt={promptOnce.current}
@@ -134,6 +210,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
+        <PeerPresenceStrip peers={remotePeers} label={t.editorWorkspace.onlinePeers} />
         <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryOpen(true)} title={t.editorWorkspace.historyBtn}>
           <History size={12}/> {t.editorWorkspace.historyBtn}
         </button>

@@ -9,6 +9,7 @@ import {
   type Locale,
   type MindmapDocument,
   type MindmapStoreState,
+  type PeerPresence,
   type SyncAdapter,
 } from "@mindmap/core";
 import { DomTextMeasurer } from "./canvas/DomMeasurer.js";
@@ -45,11 +46,13 @@ export interface MindmapEditorProps {
   readOnly?: boolean;
   locale?: Locale;
   aiRuntime?: EditorAiRuntime;
+  remotePeers?: PeerPresence[];
+  onSelectionChange?: (topicIds: string[]) => void;
 }
 
 const MindmapEditorInner: React.FC<
-  Pick<MindmapEditorProps, "accountControl" | "chromeTheme" | "initialAiPrompt" | "initialRightPanel" | "readOnly" | "aiRuntime">
-> = ({ accountControl, chromeTheme, initialAiPrompt, initialRightPanel, readOnly = false, aiRuntime }) => {
+  Pick<MindmapEditorProps, "accountControl" | "chromeTheme" | "initialAiPrompt" | "initialRightPanel" | "readOnly" | "aiRuntime" | "remotePeers">
+> = ({ accountControl, chromeTheme, initialAiPrompt, initialRightPanel, readOnly = false, aiRuntime, remotePeers }) => {
   const doc = useMindmapStore((s) => s.doc);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
   const viewMode = useMindmapStore((s) => s.viewMode);
@@ -284,6 +287,7 @@ const MindmapEditorInner: React.FC<
                 appearance={chromeTheme}
                 layout={layout}
                 readOnly={readOnly}
+                remotePeers={remotePeers}
                 searchMatchedIds={searchMatchedIds}
                 activeSearchMatchId={activeSearchMatchId}
                 onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
@@ -379,6 +383,8 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
   readOnly = false,
   locale,
   aiRuntime,
+  remotePeers,
+  onSelectionChange,
 }) => {
   useEffect(() => {
     if (locale) setLocale(locale);
@@ -401,6 +407,17 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
     });
   }, [onDocumentChange]);
 
+  useEffect(() => {
+    if (!onSelectionChange || !storeRef.current) return;
+    let prevSel = storeRef.current.getState().selectedTopicIds;
+    return storeRef.current.subscribe((state) => {
+      if (state.selectedTopicIds !== prevSel) {
+        prevSel = state.selectedTopicIds;
+        onSelectionChange(state.selectedTopicIds);
+      }
+    });
+  }, [onSelectionChange]);
+
   return (
     <MindmapStoreContext.Provider value={storeRef.current}>
       {sidebar}
@@ -411,6 +428,7 @@ export const MindmapEditor: React.FC<MindmapEditorProps> = ({
         initialRightPanel={initialRightPanel}
         readOnly={readOnly}
         aiRuntime={aiRuntime}
+        remotePeers={remotePeers}
       />
     </MindmapStoreContext.Provider>
   );
