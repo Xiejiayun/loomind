@@ -402,7 +402,7 @@ const MindmapEditorInner: React.FC<
         {!readOnly && viewMode === "canvas" && <FormatPanel isDark={isDark} />}
       </div>
 
-      <SheetBar layout={layout} isDark={isDark} viewportRef={viewportRef} />
+      <SheetBar layout={layout} isDark={isDark} viewportRef={viewportRef} readOnly={readOnly} />
 
       <ContextMenu
         menu={contextMenu}

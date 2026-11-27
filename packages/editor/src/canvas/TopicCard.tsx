@@ -86,6 +86,7 @@ export interface TopicCardProps {
   topic: MindmapTopic;
   layoutNode: LayoutNode;
   isDarkCanvas?: boolean;
+  readOnly: boolean;
   previewWidth?: number;
   selected: boolean;
   remotePeer?: PeerPresence;
@@ -111,6 +112,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     topic,
     layoutNode,
     isDarkCanvas = false,
+    readOnly,
     previewWidth,
     selected,
     remotePeer,
@@ -235,11 +237,11 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           paddingTop: relContentTop,
         }}
         onClick={(e) => onSelect(topic.id, e)}
-        onDoubleClick={(e) => {
+        onDoubleClick={readOnly ? undefined : (e) => {
           e.stopPropagation();
           onStartEdit(topic.id);
         }}
-        onPointerDown={(e) => {
+        onPointerDown={readOnly ? undefined : (e) => {
           if (e.button === 0 && !editing) onStartDrag(topic.id, e);
         }}
         onContextMenu={(e) => onContextMenu(topic.id, e)}
@@ -256,12 +258,12 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => {
+            onDoubleClick={readOnly ? undefined : (e) => {
               e.stopPropagation();
               setCalloutDraft(richTextToPlainText(topic.callout!.title));
               setEditingCallout(true);
             }}
-            title={t.topic.editCalloutTitle}
+            title={readOnly ? undefined : t.topic.editCalloutTitle}
           >
             {editingCallout ? (
               <input
@@ -287,7 +289,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
             ) : (
               <span className="truncate">{richTextToPlainText(topic.callout.title)}</span>
             )}
-            {!editingCallout && onUpdateCallout && (
+            {!readOnly && !editingCallout && onUpdateCallout && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -437,6 +439,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
               <button
                 type="button"
                 role="checkbox"
+                disabled={readOnly}
                 aria-checked={topic.task.status === "done"}
                 aria-label={t.topic.toggleTaskTitle}
                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
@@ -567,7 +570,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           {!lodLow && topic.equation?.latex && <EquationView latex={topic.equation.latex} />}
 
           {/* Right-edge Width Resize Handle */}
-          {selected && !editing && (
+          {selected && !editing && !readOnly && (
             <div
               className="absolute -right-1 top-1 bottom-1 w-2 cursor-ew-resize rounded hover:bg-blue-400/50"
               onPointerDown={(e) => {

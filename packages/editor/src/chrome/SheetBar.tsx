@@ -8,10 +8,11 @@ import { useEditorI18n } from "../i18n.js";
 interface SheetBarProps {
   viewportRef: React.RefObject<HTMLDivElement | null>;
   isDark: boolean;
+  readOnly: boolean;
   layout: MindmapLayoutResult;
 }
 
-export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef }) => {
+export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef, readOnly }) => {
   const doc = useMindmapStore((s) => s.doc);
   const viewMode = useMindmapStore((s) => s.viewMode);
   const camera = useMindmapStore((s) => s.camera);
@@ -74,7 +75,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
             <div
               key={s.id}
               onClick={() => dispatch({ type: "sheet/switch", sheetId: s.id })}
-              onDoubleClick={() => {
+              onDoubleClick={readOnly ? undefined : () => {
                 setRenamingId(s.id);
                 setRenameText(s.title);
               }}
@@ -108,7 +109,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
               ) : (
                 <span>{s.title}</span>
               )}
-              {doc.sheets.length > 1 && (
+              {!readOnly && doc.sheets.length > 1 && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -124,14 +125,14 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
           );
         })}
 
-        <button
+        {!readOnly && <button
           type="button"
           onClick={handleAddSheet}
           className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
           title={t.sheetBar.addSheetTitle}
         >
           <Plus className="h-3 w-3" />
-        </button>
+        </button>}
       </div>
 
       {/* Right: Zoom & Minimap (Canvas mode only) */}

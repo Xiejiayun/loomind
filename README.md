@@ -51,7 +51,8 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 ### Loro CRDT Live Sync, Cloud Version History & Workspace Sharing
 - **Real-time CRDT Collaboration**: Powered by `LoroSyncAdapter` (Movable Tree CRDT) with instant same-browser `BroadcastChannel` sync, Cloudflare D1 incremental delta sync (`/api/mindmaps/:id/collab`), and live collaborator selection presence badges.
 - **Cloud Version History**: Automatically snapshots up to 20 cloud revisions per mindmap (`mindmap_revisions`) with live SVG thumbnail previews, JSON download, and non-destructive one-click restore.
-- **Workspace & Mindmap Sharing**: Invite another Google account to an entire workspace or a single mindmap with editor or viewer access (7-day expiry, instant revocation, signed-session access control).
+- **Member invitations**: Invite a Google account to a workspace or a single mind map as a viewer or editor. Invitation links expire after 7 days; revoking an invitation prevents new joins, not access already granted to a member.
+- **Public read-only links**: Off by default. From **Share → Enable read-only link**, the map owner can share all sheets, notes and referenced images with anyone who has the link, without sign-in. Anonymous readers cannot access history, member details or AI chat. Both anonymous and invited viewers refresh the latest saved revision every five seconds while the page is visible; this is not a live keystroke feed. Revocation blocks further public reads without changing member access. It cannot recall copies already viewed or downloaded.
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
 - **Pitch Mode**: Automatically compiles your mind map into polished presentation slides with speaker notes and exports directly to **`.pptx`**.

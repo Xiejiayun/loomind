@@ -186,7 +186,7 @@ export const SvgLayer: React.FC<SvgLayerProps> = React.memo(
                     </text>
                   </g>
                 )}
-                {isSel && (
+                {isSel && onStartDragControl && (
                   <g>
                     <line
                       x1={rel.p0.x}

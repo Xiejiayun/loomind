@@ -11,6 +11,7 @@ import { TopicCard } from "./TopicCard.js";
 
 interface NodeLayerProps {
   sheetTitle: string;
+  readOnly: boolean;
   isDarkCanvas: boolean;
   layout: MindmapLayoutResult;
   topicMap: Map<string, MindmapTopic>;
@@ -40,6 +41,7 @@ interface NodeLayerProps {
 export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
   ({
     sheetTitle,
+    readOnly,
     isDarkCanvas,
     layout,
     topicMap,
@@ -134,6 +136,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
             >
               <TopicCard
                 topic={topic}
+                readOnly={readOnly}
                 layoutNode={layoutNode}
                 isDarkCanvas={isDarkCanvas}
                 previewWidth={previewW}

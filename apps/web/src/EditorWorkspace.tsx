@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, History, PanelLeft, Share2 } from "lucide-react";
+import { History, PanelLeft, Share2 } from "lucide-react";
 import {
   hex8ToCss,
   LocalImmerSyncAdapter,
@@ -12,13 +12,13 @@ import { MindmapEditor } from "@mindmap/editor";
 import { useWebAiRuntime } from "./ai.js";
 import { AccountControl } from "./auth/AccountControl.js";
 import type { Session } from "./auth/shared.js";
-import { readCloud } from "./drafts/cloud.js";
+import { ReadOnlyMap } from "./ReadOnlyMap.js";
 import { createMapAiChatPersistence } from "./drafts/ai-chat.js";
 import { CollabSession, randomLoroPeerId } from "./drafts/collab.js";
 import { mapTitle, type MindmapSummary } from "./drafts/shared.js";
 import { DraftWorkspace, type SyncState } from "./drafts/workspace.js";
 import { useI18n } from "./i18n.js";
-import { AppLink, navigate } from "./navigation.js";
+import { navigate } from "./navigation.js";
 import type { UiTheme } from "./ui.js";
 import { VersionHistoryDialog } from "./VersionHistoryDialog.js";
 
@@ -39,10 +39,6 @@ function PeerPresenceStrip({ peers, label }: { peers: PeerPresence[]; label: (co
       {peers.length > 4 && <span className="lm-collab-more">+{peers.length - 4}</span>}
     </div>
   );
-}
-
-function errorText(reason: unknown, fallback: string) {
-  return reason instanceof Error ? reason.message : fallback;
 }
 
 export function EditorWorkspace({ map, owner, session, changeSession, theme, initialAiPrompt, onConsumeAiPrompt, onToggleSidebar, onRename, onShare, listError }: {
@@ -275,65 +271,28 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
   listError: string;
 }) {
   const { t } = useI18n();
-  const [document, setDocument] = useState<MindmapDocument | null>(null);
-  const [error, setError] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyTitle, setHistoryTitle] = useState<string | null>(null);
   const chatPersistence = useMemo(
     () => createMapAiChatPersistence(owner, map.id, true),
     [owner, map.id],
   );
-  useEffect(() => {
-    let active = true;
-    void readCloud(owner, map.id).then((draft) => {
-      if (!active) return;
-      if (!draft.document) { setError(t.editorWorkspace.mapUnavailable); return; }
-      setDocument(draft.document);
-    }).catch((reason) => { if (active) setError(errorText(reason, t.editorWorkspace.readSharedError)); });
-    return () => { active = false; };
-  }, [owner, map.id, t.editorWorkspace.mapUnavailable, t.editorWorkspace.readSharedError]);
-  const adapter = useMemo<SyncAdapter | null>(() => {
-    if (!document) return null;
-    const source = new LocalImmerSyncAdapter(document);
-    return {
-      getDocument: () => source.getDocument(),
-      applyCommand: () => {},
-      replaceDocument: () => {},
-      undo: () => {},
-      redo: () => {},
-      canUndo: () => false,
-      canRedo: () => false,
-      subscribe: (listener) => source.subscribe(listener),
-    };
-  }, [document]);
-  if (error) return <div className="lm-not-found"><span className="lm-eyebrow">{t.editorWorkspace.unavailableEyebrow}</span><h1>{t.editorWorkspace.cannotOpenShared}</h1><p role="alert">{error}</p><AppLink href="/app" className="lm-primary-button">{t.notFound.backToWorkspace} <ArrowRight size={16}/></AppLink></div>;
-  if (!adapter) return <div className="lm-loading">{t.editorWorkspace.loadingShared}</div>;
-  return <div className="lm-editor-host lm-viewer-editor">
-    {listError && <div className="lm-editor-error" role="alert">{listError}</div>}
-    <span className="lm-readonly-badge max-md:sr-only">{t.editorWorkspace.readonlyBanner}</span>
-    <MindmapEditor
-      adapter={adapter}
-      chromeTheme={theme}
-      readOnly
-      chatPersistence={chatPersistence}
-      initialFormatPanelOpen={false}
-      accountControl={<div className="lm-editor-navigation">
+  return <ReadOnlyMap id={map.id} access={{ owner }} theme={theme} chatPersistence={chatPersistence} listError={listError}
+    navigation={(title) => <>
         <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} aria-controls="lm-workspace-sidebar" onClick={onToggleSidebar}>
           <PanelLeft size={15}/>
         </button>
-        <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
-        <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryOpen(true)} title={t.editorWorkspace.historyBtn}>
+        <span className="lm-editor-map-title" title={title}>{title}</span>
+        <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryTitle(title)} title={t.editorWorkspace.historyBtn}>
           <History size={12}/> <span className="max-sm:sr-only">{t.editorWorkspace.historyBtn}</span>
         </button>
-        <span className="lm-editor-viewer-label">{t.common.readOnly}</span>
-      </div>}
-    />
+      </>}>
     <VersionHistoryDialog
-      open={historyOpen}
+      open={historyTitle !== null}
       owner={owner}
       mapId={map.id}
-      mapTitle={map.title}
+      mapTitle={historyTitle ?? map.title}
       readOnly
-      onClose={() => setHistoryOpen(false)}
+      onClose={() => setHistoryTitle(null)}
     />
-  </div>;
+  </ReadOnlyMap>;
 }

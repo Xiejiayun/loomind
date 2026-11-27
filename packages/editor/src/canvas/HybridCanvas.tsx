@@ -1125,7 +1125,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
         selectTopics([]);
         setEditingTopicId(null);
       }}
-      onDoubleClick={handleDoubleClickBlank}
+      onDoubleClick={readOnly ? undefined : handleDoubleClickBlank}
     >
       {/* Layer 1: GPU-accelerated world container */}
       <div
@@ -1143,11 +1143,12 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
           selectedBoundaryId={selectedBoundaryId}
           onSelectRelationship={selectRelationship}
           onSelectBoundary={selectBoundary}
-          onStartDragControl={handleStartDragControl}
+          onStartDragControl={readOnly ? undefined : handleStartDragControl}
         />
 
         <NodeLayer
           sheetTitle={sheet.title}
+          readOnly={readOnly}
           isDarkCanvas={palette.isDark}
           layout={layout}
           topicMap={topicMap}
@@ -1252,7 +1253,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
       )}
 
       {/* Multi-selection Floating Action Bar */}
-      {selectedTopicIds.length > 1 && (
+      {!readOnly && selectedTopicIds.length > 1 && (
         <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur">
           <span className="px-1 text-slate-400">{t.canvas.selectedCount(selectedTopicIds.length)}</span>
           <button

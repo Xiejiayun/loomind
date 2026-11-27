@@ -35,9 +35,9 @@ export async function mindmapPermission(db: D1Database, subject: string, id: str
     .first<{ owner: string; workspaceId: string | null; access: Access | null }>();
 }
 
-export async function visibleMindmap(db: D1Database, subject: string, id: string) {
+export async function visibleMindmap(db: D1Database, subject: string, id: string, knownRevision = 0) {
   return db.prepare(`
-    SELECT m.revision, m.document FROM mindmaps m
+    SELECT m.revision, CASE WHEN m.revision = ? THEN '' ELSE m.document END AS document FROM mindmaps m
     WHERE m.id = ? AND (
       m.owner = ? OR EXISTS (
         SELECT 1 FROM workspaces w
@@ -50,5 +50,5 @@ export async function visibleMindmap(db: D1Database, subject: string, id: string
         SELECT 1 FROM mindmap_members mm WHERE mm.mindmap_id = m.id AND mm.subject = ?
       )
     )
-  `).bind(id, subject, subject, subject, subject).first<{ revision: number; document: string }>();
+  `).bind(knownRevision, id, subject, subject, subject, subject).first<{ revision: number; document: string }>();
 }

@@ -2,6 +2,7 @@ import { MindmapDocumentSchema, validateDocumentInvariants } from "@mindmap/core
 import { DRAFT_LIMIT, DRAFT_SIZE_ERROR, MAP_ID, OWNER_HEADER, mapTitle, type CloudDraft, type MindmapSummary } from "../src/drafts/shared.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import { database, mindmapPermission, visibleMindmap, workspaceRole, type Access } from "./permissions.js";
+import { knownRevision, snapshotResponse } from "./snapshot-response.js";
 
 const workspaceHeader = "X-Loomind-Workspace";
 const MAX_REVISIONS_PER_MAP = 20;
@@ -46,9 +47,10 @@ export async function handleDraft(request: Request, env: Env, subject: string | 
   }
 
   if (request.method === "GET") {
-    const row = await visibleMindmap(db, subject, id);
+    const known = knownRevision(request);
+    const row = await visibleMindmap(db, subject, id, known);
     // Unknown and inaccessible IDs are indistinguishable to the existing create-on-first-save client.
-    return json(row ? { revision: row.revision, document: JSON.parse(row.document) } : { revision: 0, document: null } satisfies CloudDraft);
+    return row ? snapshotResponse(row, known) : json({ revision: 0, document: null } satisfies CloudDraft);
   }
 
   if (request.method === "DELETE") {

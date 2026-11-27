@@ -75,6 +75,7 @@ beforeAll(async () => {
   for (const statement of aiChatMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  await platform.env.DB.prepare(await readFile(new URL("../migrations/0010_public_view_links.sql", import.meta.url), "utf8")).run();
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -281,6 +282,51 @@ describe("collaboration API (signed sessions and local D1)", () => {
 });
 
 describe("mindmaps API (local workerd D1)", () => {
+  it("publishes only the current map and invalidates a revoked read link even on a conditional read", async () => {
+    const owner = "public-map-owner";
+    const ownerSession = await login(owner);
+    const editor = "public-map-editor";
+    const editorSession = await login(editor);
+    const mapId = crypto.randomUUID();
+    const path = `mindmaps/${mapId}`;
+    const manage = `${path}/public-link`;
+    const view = `public-maps/${mapId}`;
+    const doc = getTemplate("blank-organic").create();
+    doc.deletedIds.push("discarded-topic");
+    doc.assets.orphan = { resourceId: "orphan", mimeType: "image/png", width: 1, height: 1, sha256: "unused", dataBase64: "cHJpdmF0ZQ==" };
+    const headers = { [OWNER_HEADER]: owner };
+    expect((await request(path, "PUT", ownerSession, doc, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    await env.DB.prepare("INSERT INTO mindmap_members (mindmap_id, subject, role) VALUES (?, ?, 'editor')").bind(mapId, editor).run();
+    expect(await (await request(manage, "GET", ownerSession)).json()).toEqual({ token: null });
+    expect((await request(manage, "PUT", editorSession)).status).toBe(404);
+    expect((await request(manage, "PUT")).status).toBe(401);
+    expect((await request(manage, "PUT", ownerSession, undefined, { Origin: "https://other.test" })).status).toBe(403);
+    const enabled = await request(manage, "PUT", ownerSession);
+    expect(enabled.status).toBe(200);
+    const { token } = await enabled.json() as { token: string };
+    expect(typeof token).toBe("string");
+    expect(await (await request(manage, "GET", ownerSession)).json()).toEqual({ token });
+    expect(await (await request(manage, "PUT", ownerSession)).json()).toEqual({ token });
+    const bearer = { Authorization: `Bearer ${token}` };
+    const first = await request(view, "GET", "", undefined, bearer);
+    expect(first.headers.get("ETag")).toBe('"1"');
+    expect(first.headers.get("Cache-Control")).toContain("no-store");
+    expect(await first.json()).toEqual({ revision: 1, document: { ...doc, deletedIds: [], assets: {} } });
+    const unchanged = { ...bearer, "If-None-Match": '"1"' };
+    expect((await request(view, "GET", "", undefined, unchanged)).status).toBe(304);
+    expect((await request(view)).status).toBe(404);
+    expect((await request(`public-maps/${crypto.randomUUID()}`, "GET", "", undefined, bearer)).status).toBe(404);
+    expect((await request(view, "PUT", "", doc, bearer)).status).toBe(405);
+    expect((await request(`${path}/revisions`, "GET", "", undefined, bearer)).status).toBe(401);
+    expect((await request(manage, "DELETE", editorSession)).status).toBe(404);
+    expect((await request(manage, "DELETE", ownerSession)).status).toBe(200);
+    expect((await request(view, "GET", "", undefined, unchanged)).status).toBe(404);
+    const renewed = await (await request(manage, "PUT", ownerSession)).json() as { token: string };
+    expect(renewed.token).not.toBe(token);
+    expect((await request(view, "GET", "", undefined, bearer)).status).toBe(404);
+    expect((await request(view, "GET", "", undefined, { Authorization: `Bearer ${renewed.token}` })).status).toBe(200);
+  });
+
   it("migrates the former one-map account record without changing its revision", async () => {
     const legacy = await login("legacy");
     const owner = { [OWNER_HEADER]: "legacy" };
