@@ -49,8 +49,9 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Logged-in Pro Co-Creation**: Streaming AI Chat panel (`⌘J`), inline node AI command bar (`⇧⌘J`), and 6 structured undoable node actions (Expand, Break into Tasks, Summarize, Cluster Boundary, Elaborate Note, Smart Restyle).
 
 ### Loro CRDT Live Sync, Cloud Version History & Workspace Sharing
-- **Real-time CRDT Collaboration**: Powered by `LoroSyncAdapter` (Movable Tree CRDT) with instant same-browser `BroadcastChannel` sync, Cloudflare D1 incremental delta sync (`/api/mindmaps/:id/collab`), and live collaborator selection presence badges.
+- **Collaboration**: The editor uses a Loro movable-tree CRDT, `BroadcastChannel`, and an HTTP delta log in D1 (`/api/mindmaps/:id/collab`). It shows other editors’ selections. Two editors opening the same JSON independently can still lack a common CRDT history: their unsaved edits may not appear on each other’s canvas even when both uploads succeed.
 - **Cloud Version History**: Automatically snapshots up to 20 cloud revisions per mindmap (`mindmap_revisions`) with live SVG thumbnail previews, JSON download, and non-destructive one-click restore.
+- **Collaboration transport limits**: One edit frame can carry 1.5 MiB of base64 (1,152 KiB of binary data). Each pull returns an ordered prefix of up to 100 frames and 1.5 MiB of encoded updates. D1 retains the newest 200 frames or 37.5 MiB of encoded updates per map, whichever fills first. This log is not a backup; a successful upload does not prove that another editor has applied an edit.
 - **Workspace & Mindmap Sharing**: Invite another Google account to an entire workspace or a single mindmap with editor or viewer access (7-day expiry, instant revocation, signed-session access control).
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
@@ -123,7 +124,7 @@ pnpm exec playwright install chromium webkit
 pnpm test:mobile
 ```
 
-The mobile checks serve the built app on loopback and use explicit API fixtures. They exercise real browser layout, touch input and local map storage, not live Google login, AI generation or cloud sync.
+The mobile layout checks use loopback and explicit API fixtures. A separate Chromium/WebKit scenario uses a real local Worker and D1 to upload an image, compare the delta another account receives, and reopen the saved image. Sessions are test fixtures; neither scenario calls live Google login or AI providers.
 
 ### Login and storage
 
