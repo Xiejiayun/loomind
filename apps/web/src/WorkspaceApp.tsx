@@ -77,6 +77,10 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   const [mobileOpen, setMobileOpen] = useState(false);
   const drawerClose = useRef<HTMLButtonElement>(null);
 
+  const editorMatch = /^\/app\/mindmaps\/([^/]+)$/.exec(route.pathname);
+  const mapId = editorMatch?.[1] ?? null;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(Boolean(mapId));
+
   const toggleSidebar = useCallback(() => {
     if (window.matchMedia("(max-width: 800px)").matches) setMobileOpen((open) => !open);
     else setSidebarCollapsed((collapsed) => !collapsed);
@@ -85,21 +89,21 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   useEffect(() => {
     if (!mobileOpen) return;
     const opener = document.querySelector<HTMLButtonElement>('.lm-app-column [aria-controls="lm-workspace-sidebar"]');
+    const drawer = drawerClose.current?.closest("aside");
     drawerClose.current?.focus();
     const mobile = window.matchMedia("(max-width: 800px)");
     const closeOnDesktop = () => { if (!mobile.matches) setMobileOpen(false); };
     mobile.addEventListener("change", closeOnDesktop);
     return () => {
       mobile.removeEventListener("change", closeOnDesktop);
-      if (mobile.matches && opener?.isConnected && !document.querySelector("dialog[open]")) opener.focus({ preventScroll: true });
+      const focused = document.activeElement;
+      if (mobile.matches && opener?.isConnected && (focused === document.body || drawer?.contains(focused))) {
+        opener.focus({ preventScroll: true });
+      }
     };
   }, [mobileOpen]);
 
-  const editorMatch = /^\/app\/mindmaps\/([^/]+)$/.exec(route.pathname);
-  const mapId = editorMatch?.[1] ?? null;
-
   // Auto-collapse sidebar when entering editor to maximize canvas; restore on workspace pages
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(Boolean(mapId));
   const prevInEditor = useRef(Boolean(mapId));
   useEffect(() => {
     const inEditor = Boolean(mapId);

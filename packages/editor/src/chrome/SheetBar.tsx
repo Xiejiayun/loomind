@@ -60,7 +60,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
   return (
     <footer
       className={`flex h-8 shrink-0 items-center justify-between border-t px-2.5 text-[11px] transition-colors
-        max-sm:h-auto max-sm:px-1 max-sm:pb-[env(safe-area-inset-bottom)] max-sm:[&_button]:min-h-11 max-sm:[&_button]:min-w-9 ${
+        max-sm:h-auto max-sm:px-1 max-sm:[&_button]:min-h-11 max-sm:[&_button]:min-w-9 ${
         isDark
           ? "border-white/[0.075] bg-[#0b0c0e] text-[#9ca3b0]"
           : "border-slate-900/[0.08] bg-[#f7f8fa] text-[#525b6b]"
