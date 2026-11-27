@@ -3,9 +3,12 @@ import {
   applyTouchPinchStep,
   applyWheelGesture,
   computeFitCameraForBounds,
+  computePinchCameraStep,
+  isValidCamera,
   MAX_CAMERA_SCALE,
   MIN_CAMERA_SCALE,
   resetZoomCentered,
+  sanitizeCamera,
   stepZoomCamera,
   zoomAroundPoint,
 } from "../src/canvas/viewport-camera.js";
@@ -104,5 +107,48 @@ describe("viewport camera gestures", () => {
     expect(reset.scale).toBe(1);
     expect((400 - reset.x) / reset.scale).toBeCloseTo((400 - 100) / 2, 5);
     expect((300 - reset.y) / reset.scale).toBeCloseTo((300 - 100) / 2, 5);
+  });
+
+  it("computes safe native two-finger touch pinch steps and resists NaN, near-zero spacing, and origin jumps", () => {
+    const cam = { x: 40, y: 80, scale: 1 };
+
+    // Normal 2-finger pinch-out (100px -> 150px) with slight midpoint shift
+    const zoomed = computePinchCameraStep(
+      cam,
+      { distance: 100, cx: 180, cy: 260 },
+      { distance: 150, cx: 190, cy: 250 },
+    );
+    expect(zoomed.scale).toBeCloseTo(1.5, 5);
+    expect(isValidCamera(zoomed)).toBe(true);
+    // World point under previous midpoint remains under new midpoint
+    expect((190 - zoomed.x) / zoomed.scale).toBeCloseTo((180 - cam.x) / cam.scale, 5);
+    expect((250 - zoomed.y) / zoomed.scale).toBeCloseTo((260 - cam.y) / cam.scale, 5);
+
+    // Near-zero finger distance must NOT explode scale to Infinity or NaN
+    const tooClose = computePinchCameraStep(
+      cam,
+      { distance: 2, cx: 180, cy: 260 },
+      { distance: 120, cx: 180, cy: 260 },
+    );
+    expect(tooClose).toEqual(cam);
+
+    // NaN coordinates or scale must cleanly preserve fallback camera
+    const nanSafe = computePinchCameraStep(
+      cam,
+      { distance: Number.NaN, cx: 180, cy: 260 },
+      { distance: 150, cx: Number.NaN, cy: 260 },
+    );
+    expect(nanSafe).toEqual(cam);
+    expect(sanitizeCamera({ x: Number.NaN, y: 0, scale: Number.POSITIVE_INFINITY }, cam)).toEqual(cam);
+
+    // Sudden >160px origin jump (e.g. one finger lifted & re-placed) must NOT fling canvas off-screen
+    const jumped = computePinchCameraStep(
+      cam,
+      { distance: 100, cx: 100, cy: 100 },
+      { distance: 110, cx: 360, cy: 360 },
+    );
+    expect(isValidCamera(jumped)).toBe(true);
+    expect(Math.abs(jumped.x - cam.x)).toBeLessThan(80);
+    expect(Math.abs(jumped.y - cam.y)).toBeLessThan(80);
   });
 });

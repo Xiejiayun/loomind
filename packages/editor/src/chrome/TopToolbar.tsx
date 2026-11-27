@@ -84,7 +84,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
       }`}
     >
       {/* Left: Account / Navigation + Left AI Chat / Outline Sidebar Toggles */}
-      <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
         {accountControl}
         {onToggleAi && (
           <button

@@ -1,16 +1,35 @@
 @import "tailwindcss";
 @source "../../../packages/editor/src";
 
+.mindmap-canvas-viewport {
+  contain: layout paint;
+  isolation: isolate;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mindmap-world {
+  /* Prevent mobile WebKit/Blink automatic font inflation during canvas scale transforms */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 .mindmap-node-motion {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.is-interacting .mindmap-world {
-  will-change: transform;
-}
-
+/* Do NOT promote .mindmap-world with will-change: transform: on high-DPR mobile GPUs,
+   scaling a single giant composited layer containing SVG + DOM exceeds max texture size
+   and causes text/tiles to vanish or corrupt adjacent UI layers. */
 .is-interacting .mindmap-node-motion {
   transition: none !important;
+}
+
+.lm-editor-host {
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 /* Unified Linear dark-panel overrides for editor FormatPanel */

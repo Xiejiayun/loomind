@@ -67,11 +67,22 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
   }) => {
     // RBush viewport culling (+600px world buffer so panning stays smooth without frequent re-culling)
     const visibleTopicIds = useMemo(() => {
-      const buffer = 600 / Math.max(0.15, camera.scale);
-      const minX = -camera.x / camera.scale - buffer;
-      const minY = -camera.y / camera.scale - buffer;
-      const maxX = (viewportSize.width - camera.x) / camera.scale + buffer;
-      const maxY = (viewportSize.height - camera.y) / camera.scale + buffer;
+      if (
+        !Number.isFinite(camera.x) ||
+        !Number.isFinite(camera.y) ||
+        !Number.isFinite(camera.scale) ||
+        camera.scale <= 0 ||
+        viewportSize.width <= 0 ||
+        viewportSize.height <= 0
+      ) {
+        return Array.from(layout.nodes.keys());
+      }
+      const safeScale = Math.max(0.15, camera.scale);
+      const buffer = 600 / safeScale;
+      const minX = -camera.x / safeScale - buffer;
+      const minY = -camera.y / safeScale - buffer;
+      const maxX = (viewportSize.width - camera.x) / safeScale + buffer;
+      const maxY = (viewportSize.height - camera.y) / safeScale + buffer;
 
       const hits = layout.spatialIndex.search({ minX, minY, maxX, maxY });
       const ids = hits.map((h) => h.topicId);
@@ -81,7 +92,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
       return ids;
     }, [layout, camera, viewportSize, editingTopicId]);
 
-    const lodLow = camera.scale < 0.35;
+    const lodLow = Number.isFinite(camera.scale) && camera.scale < 0.22;
 
     const peerByTopicId = useMemo(() => {
       if (!remotePeers || remotePeers.length === 0) return null;
