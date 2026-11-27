@@ -243,7 +243,7 @@ export function createTopic(
 
 export const DEFAULT_THEME_CONFIG: MindmapThemeConfig = {
   skeletonId: "xmind-organic",
-  paletteId: "xmind-rainbow",
+  paletteId: "workspace",
   handdrawn: false,
   rainbowBranches: true,
 };

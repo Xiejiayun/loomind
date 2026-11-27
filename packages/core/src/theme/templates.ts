@@ -26,7 +26,7 @@ export const TEMPLATES: MindmapTemplate[] = [
     description: "经典 XMind 有机丝带风格，适合自由发散思考",
     structure: "mindmap",
     skeletonId: "xmind-organic",
-    paletteId: "xmind-rainbow",
+    paletteId: "workspace",
     create: () =>
       createDocument(
         [
@@ -50,7 +50,7 @@ export const TEMPLATES: MindmapTemplate[] = [
             { structure: "mindmap", direction: "bilateral" },
           ),
         ],
-        { skeletonId: "xmind-organic", paletteId: "xmind-rainbow", rainbowBranches: true, handdrawn: false },
+        { skeletonId: "xmind-organic", paletteId: "workspace", rainbowBranches: true, handdrawn: false },
       ),
   },
   {

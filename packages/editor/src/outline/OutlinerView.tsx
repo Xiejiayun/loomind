@@ -162,8 +162,8 @@ export const OutlinerView: React.FC<OutlinerViewProps> = ({
     [doc],
   );
   const palette = useMemo(
-    () => getPalette({ ...doc.theme, ...sheet.theme }.paletteId),
-    [doc.theme, sheet.theme],
+    () => getPalette({ ...doc.theme, ...sheet.theme }.paletteId, isDark ? "dark" : "light"),
+    [doc.theme, sheet.theme, isDark],
   );
   const visibleIds = useMemo(
     () => collectVisibleIds(sheet.rootTopic, searchQuery, tasksOnly),

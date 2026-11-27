@@ -104,6 +104,43 @@ function buildUserPrompt(req: WorkerAiRequest): string {
   return parts.join("\n\n");
 }
 
+function extractBalancedJsonObjects(text: string): string[] {
+  const candidates: string[] = [];
+  let inString = false;
+  let escape = false;
+  let depth = 0;
+  let start = -1;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (ch === "{") {
+        if (depth === 0) start = i;
+        depth += 1;
+      } else if (ch === "}" && depth > 0) {
+        depth -= 1;
+        if (depth === 0 && start !== -1) {
+          candidates.push(text.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
+  }
+  return candidates;
+}
+
 export function parsePartialJsonLoose(rawText: string): unknown | null {
   let text = rawText.trim();
   if (!text) return null;
@@ -112,15 +149,27 @@ export function parsePartialJsonLoose(rawText: string): unknown | null {
   if (fenceStart !== -1) {
     const afterFence = text.slice(fenceStart + 3);
     const newline = afterFence.indexOf("\n");
-    text = newline !== -1 ? afterFence.slice(newline + 1) : afterFence;
-    const fenceEnd = text.lastIndexOf("```");
-    if (fenceEnd !== -1) text = text.slice(0, fenceEnd);
-    text = text.trim();
+    const fencedBody = newline !== -1 ? afterFence.slice(newline + 1) : afterFence;
+    const fenceEnd = fencedBody.indexOf("```");
+    const inner = (fenceEnd !== -1 ? fencedBody.slice(0, fenceEnd) : fencedBody).trim();
+    if (inner.includes("{")) text = inner;
   }
 
-  const objStart = text.indexOf("{");
-  if (objStart === -1) return null;
-  text = text.slice(objStart);
+  // First try complete balanced JSON objects (prefer the last valid one to skip any leading/trailing prose)
+  const balanced = extractBalancedJsonObjects(text);
+  for (let i = balanced.length - 1; i >= 0; i--) {
+    try {
+      return JSON.parse(balanced[i]);
+    } catch {
+      // try earlier candidate
+    }
+  }
+
+  const objStart = text.lastIndexOf("{");
+  const firstObjStart = text.indexOf("{");
+  const startIdx = firstObjStart !== -1 ? firstObjStart : objStart;
+  if (startIdx === -1) return null;
+  text = text.slice(startIdx);
 
   try {
     return JSON.parse(text);
@@ -320,10 +369,12 @@ export async function runWorkersAiStream(
   }
 
   // Non-streaming fallback if runtime returns an object
-  const text =
-    result && typeof result === "object" && "response" in result && typeof (result as { response?: unknown }).response === "string"
-      ? (result as { response: string }).response
-      : "";
+  let text = "";
+  if (result && typeof result === "object") {
+    const obj = result as { response?: unknown; choices?: Array<{ message?: { content?: unknown } }> };
+    if (typeof obj.response === "string") text = obj.response;
+    else if (typeof obj.choices?.[0]?.message?.content === "string") text = obj.choices[0].message.content;
+  }
   async function* singleChunk() {
     if (text) yield text;
   }
