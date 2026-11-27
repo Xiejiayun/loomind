@@ -198,6 +198,30 @@ const TEMPLATE_INFO: Record<Locale, Record<string, { name: string; description: 
       name: "团队组织架构",
       description: "居中组织结构图 + 午夜霓虹暗色主题",
     },
+    "product-launch": {
+      name: "产品发布计划",
+      description: "树型表格清晰管理上线前、中、后的跨部门检查项",
+    },
+    "meeting-notes": {
+      name: "高效会议纪要",
+      description: "缩进目录视图，快速记录议题、结论与待办行动项",
+    },
+    "project-wbs": {
+      name: "项目任务分解 (WBS)",
+      description: "黑曜鎏金逻辑树，逐层拆解阶段交付物与责任人",
+    },
+    "decision-tree": {
+      name: "方案决策评估",
+      description: "括号结构横向对比多个候选方案的收益、成本与风险",
+    },
+    "sprint-retro": {
+      name: "敏捷迭代复盘",
+      description: "四象限矩阵复盘做得好的、待改进的与下阶段行动",
+    },
+    "study-cornell": {
+      name: "课程知识体系",
+      description: "森系有机导图，串联核心概念、公式推导与习题要点",
+    },
   },
   en: {
     "blank-organic": {
@@ -231,6 +255,30 @@ const TEMPLATE_INFO: Record<Locale, Record<string, { name: string; description: 
     "team-org": {
       name: "Team Org Chart",
       description: "Centered org chart with Midnight Neon dark palette",
+    },
+    "product-launch": {
+      name: "Product Launch Plan",
+      description: "Tree table tracking pre-, during-, and post-launch checklists",
+    },
+    "meeting-notes": {
+      name: "Meeting Minutes",
+      description: "Indented outline capturing decisions, action items & blockers",
+    },
+    "project-wbs": {
+      name: "Project WBS",
+      description: "Obsidian Gold logic tree breaking down phases & deliverables",
+    },
+    "decision-tree": {
+      name: "Decision Evaluation",
+      description: "Brace map comparing trade-offs, benefits & risks side by side",
+    },
+    "sprint-retro": {
+      name: "Sprint Retrospective",
+      description: "4-quadrant matrix for Keep, Problem, Try & Kudos",
+    },
+    "study-cornell": {
+      name: "Course Study Guide",
+      description: "Forest Calm organic map organizing core concepts & review points",
     },
   },
 };

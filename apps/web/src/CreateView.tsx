@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, FileText, GitBranch, ListTree, Milestone, Sparkles } from "lucide-react";
+import { ArrowRight, FileText, GitBranch, Grid2x2, ListTree, Milestone, Network, Sparkles, Table2 } from "lucide-react";
 import type { MindmapDocument } from "@mindmap/core";
 import type { WorkspaceSummary } from "./api.js";
 import { useI18n } from "./i18n.js";
@@ -12,6 +12,10 @@ const TEMPLATE_ITEMS = [
   { id: "quarterly-okr", icon: ListTree },
   { id: "annual-roadmap", icon: Milestone },
   { id: "root-cause-fishbone", icon: FileText },
+  { id: "swot-matrix", icon: Grid2x2 },
+  { id: "team-org", icon: Network },
+  { id: "product-launch", icon: Table2 },
+  { id: "meeting-notes", icon: ListTree },
 ];
 
 export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces, onModeChange, onCreate }: {

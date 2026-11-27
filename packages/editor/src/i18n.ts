@@ -201,9 +201,9 @@ const zh = {
     opmlLabel: "OPML 2.0",
     opmlDesc: "通用大纲格式，跨软件无损迁移",
   },
-  templateModal: {
+    templateModal: {
     title: "新建思维导图模板",
-    desc: "精选 8 套结构与配色组合，点击即可一键生成专业导图",
+    desc: "精选 14 套覆盖 9 种专业结构的模板与配色组合，点击一键生成",
   },
   cmdk: {
     ariaLabel: "全局命令与节点搜索",
@@ -336,6 +336,11 @@ const zh = {
     hasLink: "含超链接",
     multiSelected: (count: number) => `已选中 ${count} 个主题`,
   },
+  rejections: {
+    SUMMARY_RANGE_BROKEN: "无法移动：该操作会打断概要覆盖的连续范围。",
+    SUMMARY_CANNOT_DETACH: "无法脱离为自由主题：该节点是独立概要的唯一成员。",
+    UNSUPPORTED_IMAGE_MIME: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
+  } as Record<string, string>,
   outliner: {
     title: "大纲",
     fullTitle: "全屏大纲写作",
@@ -588,7 +593,7 @@ const en: typeof zh = {
   },
   templateModal: {
     title: "Mind Map Templates",
-    desc: "8 curated structure and palette combinations ready in one click",
+    desc: "14 curated templates across all 9 professional structures ready in one click",
   },
   cmdk: {
     ariaLabel: "Global command palette and topic search",
@@ -721,6 +726,11 @@ const en: typeof zh = {
     hasLink: "has link",
     multiSelected: (count: number) => `${count} topics selected`,
   },
+  rejections: {
+    SUMMARY_RANGE_BROKEN: "Cannot move: this operation would split a summary's contiguous range.",
+    SUMMARY_CANNOT_DETACH: "Cannot detach to floating topic: this node is the sole member of a summary.",
+    UNSUPPORTED_IMAGE_MIME: "Only PNG, JPEG, WebP, or SVG images are supported.",
+  } as Record<string, string>,
   outliner: {
     title: "Outline",
     fullTitle: "Fullscreen Outline",
