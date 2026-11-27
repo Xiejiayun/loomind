@@ -64,10 +64,13 @@ export function createMindmapStore(
       ? initialDocOrAdapter
       : new LocalImmerSyncAdapter(initialDocOrAdapter);
 
+  const initialDoc = adapter.getDocument();
+  const initialSheet = initialDoc.sheets.find((s) => s.id === initialDoc.activeSheetId) ?? initialDoc.sheets[0];
+
   const store = createStore<MindmapStoreState>((set, get) => ({
-    doc: adapter.getDocument(),
+    doc: initialDoc,
     dirtyTopicIds: new Set<string>(),
-    selectedTopicIds: [],
+    selectedTopicIds: initialSheet ? [initialSheet.rootTopic.id] : [],
     selectedRelationshipId: null,
     selectedBoundaryId: null,
     editingTopicId: null,

@@ -11,6 +11,7 @@ import { TopicCard } from "./TopicCard.js";
 
 interface NodeLayerProps {
   sheetTitle: string;
+  isDarkCanvas: boolean;
   layout: MindmapLayoutResult;
   topicMap: Map<string, MindmapTopic>;
   assets: Record<string, InlineAsset>;
@@ -39,6 +40,7 @@ interface NodeLayerProps {
 export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
   ({
     sheetTitle,
+    isDarkCanvas,
     layout,
     topicMap,
     assets,
@@ -122,6 +124,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
               <TopicCard
                 topic={topic}
                 layoutNode={layoutNode}
+                isDarkCanvas={isDarkCanvas}
                 previewWidth={previewW}
                 selected={isSelected}
                 remotePeer={peerByTopicId?.get(id)}
