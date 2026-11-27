@@ -25,7 +25,6 @@ import { FormatPanel } from "./chrome/FormatPanel.js";
 import { InlineAiBar } from "./chrome/InlineAiBar.js";
 import { SheetBar } from "./chrome/SheetBar.js";
 import { ShortcutsHelp } from "./chrome/ShortcutsHelp.js";
-import { TemplateModal } from "./chrome/TemplateModal.js";
 import { TopToolbar } from "./chrome/TopToolbar.js";
 import { MindmapStoreContext, useMindmapStore } from "./context.js";
 import { useEditorI18n } from "./i18n.js";
@@ -105,7 +104,6 @@ const MindmapEditorInner: React.FC<
     ? chromeTheme === "dark"
     : getPalette({ ...doc.theme, ...activeSheet.theme }.paletteId).isDark;
 
-  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ topicId: string; x: number; y: number } | null>(
@@ -212,7 +210,6 @@ const MindmapEditorInner: React.FC<
         accountControl={accountControl}
         leftPanel={showLeftSidebar ? leftPanel : "none"}
         readOnly={readOnly}
-        onOpenTemplates={() => setTemplatesOpen(true)}
         onToggleAi={toggleAiPanel}
         onToggleOutlineSidebar={toggleOutlineSidebar}
         onToggleFormat={toggleFormatPanel}
@@ -364,7 +361,6 @@ const MindmapEditorInner: React.FC<
         onClose={() => setContextMenu(null)}
         onOpenAiForTopic={readOnly ? undefined : () => setInlineAiOpen(true)}
       />
-      <TemplateModal open={templatesOpen} onOpenChange={setTemplatesOpen} />
       <ExportModal open={exportOpen} onOpenChange={setExportOpen} layout={exportLayout} />
       <CommandK
         open={cmdkOpen}

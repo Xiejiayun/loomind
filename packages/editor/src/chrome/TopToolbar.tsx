@@ -2,7 +2,6 @@ import React from "react";
 import {
   Download,
   GitBranch,
-  LayoutGrid,
   ListTree,
   Maximize2,
   PanelRight,
@@ -19,7 +18,6 @@ interface TopToolbarProps {
   accountControl?: React.ReactNode;
   leftPanel?: "none" | "ai" | "outline";
   readOnly?: boolean;
-  onOpenTemplates: () => void;
   onToggleAi?: () => void;
   onToggleOutlineSidebar?: () => void;
   onToggleFormat?: () => void;
@@ -31,7 +29,6 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   accountControl,
   leftPanel = "none",
   readOnly = false,
-  onOpenTemplates,
   onToggleAi,
   onToggleOutlineSidebar,
   onToggleFormat,
@@ -184,13 +181,6 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               title={t.toolbar.redo}
             >
               <Redo2 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onOpenTemplates}
-              className={`hidden items-center gap-1 rounded-[5px] border px-2 py-1 text-[11.5px] font-medium sm:inline-flex ${borderBtnCls} ${focusCls}`}
-            >
-              <LayoutGrid className="h-3 w-3 opacity-75" /> {t.toolbar.templates}
             </button>
           </>
         )}
