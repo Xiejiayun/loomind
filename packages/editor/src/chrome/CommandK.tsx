@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Command } from "cmdk";
-import { GitBranch, ListTree, Palette, Play, Search, Sparkles } from "lucide-react";
+import { GitBranch, ListTree, Maximize, Palette, Play, Search, Sparkles, ZoomIn, ZoomOut } from "lucide-react";
 import {
   collectAllTopics,
   getPaletteLabel,
@@ -9,6 +9,7 @@ import {
   type MindmapLayoutResult,
   type MindmapStructure,
 } from "@mindmap/core";
+import { computeFitCameraForBounds, resetZoomCentered, stepZoomCamera } from "../canvas/viewport-camera.js";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
 
@@ -17,6 +18,7 @@ interface CommandKProps {
   isDark?: boolean;
   onOpenChange: (open: boolean) => void;
   layout: MindmapLayoutResult;
+  viewportRef?: React.RefObject<HTMLDivElement | null>;
   onOpenAi?: (initialPrompt?: string) => void;
 }
 
@@ -37,6 +39,7 @@ export const CommandK: React.FC<CommandKProps> = ({
   isDark = false,
   onOpenChange,
   layout,
+  viewportRef,
   onOpenAi,
 }) => {
   const doc = useMindmapStore((s) => s.doc);
@@ -214,6 +217,54 @@ export const CommandK: React.FC<CommandKProps> = ({
                 className={itemCls}
               >
                 <Play className="h-3.5 w-3.5" /> {t.cmdk.enterPitch}
+              </Command.Item>
+              <Command.Item
+                onSelect={() => {
+                  const rect = viewportRef?.current?.getBoundingClientRect();
+                  const vw = rect?.width || window.innerWidth;
+                  const vh = rect?.height || window.innerHeight;
+                  setCamera(computeFitCameraForBounds(layout.bounds, vw, vh));
+                  onOpenChange(false);
+                }}
+                className={itemCls}
+              >
+                <Maximize className="h-3.5 w-3.5" /> {t.cmdk.fitView}
+              </Command.Item>
+              <Command.Item
+                onSelect={() => {
+                  const rect = viewportRef?.current?.getBoundingClientRect();
+                  const vw = rect?.width || window.innerWidth;
+                  const vh = rect?.height || window.innerHeight;
+                  setCamera(stepZoomCamera(camera, "in", vw, vh));
+                  onOpenChange(false);
+                }}
+                className={itemCls}
+              >
+                <ZoomIn className="h-3.5 w-3.5" /> {t.cmdk.zoomIn}
+              </Command.Item>
+              <Command.Item
+                onSelect={() => {
+                  const rect = viewportRef?.current?.getBoundingClientRect();
+                  const vw = rect?.width || window.innerWidth;
+                  const vh = rect?.height || window.innerHeight;
+                  setCamera(stepZoomCamera(camera, "out", vw, vh));
+                  onOpenChange(false);
+                }}
+                className={itemCls}
+              >
+                <ZoomOut className="h-3.5 w-3.5" /> {t.cmdk.zoomOut}
+              </Command.Item>
+              <Command.Item
+                onSelect={() => {
+                  const rect = viewportRef?.current?.getBoundingClientRect();
+                  const vw = rect?.width || window.innerWidth;
+                  const vh = rect?.height || window.innerHeight;
+                  setCamera(resetZoomCentered(camera, vw, vh, 1));
+                  onOpenChange(false);
+                }}
+                className={itemCls}
+              >
+                <Maximize className="h-3.5 w-3.5" /> {t.cmdk.resetZoom}
               </Command.Item>
             </Command.Group>
 

@@ -35,6 +35,8 @@ import {
   computeFitCameraForBounds,
   MAX_CAMERA_SCALE,
   MIN_CAMERA_SCALE,
+  resetZoomCentered,
+  stepZoomCamera,
 } from "./viewport-camera.js";
 
 interface DragState {
@@ -631,6 +633,48 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
 
       const primaryId = selectedTopicIds[0];
 
+      // Zoom keyboard shortcuts: Ctrl/Cmd + = / - / 0 (fit) / 1 (100%)
+      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+        const vw = viewportSize.width || containerRef.current?.clientWidth || window.innerWidth;
+        const vh = viewportSize.height || containerRef.current?.clientHeight || window.innerHeight;
+        if (e.key === "=" || e.key === "+") {
+          e.preventDefault();
+          userMovedCameraRef.current = true;
+          const next = stepZoomCamera(cameraRef.current, "in", vw, vh);
+          cameraRef.current = next;
+          applyTransformDom(next);
+          setCamera(next);
+          return;
+        }
+        if (e.key === "-" || e.key === "_") {
+          e.preventDefault();
+          userMovedCameraRef.current = true;
+          const next = stepZoomCamera(cameraRef.current, "out", vw, vh);
+          cameraRef.current = next;
+          applyTransformDom(next);
+          setCamera(next);
+          return;
+        }
+        if (e.key === "0") {
+          e.preventDefault();
+          userMovedCameraRef.current = false;
+          const next = computeFitCamera(vw, vh);
+          cameraRef.current = next;
+          applyTransformDom(next);
+          setCamera(next);
+          return;
+        }
+        if (e.key === "1") {
+          e.preventDefault();
+          userMovedCameraRef.current = true;
+          const next = resetZoomCentered(cameraRef.current, vw, vh, 1);
+          cameraRef.current = next;
+          applyTransformDom(next);
+          setCamera(next);
+          return;
+        }
+      }
+
       if (
         (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") &&
         !e.ctrlKey &&
@@ -796,6 +840,8 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
     setEditingTopicId,
     setDrillRootId,
     applyTransformDom,
+    computeFitCamera,
+    containerRef,
     setCamera,
   ]);
 

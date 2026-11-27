@@ -5,6 +5,8 @@ import {
   computeFitCameraForBounds,
   MAX_CAMERA_SCALE,
   MIN_CAMERA_SCALE,
+  resetZoomCentered,
+  stepZoomCamera,
   zoomAroundPoint,
 } from "../src/canvas/viewport-camera.js";
 
@@ -85,5 +87,22 @@ describe("viewport camera gestures", () => {
     expect(fit.scale).toBeCloseTo(2, 5);
     expect(fit.x).toBeCloseTo(436, 5);
     expect(fit.y).toBeCloseTo(236, 5);
+  });
+
+  it("steps zoom through presets and resets to 100% around viewport center", () => {
+    const cam = { x: 200, y: 150, scale: 1 };
+    const zoomedIn = stepZoomCamera(cam, "in", 1000, 800);
+    expect(zoomedIn.scale).toBe(1.15);
+    // Viewport center world point remains invariant
+    expect((500 - zoomedIn.x) / zoomedIn.scale).toBeCloseTo((500 - cam.x) / cam.scale, 5);
+    expect((400 - zoomedIn.y) / zoomedIn.scale).toBeCloseTo((400 - cam.y) / cam.scale, 5);
+
+    const zoomedOut = stepZoomCamera(zoomedIn, "out", 1000, 800);
+    expect(zoomedOut.scale).toBe(1);
+
+    const reset = resetZoomCentered({ x: 100, y: 100, scale: 2 }, 800, 600, 1);
+    expect(reset.scale).toBe(1);
+    expect((400 - reset.x) / reset.scale).toBeCloseTo((400 - 100) / 2, 5);
+    expect((300 - reset.y) / reset.scale).toBeCloseTo((300 - 100) / 2, 5);
   });
 });

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Map, Maximize, Minus, Plus, X } from "lucide-react";
 import { createSheet, generateId, type MindmapLayoutResult } from "@mindmap/core";
+import { computeFitCameraForBounds, resetZoomCentered, stepZoomCamera } from "../canvas/viewport-camera.js";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
 
@@ -31,20 +32,29 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
     dispatch({ type: "sheet/add", sheet: createSheet(id, t.sheetBar.newSheetName(idx)) });
   };
 
+  const getViewportDims = () => {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    return {
+      vw: rect?.width || window.innerWidth,
+      vh: rect?.height || window.innerHeight,
+    };
+  };
+
   const handleFitView = () => {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const { width: vw, height: vh } = viewport.getBoundingClientRect();
-    const scaleX = (vw - 72) / Math.max(160, layout.bounds.width);
-    const scaleY = (vh - 72) / Math.max(120, layout.bounds.height);
-    const scale = Math.max(0.25, Math.min(1.6, Math.min(scaleX, scaleY)));
-    const cx = layout.bounds.x + layout.bounds.width / 2;
-    const cy = layout.bounds.y + layout.bounds.height / 2;
-    setCamera({
-      scale,
-      x: vw / 2 - cx * scale,
-      y: vh / 2 - cy * scale,
-    });
+    setCamera(computeFitCameraForBounds(layout.bounds, vw, vh));
+  };
+
+  const handleStepZoom = (dir: "in" | "out") => {
+    const { vw, vh } = getViewportDims();
+    setCamera(stepZoomCamera(camera, dir, vw, vh));
+  };
+
+  const handleResetZoom = () => {
+    const { vw, vh } = getViewportDims();
+    setCamera(resetZoomCentered(camera, vw, vh, 1));
   };
 
   return (
@@ -128,7 +138,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setCamera({ scale: Math.max(0.15, camera.scale - 0.15) })}
+            onClick={() => handleStepZoom("out")}
             className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
             title={t.sheetBar.zoomOut}
           >
@@ -136,7 +146,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
           </button>
           <button
             type="button"
-            onClick={() => setCamera({ scale: 1 })}
+            onClick={handleResetZoom}
             className="w-10 text-center font-mono text-[11px] hover:underline"
             title={t.sheetBar.resetZoom}
           >
@@ -144,7 +154,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
           </button>
           <button
             type="button"
-            onClick={() => setCamera({ scale: Math.min(3, camera.scale + 0.15) })}
+            onClick={() => handleStepZoom("in")}
             className={`rounded p-1 transition ${isDark ? "hover:bg-white/[0.07] hover:text-white" : "hover:bg-slate-900/[0.06]"}`}
             title={t.sheetBar.zoomIn}
           >
