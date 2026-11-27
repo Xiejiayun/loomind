@@ -118,8 +118,8 @@ export function TryPlaygroundPage({
         </div>
         <div className="lm-try-bar-right">
           {hasContent && (
-            <button type="button" className="lm-secondary-button lm-try-btn-sm" onClick={handleReset}>
-              <RotateCcw size={13} /> {t.tryPage.resetCanvas}
+            <button type="button" className="lm-secondary-button lm-try-btn-sm lm-try-reset" onClick={handleReset} aria-label={t.tryPage.resetCanvas} title={t.tryPage.resetCanvas}>
+              <RotateCcw size={13} /> <span>{t.tryPage.resetCanvas}</span>
             </button>
           )}
           <LanguageToggle compact />
@@ -139,7 +139,6 @@ export function TryPlaygroundPage({
           initialDoc={initialDoc}
           onDocumentChange={handleDocChange}
           chromeTheme={theme}
-          initialRightPanel="ai"
           initialFormatPanelOpen={false}
           locale={locale}
           aiRuntime={freeAiRuntime}

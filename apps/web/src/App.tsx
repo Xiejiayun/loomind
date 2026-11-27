@@ -99,7 +99,7 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
         <Brand to="/"/>
         <nav aria-label={t.landing.navAria}>
           <AppLink href="/try">{t.landing.tryFreeCta}</AppLink>
-          <AppLink href="/login" className="lm-primary-button lm-header-cta">{t.landing.startCta} <ArrowRight size={13}/></AppLink>
+          <AppLink href="/login" className="lm-primary-button lm-header-cta"><span className="sm:hidden">{t.landing.loginLink}</span><span className="hidden sm:inline">{t.landing.startCta}</span> <ArrowRight size={13}/></AppLink>
           <LanguageToggle/>
           <ThemeToggle theme={theme} toggle={toggle}/>
         </nav>

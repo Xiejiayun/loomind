@@ -44,3 +44,8 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Verify mobile browser flows
+        run: |
+          pnpm exec playwright install --with-deps chromium webkit
+          pnpm test:mobile

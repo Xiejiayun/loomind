@@ -1115,8 +1115,11 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
       </div>
 
       {/* Layer 2: Screen-Space Overlays */}
-      {workspaceCanvas && topicMap.size === 1 && !editingTopicId && (
-        <p className="editor-start-hint">{t.canvas.startHintPrefix}<span> · </span>{t.canvas.startHintMiddle} <kbd>Tab</kbd> {t.canvas.startHintSuffix}</p>
+      {workspaceCanvas && topicMap.size === 1 && !editingTopicId && !readOnly && (
+        <p className="editor-start-hint">
+          <span className="sm:hidden">{t.canvas.startTouchHint}</span>
+          <span className="hidden sm:inline">{t.canvas.startHintPrefix} · {t.canvas.startHintMiddle} <kbd>Tab</kbd> {t.canvas.startHintSuffix}</span>
+        </p>
       )}
       {marquee && (
         <div

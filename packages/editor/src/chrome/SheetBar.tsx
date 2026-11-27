@@ -59,7 +59,8 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
 
   return (
     <footer
-      className={`flex h-8 shrink-0 items-center justify-between border-t px-2.5 text-[11px] transition-colors ${
+      className={`flex h-8 shrink-0 items-center justify-between border-t px-2.5 text-[11px] transition-colors
+        max-sm:h-auto max-sm:px-1 max-sm:pb-[env(safe-area-inset-bottom)] max-sm:[&_button]:min-h-11 max-sm:[&_button]:min-w-9 ${
         isDark
           ? "border-white/[0.075] bg-[#0b0c0e] text-[#9ca3b0]"
           : "border-slate-900/[0.08] bg-[#f7f8fa] text-[#525b6b]"
@@ -77,7 +78,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
                 setRenamingId(s.id);
                 setRenameText(s.title);
               }}
-              className={`group flex cursor-pointer items-center gap-1.5 rounded-[5px] px-2 py-0.5 transition ${
+              className={`group flex cursor-pointer items-center gap-1.5 rounded-[5px] px-2 py-0.5 transition max-sm:min-h-11 max-sm:shrink-0 ${
                 active
                   ? isDark
                     ? "bg-[#1c1f26] font-medium text-[#f4f5f8]"
@@ -135,7 +136,7 @@ export const SheetBar: React.FC<SheetBarProps> = ({ layout, isDark, viewportRef 
 
       {/* Right: Zoom & Minimap (Canvas mode only) */}
       {viewMode === "canvas" ? (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 max-sm:shrink-0 max-sm:gap-0">
           <button
             type="button"
             onClick={() => handleStepZoom("out")}

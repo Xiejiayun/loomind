@@ -114,7 +114,13 @@ pnpm test
 
 # Build all packages and the web app
 pnpm build
+
+# After building: run touch-layout checks in Chromium and WebKit
+pnpm exec playwright install chromium webkit
+pnpm test:mobile
 ```
+
+The mobile checks serve the built app on loopback and use explicit API fixtures. They exercise real browser layout, touch input and local map storage, not live Google login, AI generation or cloud sync.
 
 ### Login and storage
 

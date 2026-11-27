@@ -77,19 +77,23 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
 
   return (
     <header
-      className={`flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 text-xs transition-colors ${
+      className={`flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 text-xs transition-colors
+        max-md:grid max-md:h-auto max-md:grid-cols-[auto_1fr_auto] max-md:gap-0 max-md:px-2
+        max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11 max-md:[&_button]:justify-center max-md:[&_button>svg]:size-4 ${
         isDark
           ? "border-white/[0.075] bg-[#0b0c0e] text-[#f4f5f8]"
           : "border-slate-900/[0.08] bg-[#f7f8fa] text-[#111318]"
       }`}
     >
       {/* Left: Account / Navigation + Left AI Chat / Outline Sidebar Toggles */}
-      <div className="flex min-w-0 items-center gap-1.5">
-        {accountControl}
+      <div className="flex min-w-0 items-center gap-1.5 max-md:contents">
+        {accountControl && <div className="col-span-full flex min-w-0 md:contents">{accountControl}</div>}
+        <div className="flex items-center gap-0.5 md:contents">
         {onToggleAi && (
           <button
             type="button"
             onClick={onToggleAi}
+            aria-pressed={leftPanel === "ai"}
             title={t.toolbar.toggleAiTitle}
             className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
               leftPanel === "ai"
@@ -107,6 +111,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             type="button"
             onClick={onToggleOutlineSidebar}
+            aria-label={t.toolbar.outlineSidebar}
+            aria-pressed={leftPanel === "outline"}
             title={t.toolbar.toggleOutlineTitle}
             className={`flex shrink-0 items-center gap-1.5 rounded-[6px] border px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
               leftPanel === "outline"
@@ -120,17 +126,19 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             <span className="hidden sm:inline">{t.toolbar.outlineSidebar}</span>
           </button>
         )}
+        </div>
       </div>
 
       {/* Center: Back-to-Map (when in fullscreen outline) + Undo/Redo */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 max-md:justify-center max-md:gap-0">
         {viewMode === "outline" && (
           <button
             type="button"
             onClick={() => setViewMode("canvas")}
+            aria-label={t.outliner.backToMap}
             className={`flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-[11.5px] font-medium transition ${borderBtnCls} ${focusCls}`}
           >
-            <GitBranch className="h-3 w-3" /> {t.outliner.backToMap}
+            <GitBranch className="h-3 w-3" /> <span className="hidden sm:inline">{t.outliner.backToMap}</span>
           </button>
         )}
 
@@ -185,6 +193,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             type="button"
             onClick={onOpenExport}
+            aria-label={t.toolbar.export}
             className={`flex items-center gap-1 rounded-[5px] border px-2 py-1 text-[11.5px] font-medium ${borderBtnCls} ${focusCls}`}
           >
             <Download className="h-3 w-3" />
@@ -196,6 +205,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             type="button"
             onClick={() => (onToggleFormat ? onToggleFormat() : setFormatPanelOpen(!formatPanelOpen))}
+            aria-label={t.toolbar.format}
+            aria-pressed={formatPanelOpen}
             className={`flex items-center gap-1 rounded-[5px] px-2 py-1 text-[11.5px] font-medium transition ${focusCls} ${
               formatPanelOpen
                 ? isDark
