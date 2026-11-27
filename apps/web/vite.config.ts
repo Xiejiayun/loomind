@@ -4,6 +4,11 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "loro-crdt": "loro-crdt/base64",
+    },
+  },
   optimizeDeps: {
     exclude: ["loro-crdt"],
     esbuildOptions: {

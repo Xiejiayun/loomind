@@ -1833,3 +1833,33 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   LIVE COLLABORATION PEER AVATARS
+   ========================================================= */
+.lm-collab-peers {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+}
+.lm-collab-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1.5px solid var(--lm-bg-app);
+  margin-left: -4px;
+}
+.lm-collab-avatar:first-child {
+  margin-left: 0;
+}
+.lm-collab-more {
+  margin-left: 4px;
+  font-size: 10.5px;
+  color: var(--lm-text-secondary);
+}

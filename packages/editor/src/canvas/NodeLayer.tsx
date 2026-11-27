@@ -4,6 +4,7 @@ import type {
   InlineAsset,
   MindmapLayoutResult,
   MindmapTopic,
+  PeerPresence,
   RichTextDoc,
 } from "@mindmap/core";
 import { TopicCard } from "./TopicCard.js";
@@ -15,6 +16,7 @@ interface NodeLayerProps {
   camera: CameraState;
   viewportSize: { width: number; height: number };
   selectedIds: Set<string>;
+  remotePeers?: PeerPresence[];
   searchMatchedIds?: ReadonlySet<string>;
   activeSearchMatchId?: string | null;
   editingTopicId: string | null;
@@ -39,6 +41,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
     camera,
     viewportSize,
     selectedIds,
+    remotePeers,
     searchMatchedIds,
     activeSearchMatchId,
     editingTopicId,
@@ -72,6 +75,17 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
 
     const lodLow = camera.scale < 0.35;
 
+    const peerByTopicId = useMemo(() => {
+      if (!remotePeers || remotePeers.length === 0) return null;
+      const map = new Map<string, PeerPresence>();
+      for (const peer of remotePeers) {
+        for (const tid of peer.selectedTopicIds) {
+          if (!map.has(tid)) map.set(tid, peer);
+        }
+      }
+      return map;
+    }, [remotePeers]);
+
     return (
       <div className="pointer-events-none absolute inset-0">
         {visibleTopicIds.map((id) => {
@@ -95,6 +109,7 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
                 topic={topic}
                 layoutNode={layoutNode}
                 selected={isSelected}
+                remotePeer={peerByTopicId?.get(id)}
                 searchHighlight={
                   activeSearchMatchId === id ? "active" : searchMatchedIds?.has(id) ? "match" : undefined
                 }

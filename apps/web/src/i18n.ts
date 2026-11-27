@@ -333,6 +333,7 @@ const zh = {
   editorWorkspace: {
     shareBtn: "共享",
     historyBtn: "历史",
+    onlinePeers: (count: number) => `${count} 位协作者在线`,
     unavailableEyebrow: "READ ONLY / UNAVAILABLE",
     cannotOpenShared: "无法打开共享导图",
     mapUnavailable: "这张导图暂时无法访问。",
@@ -771,6 +772,7 @@ const en: typeof zh = {
   editorWorkspace: {
     shareBtn: "Share",
     historyBtn: "History",
+    onlinePeers: (count: number) => `${count} ${count === 1 ? "collaborator" : "collaborators"} online`,
     unavailableEyebrow: "READ ONLY / UNAVAILABLE",
     cannotOpenShared: "Cannot open shared map",
     mapUnavailable: "This mind map is currently unavailable.",

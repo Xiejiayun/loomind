@@ -53,11 +53,13 @@ export async function handleDraft(request: Request, env: Env, subject: string | 
 
   if (request.method === "DELETE") {
     const results = await db.batch([
+      db.prepare("DELETE FROM mindmap_crdt_updates WHERE mindmap_id = ? AND EXISTS (SELECT 1 FROM mindmaps WHERE id = ? AND owner = ?)").bind(id, id, subject),
+      db.prepare("DELETE FROM mindmap_presence WHERE mindmap_id = ? AND EXISTS (SELECT 1 FROM mindmaps WHERE id = ? AND owner = ?)").bind(id, id, subject),
       db.prepare("DELETE FROM mindmap_revisions WHERE mindmap_id = ? AND EXISTS (SELECT 1 FROM mindmaps WHERE id = ? AND owner = ?)").bind(id, id, subject),
       db.prepare("DELETE FROM share_invites WHERE type = 'mindmap' AND resource_id = ? AND created_by = ?").bind(id, subject),
       db.prepare("DELETE FROM mindmaps WHERE id = ? AND owner = ?").bind(id, subject),
     ]);
-    if (!results[2].meta.changes) throw new HttpError(404, "导图不存在或无权删除。");
+    if (!results[4].meta.changes) throw new HttpError(404, "导图不存在或无权删除。");
     return json({ deleted: true });
   }
 

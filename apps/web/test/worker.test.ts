@@ -67,6 +67,10 @@ beforeAll(async () => {
   for (const statement of revisionsMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const collabMigration = await readFile(new URL("../migrations/0007_mindmap_collab.sql", import.meta.url), "utf8");
+  for (const statement of collabMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -579,5 +583,108 @@ describe("Version history API (D1 snapshots & pruning)", () => {
       "SELECT COUNT(*) AS count FROM mindmap_revisions WHERE mindmap_id = ?",
     ).bind(mapId).first<{ count: number }>();
     expect(remaining?.count).toBe(0);
+  });
+});
+
+
+describe("Loro CRDT realtime collab API (updates & peer presence)", () => {
+  it("exchanges binary Loro CRDT updates and live presence between collaborators while blocking viewers from writing", async () => {
+    const { LoroSyncAdapter } = await import("@mindmap/core/loro");
+    const ownerCookie = await login("collab-owner");
+    const viewerCookie = await login("collab-viewer");
+    const strangerCookie = await login("collab-stranger");
+    const mapId = crypto.randomUUID();
+    const initial = getTemplate("blank-organic").create();
+
+    // Owner creates the mindmap
+    const put = await request(`mindmaps/${mapId}`, "PUT", ownerCookie, initial, {
+      [OWNER_HEADER]: "collab-owner",
+      "If-Match": '"0"',
+    });
+    expect(put.status).toBe(200);
+
+    // Grant viewer access via share invite
+    const inviteRes = await request("shares", "POST", ownerCookie, {
+      type: "mindmap",
+      resourceId: mapId,
+      role: "viewer",
+    });
+    expect(inviteRes.status).toBe(201);
+    const { token } = await inviteRes.json() as { token: string };
+    const accept = await request(`invites/${token}/accept`, "POST", viewerCookie);
+    expect(accept.status).toBe(200);
+
+    // Owner makes a Loro CRDT edit and posts the binary update delta
+    const peerA = new LoroSyncAdapter(initial, 101n);
+    const peerB = LoroSyncAdapter.fromSnapshot(peerA.exportSnapshot(), 202n);
+    const verBefore = peerA.getVersion();
+    peerA.applyCommand({
+      type: "topic/addChild",
+      sheetId: initial.activeSheetId,
+      parentId: initial.sheets[0].rootTopic.id,
+      newId: "live-crdt-node",
+    });
+    const delta = peerA.exportUpdates(verBefore);
+    const deltaB64 = Buffer.from(delta).toString("base64");
+
+    const postOwner = await request(`mindmaps/${mapId}/collab`, "POST", ownerCookie, {
+      peerId: "peer-a",
+      name: "Owner",
+      color: "#3B82F6FF",
+      selectedTopicIds: ["live-crdt-node"],
+      updateB64: deltaB64,
+    }, { [OWNER_HEADER]: "collab-owner" });
+    expect(postOwner.status).toBe(200);
+    const postOwnerBody = await postOwner.json() as { seq: number; peers: Array<{ peerId: string; name: string }> };
+    expect(postOwnerBody.seq).toBeGreaterThan(0);
+
+    // Viewer can post presence (without updateB64), but cannot push CRDT edits
+    const viewerPresence = await request(`mindmaps/${mapId}/collab`, "POST", viewerCookie, {
+      peerId: "peer-v",
+      name: "Viewer",
+      color: "#10B981FF",
+      selectedTopicIds: ["b1"],
+    }, { [OWNER_HEADER]: "collab-viewer" });
+    expect(viewerPresence.status).toBe(200);
+
+    const viewerWrite = await request(`mindmaps/${mapId}/collab`, "POST", viewerCookie, {
+      peerId: "peer-v",
+      name: "Viewer",
+      color: "#10B981FF",
+      updateB64: deltaB64,
+    }, { [OWNER_HEADER]: "collab-viewer" });
+    expect(viewerWrite.status).toBe(403);
+
+    // Viewer pulls updates & presence and converges peerB via Loro
+    const pullRes = await request(`mindmaps/${mapId}/collab?since=0`, "GET", viewerCookie, undefined, {
+      [OWNER_HEADER]: "collab-viewer",
+    });
+    expect(pullRes.status).toBe(200);
+    const pulled = await pullRes.json() as {
+      latestSeq: number;
+      updates: Array<{ seq: number; peerId: string; updateB64: string }>;
+      peers: Array<{ peerId: string; name: string; selectedTopicIds: string[] }>;
+    };
+    expect(pulled.updates).toHaveLength(1);
+    expect(pulled.peers.map((p) => p.peerId).sort()).toEqual(["peer-a", "peer-v"]);
+
+    peerB.importUpdates(new Uint8Array(Buffer.from(pulled.updates[0].updateB64, "base64")));
+    expect(peerB.getDocument().sheets[0].rootTopic.children.some((c) => c.id === "live-crdt-node")).toBe(true);
+
+    // Stranger is denied with 404
+    const strangerPull = await request(`mindmaps/${mapId}/collab?since=0`, "GET", strangerCookie, undefined, {
+      [OWNER_HEADER]: "collab-stranger",
+    });
+    expect(strangerPull.status).toBe(404);
+
+    // DELETE cleans up collab rows
+    const del = await request(`mindmaps/${mapId}`, "DELETE", ownerCookie, undefined, {
+      [OWNER_HEADER]: "collab-owner",
+    });
+    expect(del.status).toBe(200);
+    const leftUpdates = await platform.env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM mindmap_crdt_updates WHERE mindmap_id = ?",
+    ).bind(mapId).first<{ count: number }>();
+    expect(leftUpdates?.count).toBe(0);
   });
 });

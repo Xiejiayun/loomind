@@ -12,6 +12,7 @@ import {
   richTextToPlainText,
   type LayoutBox,
   type MindmapLayoutResult,
+  type PeerPresence,
   type RichTextDoc,
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
@@ -65,6 +66,7 @@ interface HybridCanvasProps {
   viewportRef?: React.RefObject<HTMLDivElement | null>;
   layout: MindmapLayoutResult;
   readOnly?: boolean;
+  remotePeers?: PeerPresence[];
   searchMatchedIds?: ReadonlySet<string>;
   activeSearchMatchId?: string | null;
   onOpenContextMenu?: (topicId: string, pos: { x: number; y: number }) => void;
@@ -76,6 +78,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
   viewportRef,
   appearance,
   readOnly = false,
+  remotePeers,
   searchMatchedIds,
   activeSearchMatchId,
   onOpenContextMenu,
@@ -1033,6 +1036,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
           camera={camera}
           viewportSize={viewportSize}
           selectedIds={selectedSet}
+          remotePeers={remotePeers}
           searchMatchedIds={searchMatchedIds}
           activeSearchMatchId={activeSearchMatchId}
           editingTopicId={editingTopicId}
