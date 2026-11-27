@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, errors, jwtVerify, SignJWT } from "jose";
 import { LOGIN_ACTION, type AuthUser, type LoginChallenge, type Session } from "../src/auth/shared.js";
 import { handleAi } from "./ai.js";
-import { handleDraft } from "./drafts.js";
+import { handleDraft, handleRevisions } from "./drafts.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import { handleShare, handleInvite } from "./sharing.js";
 import { handleWorkspace } from "./workspaces.js";
@@ -93,7 +93,14 @@ async function handle(request: Request, env: Env) {
   const path = url.pathname;
   if (path === "/api/mindmaps" || path.startsWith("/api/mindmaps/")) {
     const session = await readCookie(request, env, sessionCookie);
-    return handleDraft(request, env, session?.sub, path === "/api/mindmaps" ? undefined : path.slice("/api/mindmaps/".length));
+    if (path === "/api/mindmaps") return handleDraft(request, env, session?.sub);
+    const rest = path.slice("/api/mindmaps/".length);
+    const segments = rest.split("/");
+    if (segments.length === 1) return handleDraft(request, env, session?.sub, segments[0]);
+    if (segments[1] === "revisions" && (segments.length === 2 || segments.length === 3)) {
+      return handleRevisions(request, env, session?.sub, segments[0], segments[2]);
+    }
+    return json({ error: "接口不存在。" }, 404);
   }
   if (path === "/api/workspaces" || path.startsWith("/api/workspaces/")) {
     const session = await readCookie(request, env, sessionCookie);

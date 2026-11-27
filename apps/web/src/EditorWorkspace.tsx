@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, PanelLeft, Share2 } from "lucide-react";
+import { ArrowRight, History, PanelLeft, Share2 } from "lucide-react";
 import { LocalImmerSyncAdapter, type MindmapDocument, type SyncAdapter } from "@mindmap/core";
 import { MindmapEditor } from "@mindmap/editor";
 import { useWebAiRuntime } from "./ai.js";
@@ -11,6 +11,7 @@ import { DraftWorkspace, type SyncState } from "./drafts/workspace.js";
 import { useI18n } from "./i18n.js";
 import { AppLink, navigate } from "./navigation.js";
 import type { UiTheme } from "./ui.js";
+import { VersionHistoryDialog } from "./VersionHistoryDialog.js";
 
 function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -65,6 +66,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
   const [initial, setInitial] = useState<{ document: MindmapDocument; key: number }>();
   const [sync, setSync] = useState<SyncState>(() => ({ label: t.sync.connectingLabel, detail: t.sync.connectingDetail, status: "connecting" }));
   const [localError, setLocalError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const workspace = useRef<DraftWorkspace | null>(null);
   const promptOnce = useRef(initialAiPrompt);
 
@@ -98,6 +100,12 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
     onRename(map.id, mapTitle(document));
   }, [map.id, onRename]);
 
+  const restoreRevision = useCallback((document: MindmapDocument) => {
+    setInitial((old) => ({ document, key: (old?.key ?? 0) + 1 }));
+    workspace.current?.edit(document);
+    onRename(map.id, mapTitle(document));
+  }, [map.id, onRename]);
+
   const downloadJson = useCallback((filename: string, json: string | null) => {
     if (!json) return;
     const blob = new Blob([json], { type: "application/json;charset=utf-8" });
@@ -126,6 +134,9 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
+        <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryOpen(true)} title={t.editorWorkspace.historyBtn}>
+          <History size={12}/> {t.editorWorkspace.historyBtn}
+        </button>
         {map.access === "owner" && (
           <button type="button" className="lm-editor-nav-btn" onClick={onShare}>
             <Share2 size={12}/> {t.editorWorkspace.shareBtn}
@@ -151,6 +162,14 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
         />
       </div>}
     />
+    <VersionHistoryDialog
+      open={historyOpen}
+      owner={owner}
+      mapId={map.id}
+      mapTitle={map.title}
+      onRestore={restoreRevision}
+      onClose={() => setHistoryOpen(false)}
+    />
   </div>;
 }
 
@@ -164,6 +183,7 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
   const { t } = useI18n();
   const [document, setDocument] = useState<MindmapDocument | null>(null);
   const [error, setError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
   useEffect(() => {
     let active = true;
     void readCloud(owner, map.id).then((draft) => {
@@ -202,8 +222,19 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
+        <button type="button" className="lm-editor-nav-btn" onClick={() => setHistoryOpen(true)} title={t.editorWorkspace.historyBtn}>
+          <History size={12}/> {t.editorWorkspace.historyBtn}
+        </button>
         <span className="lm-editor-viewer-label">{t.common.readOnly}</span>
       </div>}
+    />
+    <VersionHistoryDialog
+      open={historyOpen}
+      owner={owner}
+      mapId={map.id}
+      mapTitle={map.title}
+      readOnly
+      onClose={() => setHistoryOpen(false)}
     />
   </div>;
 }
