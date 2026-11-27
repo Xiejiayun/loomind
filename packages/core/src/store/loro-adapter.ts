@@ -214,7 +214,18 @@ export class LoroSyncAdapter implements SyncAdapter {
     const setChanged = (key: string, value: string) => { if (meta.get(key) !== value) meta.set(key, value); };
     setChanged("activeSheetId", doc.activeSheetId);
     setChanged("theme", JSON.stringify(doc.theme));
-    setChanged("assets", JSON.stringify(doc.assets));
+    if (typeof meta.get("assets") === "string") {
+      setChanged("assets", JSON.stringify(doc.assets));
+    } else {
+      const byId = this.loro.getMap("assetsById");
+      const existing = new Set(byId.keys());
+      for (const id of existing) if (!Object.hasOwn(doc.assets, id)) byId.delete(id);
+      for (const [id, asset] of Object.entries(doc.assets)) {
+        if (existing.has(id) && this.cachedDoc.assets[id] === asset) continue;
+        const encoded = JSON.stringify(asset);
+        if (byId.get(id) !== encoded) byId.set(id, encoded);
+      }
+    }
     setChanged("deletedIds", JSON.stringify(doc.deletedIds));
     const sheetsMeta: SheetMeta[] = doc.sheets.map((s) => ({
       id: s.id,
@@ -346,9 +357,9 @@ export class LoroSyncAdapter implements SyncAdapter {
     const theme: MindmapThemeConfig = meta.get("theme")
       ? JSON.parse(String(meta.get("theme")))
       : DEFAULT_THEME_CONFIG;
-    const assets: Record<string, InlineAsset> = meta.get("assets")
-      ? JSON.parse(String(meta.get("assets")))
-      : {};
+    const legacyAssets = meta.get("assets");
+    const assets: Record<string, InlineAsset> = typeof legacyAssets === "string" ? JSON.parse(legacyAssets)
+      : Object.fromEntries(this.loro.getMap("assetsById").entries().map(([id, encoded]) => [id, JSON.parse(String(encoded))]));
     const deletedIds: string[] = meta.get("deletedIds")
       ? JSON.parse(String(meta.get("deletedIds")))
       : [];

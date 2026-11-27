@@ -191,6 +191,33 @@ test("two editors converge on a multi-photo cloud map above 1 MiB and cold reade
   expect(JSON.parse(await readFile((await download.path())!, "utf8"))).toEqual(baseline);
 });
 
+test("concurrent photos on different topics survive both live canvases and a cold reopen", async ({ team: { author, reviewer, mapApi, reopen } }) => {
+  const resume = await holdSaves(author, mapApi);
+  await holdSaves(reviewer, mapApi);
+  async function attach(page: Page, title: string, seed: number) {
+    const png = await imageFixture(page, false, seed);
+    await topic(page, title).click();
+    await page.locator('input[type="file"][accept*="image/png"]').setInputFiles({ name: `${seed}.png`, mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  }
+  const [first, second] = await Promise.all([author.waitForResponse(postedDelta), reviewer.waitForResponse(postedDelta),
+    attach(author, "Research", 21), attach(reviewer, "Delivery", 42)]);
+  expect([first.status(), second.status()]).toEqual([200, 200]);
+  const images = [[author, "Research"], [reviewer, "Delivery"]] as const;
+  for (const [source, title] of images) {
+    const image = (page: Page) => topic(page, title).locator('img[src^="data:image/"]');
+    const src = await image(source).getAttribute("src");
+    await expect(image(source === author ? reviewer : author)).toHaveAttribute("src", src!, { timeout: 12_000 });
+  }
+  resume();
+  const [saved] = await Promise.all([savedMap(author, mapApi, "Delivery"), author.evaluate(() => window.dispatchEvent(new Event("online")))]);
+  expect(Object.keys(saved.request().postDataJSON().assets)).toHaveLength(2);
+  const fresh = await reopen();
+  for (const [source, title] of images) {
+    const src = await topic(source, title).locator('img[src^="data:image/"]').getAttribute("src");
+    await expect(topic(fresh, title).locator('img[src^="data:image/"]')).toHaveAttribute("src", src!);
+  }
+});
+
 test("an unsynced editor can save a new cloud map without changing the original", async ({ team: { author, reviewer, mapApi } }) => {
   await author.route(mapApi, (route) => route.request().method() === "PUT" && route.request().headers()["x-loomind-checkpoint"] !== "seed"
     ? route.fulfill({ status: 413, json: { error: "Test checkpoint size limit" } }) : route.continue());
