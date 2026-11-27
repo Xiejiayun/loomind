@@ -51,6 +51,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 ### Loro CRDT Live Sync, Cloud Version History & Workspace Sharing
 - **Real-time CRDT Collaboration**: Powered by `LoroSyncAdapter` (Movable Tree CRDT) with instant same-browser `BroadcastChannel` sync, Cloudflare D1 incremental delta sync (`/api/mindmaps/:id/collab`), and live collaborator selection presence badges.
 - **Cloud Version History**: Automatically snapshots up to 20 cloud revisions per mindmap (`mindmap_revisions`) with live SVG thumbnail previews, JSON download, and non-destructive one-click restore.
+- **Photos in live sessions**: New editing histories store one CRDT entry per image so uploading a photo does not retransmit older ones or replace another editor’s independently added image. Existing single-dictionary histories keep their original encoding. Reload older editor tabs before collaborating; the saved document JSON is unchanged.
 - **Concurrent editing and reconnect**: Editors share a persisted Loro history rather than creating independent trees from the same JSON. An editor can merge a newer saved checkpoint with unsaved edits after disconnecting or missing deltas. A legacy JSON-only save starts a new history; incompatible unsaved drafts are kept locally for explicit recovery.
 - **Workspace & Mindmap Sharing**: Invite another Google account to an entire workspace or a single mindmap with editor or viewer access (7-day expiry, instant revocation, signed-session access control).
 
