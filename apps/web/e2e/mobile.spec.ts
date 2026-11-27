@@ -103,6 +103,25 @@ test("shared viewers can navigate without editing controls covering the map", as
   await expect(page.getByRole("link", { name: title })).toBeVisible();
 });
 
+test("indented outline siblings retain their levels from preview through a local reopen", async ({ page }) => {
+  await useLocalFixtures(page, true);
+  await page.goto("/app/create?mode=outline");
+  await page.locator("#lm-outline-input").fill("Launch\n  - Pricing\n    - Costs\n  - Timeline");
+  await expect(page.getByText("4 nodes · 2 top-level branches", { exact: true })).toBeVisible();
+  await expect(page.locator(".lm-outline-tree > ul > li > span")).toHaveText(["Pricing", "Timeline"]);
+  await expect(page.locator(".lm-outline-tree li li > span")).toHaveText(["Costs"]);
+  await page.getByRole("button", { name: "Create Map" }).tap();
+  const checkLevels = async () => {
+    const canvas = page.getByRole("application");
+    await expect(canvas.getByRole("treeitem", { name: /^Pricing,/ })).toHaveAttribute("aria-level", "2");
+    await expect(canvas.getByRole("treeitem", { name: /^Timeline,/ })).toHaveAttribute("aria-level", "2");
+    await expect(canvas.getByRole("treeitem", { name: /^Costs,/ })).toHaveAttribute("aria-level", "3");
+  };
+  await checkLevels();
+  await page.reload();
+  await checkLevels();
+});
+
 test("wide layouts still show chat beside the canvas", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await useLocalFixtures(page);
