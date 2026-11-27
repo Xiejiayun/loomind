@@ -129,6 +129,8 @@ export class DraftWorkspace {
   private corruptRecords: V2CorruptRecord[] = [];
   private localTimer?: ReturnType<typeof setTimeout>;
   private cloudTimer?: ReturnType<typeof setTimeout>;
+  private remoteRefreshTimer?: ReturnType<typeof setTimeout>;
+  private acceptedRemoteCanonicals = new Set<string>();
 
   constructor(
     private owner: string | null,
@@ -373,8 +375,20 @@ export class DraftWorkspace {
     return { ...document, theme: { ...document.theme, paletteId: "workspace" } };
   }
 
+  private recordAcceptedRemote(document: MindmapDocument) {
+    const canon = canonicalJson(document);
+    this.acceptedRemoteCanonicals.delete(canon);
+    this.acceptedRemoteCanonicals.add(canon);
+    while (this.acceptedRemoteCanonicals.size > 20) {
+      const oldest = this.acceptedRemoteCanonicals.values().next().value;
+      if (oldest === undefined) break;
+      this.acceptedRemoteCanonicals.delete(oldest);
+    }
+  }
+
   edit(document: MindmapDocument) {
     if (!this.draft || this.closed) return;
+    clearTimeout(this.remoteRefreshTimer);
     this.localGen += 1;
     this.draft = {
       ...this.draft,
@@ -388,6 +402,47 @@ export class DraftWorkspace {
     if (this.owner && !this.conflicted && !this.remoteUnavailable) {
       this.emitStatus(this.pendingState());
       this.scheduleCloud();
+    }
+  }
+
+  acceptRemoteDocument(document: MindmapDocument) {
+    if (!this.draft || this.closed) return;
+    if (this.draft.dirty) {
+      // Local tab already has unsynced edits; Loro CRDT-merged remote updates into `document`.
+      // Keep the merged document in the dirty local draft so neither local nor remote edits are lost.
+      this.localGen += 1;
+      this.draft = {
+        ...this.draft,
+        document,
+        dirty: true,
+        revision: Math.max(this.draft.revision, this.confirmedBaseRevision),
+      };
+      this.needsLocalSave = true;
+      clearTimeout(this.localTimer);
+      this.localTimer = setTimeout(() => void this.flush(), 250);
+      if (this.owner && !this.conflicted && !this.remoteUnavailable) {
+        this.emitStatus(this.pendingState());
+        this.scheduleCloud();
+      }
+      return;
+    }
+
+    // Clean tab received a remote CRDT update: keep it clean instead of triggering a stale PUT,
+    // remember the canonical remote state, and schedule a silent revision refresh from cloud.
+    this.draft = {
+      ...this.draft,
+      document,
+      dirty: false,
+    };
+    this.recordAcceptedRemote(document);
+    this.pullingRequired = true;
+    if (this.owner && !this.conflicted && !this.remoteUnavailable) {
+      clearTimeout(this.remoteRefreshTimer);
+      this.remoteRefreshTimer = setTimeout(() => {
+        if (!this.closed && this.draft && !this.draft.dirty) {
+          void this.sync();
+        }
+      }, 3200);
     }
   }
 
@@ -436,6 +491,66 @@ export class DraftWorkspace {
     }
   }
 
+  private async finalizeUpload(
+    reqOwner: string,
+    reqId: string,
+    sentGen: number,
+    newRevision: number,
+    docSnapshot: MindmapDocument,
+  ): Promise<boolean> {
+    if (!this.draft || this.closed || this.owner !== reqOwner) return false;
+
+    // Step A (always runs for this writerId): monotonically advance causal watermark & baseRevision
+    this.ackedGen = Math.max(this.ackedGen, sentGen);
+    this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, newRevision);
+    this.hasBeenSyncedToCloud = true;
+    this.acceptedRemoteCanonicals.clear();
+
+    if (this.usesV2() && this.cacheReadable) {
+      const confirmResult = await this.storage.confirmUploadCas!(reqOwner, reqId, this.writerId, {
+        sentGen,
+        newRevision,
+        document: docSnapshot,
+        workspaceId: this.draft.workspaceId,
+        access: this.draft.access,
+      });
+      // Re-verify after awaiting IDB commit
+      if (this.closed || this.owner !== reqOwner) return false;
+
+      // Step B: only mark clean/synced if no newer local edit exists in store OR memory
+      if (this.localGen === sentGen && confirmResult.draftCleared) {
+        this.draft = {
+          ...this.draft,
+          revision: Math.max(this.draft.revision, newRevision),
+          dirty: false,
+        };
+        this.needsLocalSave = false;
+      } else {
+        // Newer edit (gen2 > sentGen) exists: keep gen2 document untouched, advance baseRevision
+        this.draft = {
+          ...this.draft,
+          revision: Math.max(this.draft.revision, newRevision),
+          dirty: true,
+        };
+        if (confirmResult.draftCleared) {
+          // gen2 happened in memory while confirmUploadCas was committing -> persist gen2 now
+          this.needsLocalSave = true;
+          await this.flush();
+          if (this.closed || this.owner !== reqOwner) return false;
+        }
+      }
+    } else {
+      this.draft = {
+        ...this.draft,
+        revision: Math.max(this.draft.revision, newRevision),
+        dirty: this.draft.document !== docSnapshot || this.localGen !== sentGen,
+      };
+      this.needsLocalSave = true;
+    }
+
+    return true;
+  }
+
   async sync(useCloud = false) {
     if (
       !this.owner ||
@@ -448,12 +563,14 @@ export class DraftWorkspace {
     ) {
       return;
     }
+    clearTimeout(this.remoteRefreshTimer);
     const reqOwner = this.owner;
     const reqId = this.id;
     this.running = true;
     const s = syncMessages();
     this.emitStatus({ label: s.syncingLabel, detail: s.syncingDetail, status: "syncing" });
     try {
+      let keepPullingRequired = false;
       if (this.pullingRequired || !this.draft.dirty || useCloud) {
         const beforeGen = this.localGen;
         const beforeDoc = this.draft.document;
@@ -488,58 +605,87 @@ export class DraftWorkspace {
           throw new CloudError(409, this.conflictState().detail);
         }
 
+        const remoteCanon = remote.document ? canonicalJson(remote.document) : null;
+
         if (!useCloud && this.draft.dirty && remote.revision !== this.draft.revision) {
-          if (!remote.document || canonicalJson(remote.document) !== canonicalJson(this.draft.document)) {
-            throw new CloudError(409, this.conflictState().detail);
-          }
-          // Same content as cloud -> reconcile cleanly
-          const reconcileGen = this.localGen;
-          this.ackedGen = Math.max(this.ackedGen, reconcileGen);
-          this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
-          if (this.usesV2() && this.cacheReadable) {
-            const confirmed = await this.storage.confirmUploadCas!(reqOwner, reqId, this.writerId, {
-              sentGen: reconcileGen,
-              newRevision: remote.revision,
-              document: remote.document,
-              workspaceId: this.draft.workspaceId,
-              access: this.draft.access,
-            });
-            if (this.closed || this.owner !== reqOwner) return;
-            const stillSame = this.localGen === reconcileGen && confirmed.draftCleared;
+          const localCanon = canonicalJson(this.draft.document);
+          if (remote.document && remoteCanon === localCanon) {
+            // Same content as cloud -> reconcile cleanly
+            const reconcileGen = this.localGen;
+            this.ackedGen = Math.max(this.ackedGen, reconcileGen);
+            this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
+            this.acceptedRemoteCanonicals.clear();
+            if (this.usesV2() && this.cacheReadable) {
+              const confirmed = await this.storage.confirmUploadCas!(reqOwner, reqId, this.writerId, {
+                sentGen: reconcileGen,
+                newRevision: remote.revision,
+                document: remote.document,
+                workspaceId: this.draft.workspaceId,
+                access: this.draft.access,
+              });
+              if (this.closed || this.owner !== reqOwner) return;
+              const stillSame = this.localGen === reconcileGen && confirmed.draftCleared;
+              this.draft = {
+                ...this.draft,
+                revision: Math.max(this.draft.revision, remote.revision),
+                dirty: !stillSame,
+              };
+              this.needsLocalSave = !stillSame;
+            } else {
+              this.draft = { ...this.draft, revision: remote.revision, dirty: false };
+              this.needsLocalSave = true;
+            }
+          } else if (remote.document && remoteCanon !== null && this.acceptedRemoteCanonicals.has(remoteCanon)) {
+            // Cloud holds an exact CRDT state already merged into this tab before local edits:
+            // safely rebase baseRevision onto remote.revision so the upload proceeds without false 409.
+            this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
             this.draft = {
               ...this.draft,
               revision: Math.max(this.draft.revision, remote.revision),
-              dirty: !stillSame,
             };
-            this.needsLocalSave = !stillSame;
+            this.acceptedRemoteCanonicals.clear();
           } else {
-            this.draft = { ...this.draft, revision: remote.revision, dirty: false };
-            this.needsLocalSave = true;
+            throw new CloudError(409, this.conflictState().detail);
           }
         } else if (
           remote.document &&
           (useCloud || (!this.draft.dirty && remote.revision !== this.draft.revision))
         ) {
-          const acceptGen = this.localGen;
-          this.ackedGen = Math.max(this.ackedGen, acceptGen);
-          this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
-          this.draft = this.withScope({ document: remote.document, revision: remote.revision, dirty: false });
-          this.show(remote.document);
-          if (this.usesV2() && this.cacheReadable) {
-            await this.storage.confirmUploadCas!(reqOwner, reqId, this.writerId, {
-              sentGen: acceptGen,
-              newRevision: remote.revision,
-              document: remote.document,
-              workspaceId: this.draft.workspaceId,
-              access: this.draft.access,
-            });
-            if (this.closed || this.owner !== reqOwner) return;
-            this.needsLocalSave = false;
+          const currentCanon = canonicalJson(this.draft.document);
+          if (!useCloud && remoteCanon !== currentCanon && remoteCanon !== null && this.acceptedRemoteCanonicals.has(remoteCanon)) {
+            // Cloud is at an earlier CRDT state already superseded locally by newer remote CRDT deltas:
+            // advance baseRevision without reverting the live canvas document.
+            this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
+            this.draft = {
+              ...this.draft,
+              revision: Math.max(this.draft.revision, remote.revision),
+            };
+            keepPullingRequired = true;
           } else {
-            this.needsLocalSave = true;
+            const acceptGen = this.localGen;
+            this.ackedGen = Math.max(this.ackedGen, acceptGen);
+            this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
+            this.draft = this.withScope({ document: remote.document, revision: remote.revision, dirty: false });
+            if (useCloud || remoteCanon !== currentCanon) {
+              this.show(remote.document);
+            }
+            this.acceptedRemoteCanonicals.clear();
+            if (this.usesV2() && this.cacheReadable) {
+              await this.storage.confirmUploadCas!(reqOwner, reqId, this.writerId, {
+                sentGen: acceptGen,
+                newRevision: remote.revision,
+                document: remote.document,
+                workspaceId: this.draft.workspaceId,
+                access: this.draft.access,
+              });
+              if (this.closed || this.owner !== reqOwner) return;
+              this.needsLocalSave = false;
+            } else {
+              this.needsLocalSave = true;
+            }
           }
         }
-        this.pullingRequired = false;
+        this.pullingRequired = keepPullingRequired;
         this.conflicted = false;
       }
 
@@ -549,58 +695,52 @@ export class DraftWorkspace {
         const baseRevision = Math.max(this.draft.revision, this.confirmedBaseRevision);
         const docSnapshot = this.draft.document;
 
-        const newRevision =
-          this.workspaceId && baseRevision === 0
-            ? await this.storage.writeCloud(reqOwner, reqId, baseRevision, docSnapshot, this.workspaceId)
-            : await this.storage.writeCloud(reqOwner, reqId, baseRevision, docSnapshot);
-        if (this.closed || this.owner !== reqOwner) return;
+        const doWrite = (rev: number) =>
+          this.workspaceId && rev === 0
+            ? this.storage.writeCloud(reqOwner, reqId, rev, docSnapshot, this.workspaceId)
+            : this.storage.writeCloud(reqOwner, reqId, rev, docSnapshot);
 
-        // Step A (always runs for this writerId): monotonically advance causal watermark & baseRevision
-        this.ackedGen = Math.max(this.ackedGen, sentGen);
-        this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, newRevision);
-        this.hasBeenSyncedToCloud = true;
-
-        if (this.usesV2() && this.cacheReadable) {
-          const confirmResult = await this.storage.confirmUploadCas!(reqOwner, reqId, this.writerId, {
-            sentGen,
-            newRevision,
-            document: docSnapshot,
-            workspaceId: this.draft.workspaceId,
-            access: this.draft.access,
-          });
-          // Re-verify after awaiting IDB commit
+        let newRevision: number;
+        try {
+          newRevision = await doWrite(baseRevision);
+        } catch (writeErr) {
+          if (!(writeErr instanceof CloudError && writeErr.status === 409)) {
+            throw writeErr;
+          }
+          // Verify latest cloud state before entering conflict:
+          // cloud may already hold an identical CRDT-converged document, an already-merged ancestor,
+          // or have been deleted/revoked.
+          let remote: CloudDraft;
+          try {
+            remote = await this.storage.readCloud(reqOwner, reqId);
+          } catch {
+            throw writeErr;
+          }
           if (this.closed || this.owner !== reqOwner) return;
 
-          // Step B: only mark clean/synced if no newer local edit exists in store OR memory
-          if (this.localGen === sentGen && confirmResult.draftCleared) {
-            this.draft = {
-              ...this.draft,
-              revision: Math.max(this.draft.revision, newRevision),
-              dirty: false,
-            };
-            this.needsLocalSave = false;
-          } else {
-            // Newer edit (gen2 > sentGen) exists: keep gen2 document untouched, advance baseRevision
-            this.draft = {
-              ...this.draft,
-              revision: Math.max(this.draft.revision, newRevision),
-              dirty: true,
-            };
-            if (confirmResult.draftCleared) {
-              // gen2 happened in memory while confirmUploadCas was committing -> persist gen2 now
-              this.needsLocalSave = true;
-              await this.flush();
-              if (this.closed || this.owner !== reqOwner) return;
-            }
+          if (remote.revision === 0 && remote.document === null && (baseRevision > 0 || this.hasBeenSyncedToCloud)) {
+            this.remoteUnavailable = true;
+            this.conflicted = false;
+            this.pullingRequired = false;
+            this.emitStatus(this.remoteUnavailableState());
+            return;
           }
-        } else {
-          this.draft = {
-            ...this.draft,
-            revision: Math.max(this.draft.revision, newRevision),
-            dirty: this.draft.document !== docSnapshot || this.localGen !== sentGen,
-          };
-          this.needsLocalSave = true;
+
+          const remoteCanon = remote.document ? canonicalJson(remote.document) : null;
+          if (remote.document && remoteCanon === canonicalJson(docSnapshot)) {
+            newRevision = remote.revision;
+          } else if (remote.document && remoteCanon !== null && this.acceptedRemoteCanonicals.has(remoteCanon)) {
+            this.hasBeenSyncedToCloud = true;
+            this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
+            newRevision = await doWrite(remote.revision);
+          } else {
+            throw writeErr;
+          }
         }
+        if (this.closed || this.owner !== reqOwner) return;
+
+        const ok = await this.finalizeUpload(reqOwner, reqId, sentGen, newRevision, docSnapshot);
+        if (!ok) return;
       }
 
       if (this.needsLocalSave) {
@@ -636,10 +776,84 @@ export class DraftWorkspace {
     }
   }
 
+  async resolveConflictKeepLocal() {
+    if (!this.owner || !this.id || !this.draft || this.closed || this.running || !this.conflicted) {
+      return;
+    }
+    clearTimeout(this.remoteRefreshTimer);
+    const reqOwner = this.owner;
+    const reqId = this.id;
+    this.running = true;
+    const s = syncMessages();
+    this.emitStatus({ label: s.syncingLabel, detail: s.syncingDetail, status: "syncing" });
+    try {
+      const remote = await this.storage.readCloud(reqOwner, reqId);
+      if (this.closed || this.owner !== reqOwner) return;
+
+      if (remote.revision === 0 && remote.document === null && (this.draft.revision > 0 || this.hasBeenSyncedToCloud)) {
+        this.remoteUnavailable = true;
+        this.conflicted = false;
+        this.pullingRequired = false;
+        this.emitStatus(this.remoteUnavailableState());
+        return;
+      }
+
+      const sentGen = this.localGen;
+      const docSnapshot = this.draft.document;
+      const targetBaseRevision = remote.revision;
+
+      let newRevision: number;
+      if (remote.document && canonicalJson(remote.document) === canonicalJson(docSnapshot)) {
+        newRevision = remote.revision;
+      } else {
+        newRevision =
+          this.workspaceId && targetBaseRevision === 0
+            ? await this.storage.writeCloud(reqOwner, reqId, targetBaseRevision, docSnapshot, this.workspaceId)
+            : await this.storage.writeCloud(reqOwner, reqId, targetBaseRevision, docSnapshot);
+      }
+      if (this.closed || this.owner !== reqOwner) return;
+
+      this.conflicted = false;
+      this.pullingRequired = false;
+      this.remoteUnavailable = false;
+
+      const ok = await this.finalizeUpload(reqOwner, reqId, sentGen, newRevision, docSnapshot);
+      if (!ok) return;
+
+      if (this.needsLocalSave) {
+        await this.flush();
+        if (this.closed || this.owner !== reqOwner) return;
+      }
+
+      const doneMsg = syncMessages();
+      this.emitStatus(
+        this.draft.dirty
+          ? this.pendingState()
+          : this.draft.revision
+            ? this.syncedState()
+            : { label: doneMsg.readyLabel, detail: doneMsg.readyDetail, status: "ready" },
+      );
+      if (this.draft.dirty) this.scheduleCloud();
+    } catch (error) {
+      if (this.closed || this.owner !== reqOwner) return;
+      this.pullingRequired = true;
+      this.conflicted = true;
+      const base = this.conflictState();
+      this.emitStatus(
+        error instanceof CloudError && error.status === 409
+          ? base
+          : { ...base, detail: error instanceof Error ? error.message : syncMessages().unsyncedDetail },
+      );
+    } finally {
+      this.running = false;
+    }
+  }
+
   close() {
     this.closed = true;
     clearTimeout(this.localTimer);
     clearTimeout(this.cloudTimer);
+    clearTimeout(this.remoteRefreshTimer);
     void this.flush();
   }
 }

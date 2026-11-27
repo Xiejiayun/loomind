@@ -580,3 +580,148 @@ describe("T1 v2 draft isolation, CAS, causal watermark, remote-unavailable, and 
     expect(snapshotAfter).toEqual(snapshotBefore);
   });
 });
+
+describe("CRDT remote sync, 409 auto-reconcile, and conflict resolution", () => {
+  beforeEach(async () => {
+    await clearDb();
+  });
+
+  it("accepts remote CRDT updates on a clean tab without marking dirty, writing cloud, or remounting editor", async () => {
+    const owner = "alice";
+    const mapId = "88888888-8888-4888-8888-888888888888";
+    const v1 = documentWith("v1");
+    const v2 = documentWith("v2-from-peer");
+    const cloud = createV2CloudHarness(1, v1);
+    const shown = vi.fn();
+    const statuses: SyncState[] = [];
+
+    const tabB = new DraftWorkspace(owner, mapId, shown, (s) => statuses.push(s), vi.fn(), cloud.storage);
+    await tabB.start();
+    const initialShowCalls = shown.mock.calls.length;
+
+    // Peer edits and broadcasts CRDT delta to Tab B
+    tabB.acceptRemoteDocument(v2);
+    expect(cloud.writeCloud).not.toHaveBeenCalled();
+
+    // Peer uploads v2 to cloud -> Tab B refreshes cleanly without remounting (`show` not called again)
+    cloud.setCloud(2, v2);
+    await tabB.sync();
+    expect(cloud.writeCloud).not.toHaveBeenCalled();
+    expect(shown.mock.calls.length).toBe(initialShowCalls);
+    expect(statuses.at(-1)?.status).toBe("synced");
+
+    const state = await loadMapState(owner, mapId);
+    expect(state.synced?.revision).toBe(2);
+    expect(state.drafts).toHaveLength(0);
+    tabB.close();
+  });
+
+  it("auto-rebases local edits made after accepting a remote CRDT update without triggering false 409 conflict", async () => {
+    const owner = "alice";
+    const mapId = "99999999-9999-4999-8999-999999999999";
+    const v1 = documentWith("v1");
+    const peerDoc = documentWith("peer-crdt-update");
+    const localAfterPeer = documentWith("peer-crdt-plus-local");
+    const cloud = createV2CloudHarness(1, v1);
+    const statuses: SyncState[] = [];
+
+    const tabB = new DraftWorkspace(owner, mapId, vi.fn(), (s) => statuses.push(s), vi.fn(), cloud.storage);
+    await tabB.start();
+
+    // Tab B receives peer CRDT update BEFORE peer finishes uploading rev 2
+    tabB.acceptRemoteDocument(peerDoc);
+    // User edits Tab B on top of peerDoc
+    tabB.edit(localAfterPeer);
+    // Peer finishes uploading peerDoc as rev 2
+    cloud.setCloud(2, peerDoc);
+
+    // Tab B syncs -> recognizes cloud rev 2 matches accepted CRDT ancestor -> rebases and uploads rev 3
+    await tabB.sync();
+    expect(cloud.state.revision).toBe(3);
+    expect(cloud.state.document).toEqual(localAfterPeer);
+    expect(statuses.at(-1)?.status).toBe("synced");
+    expect(statuses.at(-1)?.conflict).toBeFalsy();
+    tabB.close();
+  });
+
+  it("auto-reconciles PUT 409 when cloud already holds an identical document instead of entering conflict", async () => {
+    const owner = "alice";
+    const mapId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const v1 = documentWith("v1");
+    const converged = documentWith("crdt-converged");
+    const cloud = createV2CloudHarness(1, v1);
+    const statuses: SyncState[] = [];
+
+    const ws = new DraftWorkspace(owner, mapId, vi.fn(), (s) => statuses.push(s), vi.fn(), cloud.storage);
+    await ws.start();
+
+    ws.edit(converged);
+    // Another tab already uploaded the exact same converged document as rev 2
+    cloud.setCloud(2, structuredClone(converged));
+
+    await ws.sync();
+    expect(cloud.writeCloud).toHaveBeenCalledTimes(1);
+    expect(statuses.at(-1)?.status).toBe("synced");
+    expect(statuses.at(-1)?.conflict).toBeFalsy();
+    const state = await loadMapState(owner, mapId);
+    expect(state.synced?.revision).toBe(2);
+    expect(state.drafts).toHaveLength(0);
+    ws.close();
+  });
+
+  it("transitions PUT 409 to remote_unavailable when the map was deleted on cloud", async () => {
+    const owner = "alice";
+    const mapId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const v1 = documentWith("v1");
+    const cloud = createV2CloudHarness(1, v1);
+    const statuses: SyncState[] = [];
+
+    const ws = new DraftWorkspace(owner, mapId, vi.fn(), (s) => statuses.push(s), vi.fn(), cloud.storage);
+    await ws.start();
+
+    ws.edit(documentWith("local-after-delete"));
+    cloud.setCloud(0, null);
+
+    await ws.sync();
+    expect(statuses.at(-1)?.status).toBe("remote_unavailable");
+    expect(statuses.at(-1)?.remoteUnavailable).toBe(true);
+    expect(statuses.at(-1)?.conflict).toBeFalsy();
+    ws.close();
+  });
+
+  it("resolves a genuine conflict via resolveConflictKeepLocal by rebasing onto latest cloud revision", async () => {
+    const owner = "alice";
+    const mapId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const v1 = documentWith("v1");
+    const cloudDivergent = documentWith("other-device-v2");
+    const localDivergent = documentWith("my-local-version");
+    const cloud = createV2CloudHarness(1, v1);
+    const statuses: SyncState[] = [];
+
+    const ws = new DraftWorkspace(owner, mapId, vi.fn(), (s) => statuses.push(s), vi.fn(), cloud.storage);
+    await ws.start();
+
+    // Divergent edits without CRDT ancestry -> genuine 409 conflict
+    ws.edit(localDivergent);
+    cloud.setCloud(2, cloudDivergent);
+    await ws.sync();
+    expect(statuses.at(-1)?.status).toBe("conflict");
+    expect(statuses.at(-1)?.conflict).toBe(true);
+
+    // Normal sync stays paused in conflict
+    await ws.sync();
+    expect(cloud.state.revision).toBe(2);
+
+    // User explicitly chooses "Keep local version & sync" -> pushes as rev 3 (preserving v2 in history)
+    await ws.resolveConflictKeepLocal();
+    expect(cloud.state.revision).toBe(3);
+    expect(cloud.state.document).toEqual(localDivergent);
+    expect(statuses.at(-1)?.status).toBe("synced");
+    expect(statuses.at(-1)?.conflict).toBeFalsy();
+
+    const state = await loadMapState(owner, mapId);
+    expect(state.synced?.revision).toBe(3);
+    expect(state.drafts).toHaveLength(0);
+    ws.close();
+  });
+});

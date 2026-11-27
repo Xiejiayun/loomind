@@ -10,6 +10,7 @@ export function AccountControl({
   onSessionChange,
   sync,
   onSync,
+  onKeepLocal,
   onLogin,
   onSaveAsNew,
   onExportBackup,
@@ -21,6 +22,7 @@ export function AccountControl({
   onSessionChange: (session: Session) => void;
   sync: SyncState;
   onSync: (useCloud?: boolean) => void;
+  onKeepLocal?: () => void;
   onLogin: () => void;
   onSaveAsNew?: () => void;
   onExportBackup?: () => void;
@@ -79,9 +81,18 @@ export function AccountControl({
           {onRemoveLocalCache && <button type="button" className="lm-text-button" onClick={onRemoveLocalCache}>{t.sync.removeLocalCacheBtn}</button>}
         </div>
       ) : sync.conflict ? (
-        <button type="button" className="lm-text-button" onClick={() => {
-          if (window.confirm(t.account.openCloudConfirm)) onSync(true);
-        }}>{t.account.openCloudBtn}</button>
+        <div className="lm-account-recovery">
+          {onKeepLocal && (
+            <button type="button" className="lm-text-button" disabled={syncing} onClick={() => {
+              if (window.confirm(t.account.keepLocalConfirm)) onKeepLocal();
+            }}>{t.account.keepLocalBtn}</button>
+          )}
+          <button type="button" className="lm-text-button" disabled={syncing} onClick={() => {
+            if (window.confirm(t.account.openCloudConfirm)) onSync(true);
+          }}>{t.account.openCloudBtn}</button>
+          {onSaveAsNew && <button type="button" className="lm-text-button" onClick={() => { dialog.current?.close(); onSaveAsNew(); }}>{t.sync.saveAsNewBtn}</button>}
+          {onExportBackup && <button type="button" className="lm-text-button" onClick={onExportBackup}>{t.sync.exportBackupBtn}</button>}
+        </div>
       ) : (
         <button type="button" className="lm-text-button" disabled={syncing} onClick={() => onSync()}>{t.account.syncNow}</button>
       )}

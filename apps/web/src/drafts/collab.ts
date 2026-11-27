@@ -149,6 +149,10 @@ export class CollabSession {
     }
   }
 
+  isApplyingRemote(): boolean {
+    return this.applyingRemote;
+  }
+
   setLocalSelection(topicIds: string[]): void {
     const prevKey = this.localSelection.join(",");
     const nextKey = topicIds.join(",");
