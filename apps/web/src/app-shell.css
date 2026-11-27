@@ -1274,6 +1274,10 @@
   outline: none;
 }
 .lm-topic-textarea { min-height: 112px; }
+.lm-source-view .lm-create-input-panel > input { width: 100%; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--lm-border-subtle); border-radius: var(--lm-radius-md); background: var(--lm-bg-canvas); color: var(--lm-text-primary); }
+.lm-source-view details { padding-block: 6px; overflow-wrap: anywhere; }
+.lm-source-view summary { cursor: pointer; }
+.lm-source-view details p { white-space: pre-wrap; }
 .lm-field-foot {
   display: flex;
   align-items: center;

@@ -63,6 +63,9 @@ importers:
       fake-indexeddb:
         specifier: ^6.2.8
         version: 6.2.8
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
       tailwindcss:
         specifier: ^4.0.6
         version: 4.3.5

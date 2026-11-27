@@ -45,6 +45,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - Dark-mode adaptive chrome and an interactive **Minimap** viewport navigator.
 
 ### Dual-Tier AI Co-Creation
+- **Source-linked meeting notes**: From the workspace choose **Create from source** to paste minutes or a web excerpt and optionally record its HTTP(S) link. Blank lines and list items become editable topics; each topic note keeps its exact passage and original line range. Those notes are included in exported PowerPoint speaker notes. The pasted-text flow does not call an AI model, fetch the URL, or import PDFs.
 - **Free `/try` Playground**: Powered by Cloudflare Workers AI (Gemma 4) with a per-device 3-trial signed cookie quota — try AI mind map generation and node actions without signing in.
 - **Logged-in Pro Co-Creation**: Streaming AI Chat panel (`⌘J`), inline node AI command bar (`⇧⌘J`), and 6 structured undoable node actions (Expand, Break into Tasks, Summarize, Cluster Boundary, Elaborate Note, Smart Restyle).
 

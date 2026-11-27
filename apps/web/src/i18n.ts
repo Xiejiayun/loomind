@@ -6,6 +6,14 @@ export function useWebLocale(): Locale {
 }
 
 const zh = {
+  source: {
+    heading: "从资料创建", description: "粘贴会议纪要或网页摘录，按原文生成可编辑节点。这里按段摘录，不会调用 AI 或打开链接。",
+    name: "资料标题", url: "原文链接（可选）", text: "原文", preview: "节点与原文预览", hint: "空行划分段落，也可使用项目符号。",
+    empty: "粘贴一段原文即可预览节点。", invalidName: "请输入 1 至 120 个字符的资料标题。", invalidUrl: "原文链接须为不含账号信息的 HTTP 或 HTTPS 地址（最多 2,048 个字符）。",
+    tooLong: "原文超过 16,000 个字符，请分次导入。", tooMany: "原文超过 80 个节点，请分次导入。", create: "创建带出处的导图",
+    privacy: "原文、行号和链接写入节点备注；分享导图或导出 PPTX 时，接收者也能看到。",
+    lines: (first: number, last: number) => first === last ? `第 ${first} 行` : `第 ${first}–${last} 行`,
+  },
   meta: {
     mapTitle: "导图 — Loomind",
     workspaceTitle: "工作区 — Loomind",
@@ -536,6 +544,14 @@ const zh = {
 };
 
 const en: typeof zh = {
+  source: {
+    heading: "Create from source", description: "Paste meeting minutes or a web excerpt to create editable topics from the original passages. No AI request or webpage fetch is made.",
+    name: "Source title", url: "Original link (optional)", text: "Source text", preview: "Preview topics and quotes", hint: "Separate passages with blank lines, or use list items.",
+    empty: "Paste a passage to preview its topic.", invalidName: "Enter a source title of 1–120 characters.", invalidUrl: "Use an HTTP or HTTPS address without credentials (at most 2,048 characters).",
+    tooLong: "The source exceeds 16,000 characters; split it into smaller imports.", tooMany: "The source exceeds 80 topics; split it into smaller imports.", create: "Create source-linked map",
+    privacy: "Quotes, line numbers and links are saved in topic notes and are visible to people who receive the map or exported PowerPoint.",
+    lines: (first: number, last: number) => first === last ? `Line ${first}` : `Lines ${first}–${last}`,
+  },
   meta: {
     mapTitle: "Mind Map — Loomind",
     workspaceTitle: "Workspace — Loomind",

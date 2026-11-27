@@ -60,6 +60,7 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
       <button type="button" role="tab" aria-selected={mode === "idea"} onClick={() => { setError(""); onModeChange("idea"); }}><Sparkles size={16}/> {t.createView.tabIdea}</button>
       <button type="button" role="tab" aria-selected={mode === "outline"} onClick={() => { setError(""); onModeChange("outline"); }}><ListTree size={16}/> {t.createView.tabOutline}</button>
     </div>
+    <AppLink href="/app/create/source" className="lm-secondary-button">{t.source.heading}</AppLink>
     <div className="lm-create-grid">
       <section className="lm-create-input-panel" aria-label={mode === "outline" ? t.createView.outlineInputAria : t.createView.topicInputAria}>
         {mode === "idea" ? <>

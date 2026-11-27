@@ -22,6 +22,7 @@ import { authRequest } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
 import { createWorkspace, listWorkspaces, moveMindmap, type WorkspaceSummary } from "./api.js";
 import { CreateView } from "./CreateView.js";
+import { SourceView } from "./SourceView.js";
 import { clearLocalAiChatCache, seedLocalAiChatCache } from "./drafts/ai-chat.js";
 import { deleteCloud, listCloud } from "./drafts/cloud.js";
 import { mapTitle, MAP_ID, type MindmapSummary } from "./drafts/shared.js";
@@ -419,6 +420,8 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             <LibraryView key="library" maps={maps} workspaces={workspaces} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
           ) : isShared ? (
             <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+          ) : route.pathname === "/app/create/source" ? (
+            <SourceView workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onCreate={createMap}/>
           ) : isCreate ? (
             <CreateView
               mode={createMode}
@@ -620,6 +623,7 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
         {error && <p className="lm-form-error" role="alert">{error}</p>}
 
         <div className="lm-suggestion-row">
+          <AppLink href="/app/create/source" className="lm-secondary-button">{t.source.heading}</AppLink>
           {t.home.suggestions.map((idea) => (
             <button key={idea} type="button" onClick={() => setText(idea)}>
               {idea}
