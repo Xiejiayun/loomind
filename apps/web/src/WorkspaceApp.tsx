@@ -32,6 +32,7 @@ import { documentFromOutline, documentFromTopic, outlineNodeCount, parseOutline 
 import { OutlineTree } from "./OutlineTree.js";
 import { deleteLocal, listLocalMaps, loadLocal, saveLocal } from "./persistence.js";
 import { ShareDialog, type ShareTarget } from "./ShareDialog.js";
+import { consumeStagedTryDocument } from "./try-handoff.js";
 import { Brand, LanguageToggle, ThemeToggle, type UiTheme } from "./ui.js";
 
 const EditorWorkspace = lazy(() => import("./EditorWorkspace.js").then(({ EditorWorkspace }) => ({ default: EditorWorkspace })));
@@ -122,6 +123,23 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
       setActiveWorkspaceId((current) => current && spaces.some((space) => space.id === current) ? current : null);
       setListError(failures.join(" "));
       setLoading(false);
+
+      if (new URLSearchParams(window.location.search).get("importTry") === "1") {
+        const importedDoc = consumeStagedTryDocument();
+        if (importedDoc) {
+          const id = crypto.randomUUID();
+          await saveLocal(owner, { document: importedDoc, revision: 0, dirty: true, workspaceId: null, access: "owner" }, id);
+          if (!active) return;
+          setMaps((current) => sortMaps([
+            { id, title: mapTitle(importedDoc), updatedAt: new Date().toISOString(), workspaceId: null, access: "owner" },
+            ...current,
+          ]));
+          setActiveWorkspaceId(null);
+          navigate(`/app/mindmaps/${id}`, true);
+        } else {
+          navigate("/app", true);
+        }
+      }
     })();
     return () => { active = false; };
   }, [owner]);

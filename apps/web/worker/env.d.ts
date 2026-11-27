@@ -14,6 +14,7 @@ interface __BaseEnv_Env {
 	PRO_LLM_API_MODE?: string;
 	AI_FREE_MODEL?: string;
 	AI_FREE_DAILY_LIMIT?: string;
+	AI_FREE_IP_DAILY_LIMIT?: string;
 	AI_PRO_DAILY_LIMIT?: string;
 	AI_ALLOW_MOCK?: string;
 }

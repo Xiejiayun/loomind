@@ -231,11 +231,14 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         );
       } else {
         const msg = err instanceof Error ? err.message : t.aiChat.errorFallback;
+        const isRateLimited = err instanceof AiClientError && err.code === "RATE_LIMITED";
         const showUpgrade =
           aiRuntime?.tier === "free" &&
           Boolean(aiRuntime.onUpgradeToPro) &&
-          err instanceof AiClientError &&
-          err.code === "RATE_LIMITED";
+          isRateLimited;
+        if (aiRuntime?.onRefreshConfig && (isRateLimited || (err instanceof AiClientError && err.code === "UPSTREAM_ERROR"))) {
+          aiRuntime.onRefreshConfig();
+        }
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
@@ -262,7 +265,11 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   if (!open) return null;
 
   const borderCls = isDark ? "border-white/[0.075]" : "border-slate-900/[0.08]";
-  const mutedTextCls = isDark ? "text-[#646b78]" : "text-[#8c95a4]";
+  const mutedTextCls = isDark ? "text-[#9ca3b0]" : "text-[#525b6b]";
+  const isTrialMode = aiRuntime?.tier === "free";
+  const trialRemaining = isTrialMode && aiRuntime?.config ? aiRuntime.config.remainingToday : null;
+  const trialExhausted = trialRemaining !== null && trialRemaining <= 0;
+  const showStrip = embedded || trialRemaining !== null;
 
   const content = (
     <>
@@ -306,71 +313,33 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         </div>
       )}
 
-      {/* Tier & Quota Status Strip */}
-      {(aiRuntime || embedded) && (
+      {/* Compact Status / Action Strip */}
+      {showStrip && (
         <div
-          className={`flex shrink-0 flex-wrap items-center justify-between gap-1.5 border-b px-3 py-1.5 text-[10.5px] ${borderCls} ${
-            isDark ? "bg-white/[0.025]" : "bg-slate-900/[0.025]"
+          className={`flex shrink-0 items-center justify-between gap-2 border-b px-3 py-1.5 text-[11px] ${borderCls} ${
+            isDark ? "bg-white/[0.02]" : "bg-slate-900/[0.02]"
           }`}
         >
           <div className="flex min-w-0 items-center gap-1.5">
-            {aiRuntime && (
-              <>
-                <span
-                  className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${
-                    aiRuntime.tier === "pro"
-                      ? isDark
-                        ? "bg-indigo-500/20 text-indigo-200"
-                        : "bg-indigo-100 text-indigo-800"
-                      : isDark
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : "bg-emerald-100 text-emerald-800"
-                  }`}
-                >
-                  {aiRuntime.tier === "pro" ? t.aiChat.tierProBadge : t.aiChat.tierFreeBadge}
-                </span>
-                {aiRuntime.config?.modelLabel && (
-                  <span className={`truncate ${mutedTextCls}`} title={aiRuntime.config.modelLabel}>
-                    {aiRuntime.config.modelLabel}
-                  </span>
-                )}
-                {aiRuntime.config?.isMock && (
-                  <span
-                    className={`rounded border px-1 py-0.25 text-[9.5px] ${
-                      isDark
-                        ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                        : "border-amber-500/30 bg-amber-50 text-amber-800"
-                    }`}
-                  >
-                    {t.aiChat.mockBadge}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {aiRuntime?.config && (
-              <span className={mutedTextCls}>
-                {t.aiChat.quotaLabel(aiRuntime.config.remainingToday, aiRuntime.config.dailyLimit)}
-              </span>
-            )}
-            {aiRuntime?.tier === "free" && aiRuntime.onUpgradeToPro && (
-              <button
-                type="button"
-                onClick={aiRuntime.onUpgradeToPro}
-                className={`font-medium underline-offset-2 hover:underline ${
-                  isDark ? "text-indigo-300 hover:text-indigo-200" : "text-indigo-700 hover:text-indigo-900"
+            {trialRemaining !== null && (
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                  isDark
+                    ? "border-white/[0.1] bg-white/[0.04] text-[#d5d9e2]"
+                    : "border-slate-900/[0.1] bg-slate-900/[0.04] text-[#2c3340]"
                 }`}
               >
-                {t.aiChat.upgradeCta}
-              </button>
+                {t.aiChat.trialRemaining(trialRemaining)}
+              </span>
             )}
+          </div>
+          <div className="flex items-center gap-1.5">
             {embedded && messages.length > 0 && (
               <button
                 type="button"
                 title={t.aiChat.newChat}
                 onClick={() => setMessages([])}
-                className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10.5px] transition ${
+                className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] transition ${
                   isDark ? "text-[#9ca3b0] hover:bg-white/[0.07] hover:text-white" : "text-[#525b6b] hover:bg-slate-200/70"
                 }`}
               >
@@ -411,6 +380,11 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               <Sparkles className="h-4 w-4" />
             </div>
             <p className="text-[13.5px] font-semibold">{t.aiChat.emptyTitle}</p>
+            {isTrialMode && (
+              <p className={`mt-1.5 text-[11.5px] leading-relaxed ${mutedTextCls}`}>
+                {t.aiChat.trialEmptyHint}
+              </p>
+            )}
             {topicMap.size <= 1 && (
               <div className="mt-4 grid grid-cols-1 gap-1.5">
                 {t.aiChat.starterIdeas.map((idea) => (
@@ -465,10 +439,10 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                     <button
                       type="button"
                       onClick={aiRuntime.onUpgradeToPro}
-                      className={`inline-flex items-center gap-1 rounded-[6px] px-2.5 py-1 text-[11px] font-medium transition ${
+                      className={`inline-flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 text-[11.5px] font-medium transition ${
                         isDark
-                          ? "bg-indigo-500/25 text-indigo-100 hover:bg-indigo-500/35"
-                          : "bg-indigo-600 text-white hover:bg-indigo-700"
+                          ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"
+                          : "bg-[#14161b] text-white hover:bg-[#282c35]"
                       }`}
                     >
                       <Sparkles className="h-3 w-3" /> {t.aiChat.upgradeCta}
@@ -523,88 +497,116 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
       {/* Composer Footer */}
       <div className={`shrink-0 border-t p-2.5 ${borderCls}`}>
-        {/* Context Chip Bar (only when a node is selected) */}
-        {activeTopicTitle && (
-          <div className="mb-2 flex flex-wrap items-center gap-1.5">
-            <span
-              className={`inline-flex max-w-full items-center gap-1 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium ${
-                isDark
-                  ? "border-white/[0.12] bg-white/[0.08] text-[#f4f5f8]"
-                  : "border-slate-900/[0.12] bg-slate-900/[0.06] text-[#111318]"
-              }`}
-            >
-              <span className="truncate">
-                @ {activeTopicTitle}
-                {selectedTopicIds.length > 1 ? ` +${selectedTopicIds.length - 1}` : ""}
-              </span>
-              <button
-                type="button"
-                aria-label={t.aiChat.resetContextAria}
-                onClick={() => setIgnoreSelection(true)}
-                className="ml-0.5 opacity-70 hover:opacity-100"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          </div>
-        )}
-
-        {/* Input Box */}
-        <div
-          className={`flex items-end gap-1.5 rounded-[8px] border px-2.5 py-2 transition ${
-            isDark
-              ? "border-white/[0.1] bg-[#101114] focus-within:border-white/[0.26]"
-              : "border-slate-900/[0.12] bg-[#f7f8fa] focus-within:border-slate-900/[0.3]"
-          }`}
-        >
-          <textarea
-            ref={inputRef}
-            rows={2}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void executePrompt(input);
-              }
-            }}
-            placeholder={
-              activeTopicTitle
-                ? t.aiChat.inputPlaceholderTopic(activeTopicTitle)
-                : t.aiChat.inputPlaceholderFull
-            }
-            className="block min-w-0 flex-1 resize-none bg-transparent text-[12.5px] leading-relaxed outline-none placeholder:text-[#646b78]"
-          />
-          {busy ? (
+        {trialExhausted && aiRuntime?.onUpgradeToPro ? (
+          <div
+            className={`rounded-[8px] border p-3 ${
+              isDark
+                ? "border-white/[0.1] bg-[#15171c] text-[#f4f5f8]"
+                : "border-slate-900/[0.1] bg-[#f7f8fa] text-[#111318]"
+            }`}
+          >
+            <p className="text-[12.5px] font-semibold">{t.aiChat.trialExhaustedTitle}</p>
+            <p className={`mt-1 text-[11.5px] leading-relaxed ${mutedTextCls}`}>
+              {t.aiChat.trialExhaustedDesc}
+            </p>
             <button
               type="button"
-              onClick={() => abortRef.current?.abort()}
-              aria-label={t.aiChat.stopAria}
-              title={t.aiChat.stopAria}
-              className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition ${
-                isDark
-                  ? "bg-red-500/25 text-red-200 hover:bg-red-500/35"
-                  : "bg-red-600 text-white hover:bg-red-700"
-              }`}
-            >
-              <Square className="h-3 w-3 fill-current" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={!input.trim()}
-              onClick={() => void executePrompt(input)}
-              aria-label={t.aiChat.sendAria}
-              className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition disabled:opacity-35 ${
+              onClick={aiRuntime.onUpgradeToPro}
+              className={`mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-[6px] px-3 py-1.5 text-[12px] font-medium transition ${
                 isDark
                   ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"
                   : "bg-[#14161b] text-white hover:bg-[#282c35]"
               }`}
             >
-              <ArrowUp className="h-3.5 w-3.5" />
+              <Sparkles className="h-3.5 w-3.5" /> {t.aiChat.upgradeCta}
             </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <>
+            {/* Context Chip Bar (only when a node is selected) */}
+            {activeTopicTitle && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span
+                  className={`inline-flex max-w-full items-center gap-1 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium ${
+                    isDark
+                      ? "border-white/[0.12] bg-white/[0.08] text-[#f4f5f8]"
+                      : "border-slate-900/[0.12] bg-slate-900/[0.06] text-[#111318]"
+                  }`}
+                >
+                  <span className="truncate">
+                    @ {activeTopicTitle}
+                    {selectedTopicIds.length > 1 ? ` +${selectedTopicIds.length - 1}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t.aiChat.resetContextAria}
+                    onClick={() => setIgnoreSelection(true)}
+                    className="ml-0.5 opacity-70 hover:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+            )}
+
+            {/* Input Box */}
+            <div
+              className={`flex items-end gap-1.5 rounded-[8px] border px-2.5 py-2 transition ${
+                isDark
+                  ? "border-white/[0.1] bg-[#101114] focus-within:border-white/[0.26]"
+                  : "border-slate-900/[0.12] bg-[#f7f8fa] focus-within:border-slate-900/[0.3]"
+              }`}
+            >
+              <textarea
+                ref={inputRef}
+                rows={2}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void executePrompt(input);
+                  }
+                }}
+                placeholder={
+                  activeTopicTitle
+                    ? t.aiChat.inputPlaceholderTopic(activeTopicTitle)
+                    : t.aiChat.inputPlaceholderFull
+                }
+                className="block min-w-0 flex-1 resize-none bg-transparent text-[12.5px] leading-relaxed outline-none placeholder:text-[#646b78]"
+              />
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={() => abortRef.current?.abort()}
+                  aria-label={t.aiChat.stopAria}
+                  title={t.aiChat.stopAria}
+                  className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition ${
+                    isDark
+                      ? "bg-red-500/25 text-red-200 hover:bg-red-500/35"
+                      : "bg-red-600 text-white hover:bg-red-700"
+                  }`}
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!input.trim()}
+                  onClick={() => void executePrompt(input)}
+                  aria-label={t.aiChat.sendAria}
+                  className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition disabled:opacity-35 ${
+                    isDark
+                      ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"
+                      : "bg-[#14161b] text-white hover:bg-[#282c35]"
+                  }`}
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </>
   );

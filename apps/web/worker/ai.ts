@@ -1,3 +1,4 @@
+import { errors, jwtVerify, SignJWT } from "jose";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import {
   allowMock,
@@ -15,6 +16,12 @@ import {
 } from "./ai-providers.js";
 
 const MAX_AI_BODY_BYTES = 64 * 1024;
+const TRIAL_COOKIE_HTTPS = "__Host-loomind-trial";
+const TRIAL_COOKIE_HTTP = "loomind-trial";
+const TRIAL_COOKIE_AUD = "loomind-trial";
+const TRIAL_COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
+const TRIAL_LIFETIME_KEY = "lifetime";
+
 const VALID_INTENTS = new Set<WorkerAiIntent>([
   "generate_map",
   "expand",
@@ -31,10 +38,14 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
-function getDailyLimit(env: Env, tier: WorkerAiTier): number {
+function getQuotaLimit(env: Env, tier: WorkerAiTier): number {
   return tier === "pro"
     ? parsePositiveInt(env.AI_PRO_DAILY_LIMIT, 100)
-    : parsePositiveInt(env.AI_FREE_DAILY_LIMIT, 10);
+    : parsePositiveInt(env.AI_FREE_DAILY_LIMIT, 3);
+}
+
+function getFreeIpDailyLimit(env: Env): number {
+  return Math.max(getQuotaLimit(env, "free"), parsePositiveInt(env.AI_FREE_IP_DAILY_LIMIT, 30));
 }
 
 function utcDayKey(): string {
@@ -47,15 +58,72 @@ function secondsUntilUtcMidnight(): number {
   return Math.max(60, Math.ceil((nextMidnight - now.getTime()) / 1000));
 }
 
+async function sha256Bytes(input: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input)));
+}
+
 async function sha256Hex(input: string): Promise<string> {
-  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input)));
+  const bytes = await sha256Bytes(input);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function resolveBucketKey(request: Request, env: Env, tier: WorkerAiTier, subject?: string): Promise<string> {
-  if (tier === "pro" && subject) {
-    return `sub:${subject}`;
+async function trialSigningKey(env: Env): Promise<Uint8Array> {
+  return sha256Bytes(`loomind-trial:${env.SESSION_SECRET || "loomind-free-salt"}`);
+}
+
+function trialIssuer(env: Env): string {
+  return env.AUTH_ORIGIN || "https://loomind.local";
+}
+
+function isHttpsRequest(request: Request): boolean {
+  try {
+    return new URL(request.url).protocol === "https:";
+  } catch {
+    return true;
   }
+}
+
+async function readTrialId(request: Request, env: Env): Promise<string | null> {
+  const cookieHeader = request.headers.get("Cookie");
+  if (!cookieHeader) return null;
+  const parts = cookieHeader.split(";").map((part) => part.trim());
+  const rawToken =
+    parts.find((p) => p.startsWith(`${TRIAL_COOKIE_HTTPS}=`))?.slice(TRIAL_COOKIE_HTTPS.length + 1) ||
+    parts.find((p) => p.startsWith(`${TRIAL_COOKIE_HTTP}=`))?.slice(TRIAL_COOKIE_HTTP.length + 1);
+  if (!rawToken) return null;
+  try {
+    const { payload } = await jwtVerify(rawToken, await trialSigningKey(env), {
+      algorithms: ["HS256"],
+      audience: TRIAL_COOKIE_AUD,
+      issuer: trialIssuer(env),
+      requiredClaims: ["exp", "sub"],
+    });
+    return typeof payload.sub === "string" && payload.sub.length >= 16 && payload.sub.length <= 64
+      ? payload.sub
+      : null;
+  } catch (err) {
+    if (err instanceof errors.JOSEError) return null;
+    return null;
+  }
+}
+
+async function issueTrialCookie(request: Request, env: Env, trialId: string): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + TRIAL_COOKIE_MAX_AGE;
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(trialIssuer(env))
+    .setAudience(TRIAL_COOKIE_AUD)
+    .setSubject(trialId)
+    .setIssuedAt()
+    .setExpirationTime(exp)
+    .sign(await trialSigningKey(env));
+  if (isHttpsRequest(request)) {
+    return `${TRIAL_COOKIE_HTTPS}=${token}; Max-Age=${TRIAL_COOKIE_MAX_AGE}; Path=/; HttpOnly; Secure; SameSite=Lax`;
+  }
+  return `${TRIAL_COOKIE_HTTP}=${token}; Max-Age=${TRIAL_COOKIE_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax`;
+}
+
+async function resolveIpBucketKey(request: Request, env: Env): Promise<string> {
   const ip =
     request.headers.get("CF-Connecting-IP") ||
     request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ||
@@ -64,45 +132,75 @@ async function resolveBucketKey(request: Request, env: Env, tier: WorkerAiTier, 
   return `ip:${(await sha256Hex(`${ip}:${salt}`)).slice(0, 32)}`;
 }
 
-async function readDailyUsage(env: Env, bucketKey: string, tier: WorkerAiTier): Promise<number> {
+async function readUsage(
+  env: Env,
+  bucketKey: string,
+  dayKey: string,
+  tier: WorkerAiTier,
+): Promise<number> {
   if (!env.DB) return 0;
+  const row = await env.DB.prepare(
+    "SELECT request_count AS count FROM ai_usage_daily WHERE bucket_key = ? AND day_utc = ? AND tier = ?",
+  )
+    .bind(bucketKey, dayKey, tier)
+    .first<{ count: number }>();
+  return Number(row?.count ?? 0);
+}
+
+type QuotaConsumeResult =
+  | { allowed: true; remaining: number }
+  | { allowed: false; remaining: 0; dbError?: boolean };
+
+async function consumeQuotaAtomic(
+  env: Env,
+  bucketKey: string,
+  dayKey: string,
+  tier: WorkerAiTier,
+  limit: number,
+): Promise<QuotaConsumeResult> {
+  if (!env.DB) return { allowed: true, remaining: Math.max(0, limit - 1) };
   try {
-    const row = await env.DB.prepare(
-      "SELECT request_count AS count FROM ai_usage_daily WHERE bucket_key = ? AND day_utc = ? AND tier = ?",
-    )
-      .bind(bucketKey, utcDayKey(), tier)
-      .first<{ count: number }>();
-    return Number(row?.count ?? 0);
+    const [, updateRes] = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO ai_usage_daily (bucket_key, day_utc, tier, request_count)
+         VALUES (?, ?, ?, 0)
+         ON CONFLICT(bucket_key, day_utc, tier) DO NOTHING`,
+      ).bind(bucketKey, dayKey, tier),
+      env.DB.prepare(
+        `UPDATE ai_usage_daily
+         SET request_count = request_count + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE bucket_key = ? AND day_utc = ? AND tier = ? AND request_count < ?
+         RETURNING request_count AS count`,
+      ).bind(bucketKey, dayKey, tier, limit),
+    ]);
+    const rows = (updateRes as { results?: Array<{ count: number }> }).results ?? [];
+    if (rows.length === 0) {
+      return { allowed: false, remaining: 0 };
+    }
+    const nextCount = Number(rows[0].count);
+    return { allowed: true, remaining: Math.max(0, limit - nextCount) };
   } catch {
-    return 0;
+    return { allowed: false, remaining: 0, dbError: true };
   }
 }
 
-async function consumeDailyQuota(
+async function refundQuota(
   env: Env,
   bucketKey: string,
+  dayKey: string,
   tier: WorkerAiTier,
-  limit: number,
-): Promise<{ allowed: boolean; remaining: number }> {
-  if (!env.DB) return { allowed: true, remaining: Math.max(0, limit - 1) };
-  const day = utcDayKey();
+): Promise<void> {
+  if (!env.DB) return;
   try {
-    const current = await readDailyUsage(env, bucketKey, tier);
-    if (current >= limit) {
-      return { allowed: false, remaining: 0 };
-    }
     await env.DB.prepare(
-      `INSERT INTO ai_usage_daily (bucket_key, day_utc, tier, request_count)
-       VALUES (?, ?, ?, 1)
-       ON CONFLICT(bucket_key, day_utc, tier)
-       DO UPDATE SET request_count = request_count + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+      `UPDATE ai_usage_daily
+       SET request_count = MAX(0, request_count - 1), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+       WHERE bucket_key = ? AND day_utc = ? AND tier = ?`,
     )
-      .bind(bucketKey, day, tier)
+      .bind(bucketKey, dayKey, tier)
       .run();
-    return { allowed: true, remaining: Math.max(0, limit - (current + 1)) };
   } catch {
-    // Graceful fallback if migration 0005 has not been applied in an isolated test
-    return { allowed: true, remaining: Math.max(0, limit - 1) };
+    // Best-effort refund
   }
 }
 
@@ -114,7 +212,7 @@ function buildConfigStatus(env: Env, tier: WorkerAiTier, subject: string | undef
     return {
       available: Boolean(subject) && (real || mockAllowed),
       isMock: !real && mockAllowed,
-      providerLabel: real ? "Loomind Pro LLM" : "Loomind Pro LLM (Mock)",
+      providerLabel: real ? "Loomind AI" : "Loomind AI (Mock)",
       modelLabel: model,
       requiresLogin: !subject,
     };
@@ -124,7 +222,7 @@ function buildConfigStatus(env: Env, tier: WorkerAiTier, subject: string | undef
   return {
     available: real || mockAllowed,
     isMock: !real && mockAllowed,
-    providerLabel: real ? "Cloudflare Workers AI" : "Cloudflare Workers AI (Mock)",
+    providerLabel: real ? "Loomind AI" : "Loomind AI (Mock)",
     modelLabel: model.replace(/^@cf\/[^/]+\//, ""),
     requiresLogin: false,
   };
@@ -172,19 +270,45 @@ export async function handleAi(
     const tierParam = url.searchParams.get("tier");
     const tier: WorkerAiTier = tierParam === "pro" ? "pro" : tierParam === "free" ? "free" : subject ? "pro" : "free";
     const status = buildConfigStatus(env, tier, subject);
-    const dailyLimit = getDailyLimit(env, tier);
-    const bucketKey = await resolveBucketKey(request, env, tier, subject);
-    const used = tier === "pro" && !subject ? 0 : await readDailyUsage(env, bucketKey, tier);
-    return json({
-      tier,
-      available: status.available,
-      isMock: status.isMock,
-      providerLabel: status.providerLabel,
-      modelLabel: status.modelLabel,
-      dailyLimit,
-      remainingToday: Math.max(0, dailyLimit - used),
-      requiresLogin: status.requiresLogin,
-    });
+    const limit = getQuotaLimit(env, tier);
+    const cookies: string[] = [];
+
+    let remaining = limit;
+    try {
+      if (tier === "pro") {
+        const used = subject ? await readUsage(env, `sub:${subject}`, utcDayKey(), "pro") : 0;
+        remaining = Math.max(0, limit - used);
+      } else {
+        let trialId = await readTrialId(request, env);
+        if (!trialId) {
+          trialId = crypto.randomUUID();
+          cookies.push(await issueTrialCookie(request, env, trialId));
+        }
+        const [deviceUsed, ipUsed] = await Promise.all([
+          readUsage(env, `trial:${trialId}`, TRIAL_LIFETIME_KEY, "free"),
+          readUsage(env, await resolveIpBucketKey(request, env), utcDayKey(), "free"),
+        ]);
+        const ipLimit = getFreeIpDailyLimit(env);
+        remaining = ipUsed >= ipLimit ? 0 : Math.max(0, limit - deviceUsed);
+      }
+    } catch {
+      remaining = 0;
+    }
+
+    return json(
+      {
+        tier,
+        available: status.available,
+        isMock: status.isMock,
+        providerLabel: status.providerLabel,
+        modelLabel: status.modelLabel,
+        dailyLimit: limit,
+        remainingToday: remaining,
+        requiresLogin: status.requiresLogin,
+      },
+      200,
+      cookies,
+    );
   }
 
   if (path !== "/api/ai/stream") {
@@ -199,7 +323,7 @@ export async function handleAi(
   const req = parseStreamBody(rawBody);
 
   if (req.tier === "pro" && !subject) {
-    return json({ code: "AUTH_REQUIRED", error: "请先登录 Loomind 账号后使用付费 Pro 模型。" }, 401);
+    return json({ code: "AUTH_REQUIRED", error: "请先登录 Loomind 账号后继续使用 AI。" }, 401);
   }
 
   const status = buildConfigStatus(env, req.tier, subject);
@@ -207,33 +331,103 @@ export async function handleAi(
     return json(
       {
         code: req.tier === "pro" ? "PRO_NOT_CONFIGURED" : "FREE_UNAVAILABLE",
-        error:
-          req.tier === "pro"
-            ? "付费 Pro LLM 尚未完成服务端配置，请联系管理员补齐密钥。"
-            : "Cloudflare Workers AI 免费体验服务暂不可用，请稍后重试。",
+        error: "AI 服务暂不可用，请稍后重试。",
       },
       503,
     );
   }
 
-  const dailyLimit = getDailyLimit(env, req.tier);
-  const bucketKey = await resolveBucketKey(request, env, req.tier, subject);
-  const quota = await consumeDailyQuota(env, bucketKey, req.tier, dailyLimit);
-  if (!quota.allowed) {
-    const retryAfterSec = secondsUntilUtcMidnight();
-    return json(
-      {
-        code: "RATE_LIMITED",
-        error:
-          req.tier === "free"
-            ? "今日免费体验次数已用完，登录账号即可解锁更强付费模型与更高配额。"
-            : "今日 AI 调用额度已达上限，明天 UTC 00:00 自动重置。",
-        retryAfterSec,
-      },
-      429,
-      [],
-      { "Retry-After": String(retryAfterSec) },
-    );
+  const limit = getQuotaLimit(env, req.tier);
+  const setCookies: string[] = [];
+  const consumedBuckets: Array<{ bucketKey: string; dayKey: string; tier: WorkerAiTier }> = [];
+  let remainingAfterConsume = 0;
+
+  if (req.tier === "pro") {
+    const bucketKey = `sub:${subject!}`;
+    const dayKey = utcDayKey();
+    const quota = await consumeQuotaAtomic(env, bucketKey, dayKey, "pro", limit);
+    if (!quota.allowed) {
+      if (quota.dbError) {
+        return json({ code: "UPSTREAM_ERROR", error: "服务暂时繁忙，请稍后重试。" }, 503);
+      }
+      const retryAfterSec = secondsUntilUtcMidnight();
+      return json(
+        {
+          code: "RATE_LIMITED",
+          error: "今日 AI 调用额度已达上限，明天自动重置。",
+          retryAfterSec,
+        },
+        429,
+        [],
+        { "Retry-After": String(retryAfterSec) },
+      );
+    }
+    consumedBuckets.push({ bucketKey, dayKey, tier: "pro" });
+    remainingAfterConsume = quota.remaining;
+  } else {
+    const existingTrialId = await readTrialId(request, env);
+    const ipBucket = await resolveIpBucketKey(request, env);
+    const today = utcDayKey();
+
+    if (existingTrialId) {
+      // Two-layer quota: per-device total trial limit + per-IP daily anti-abuse cap
+      const deviceBucket = `trial:${existingTrialId}`;
+      const deviceQuota = await consumeQuotaAtomic(env, deviceBucket, TRIAL_LIFETIME_KEY, "free", limit);
+      if (!deviceQuota.allowed) {
+        if (deviceQuota.dbError) {
+          return json({ code: "UPSTREAM_ERROR", error: "服务暂时繁忙，请稍后重试。" }, 503);
+        }
+        return json(
+          {
+            code: "RATE_LIMITED",
+            error: "体验次数已用完，登录账号即可保存导图并继续使用 AI。",
+          },
+          429,
+        );
+      }
+      consumedBuckets.push({ bucketKey: deviceBucket, dayKey: TRIAL_LIFETIME_KEY, tier: "free" });
+
+      const ipLimit = getFreeIpDailyLimit(env);
+      const ipQuota = await consumeQuotaAtomic(env, ipBucket, today, "free", ipLimit);
+      if (!ipQuota.allowed) {
+        await refundQuota(env, deviceBucket, TRIAL_LIFETIME_KEY, "free");
+        if (ipQuota.dbError) {
+          return json({ code: "UPSTREAM_ERROR", error: "服务暂时繁忙，请稍后重试。" }, 503);
+        }
+        const retryAfterSec = secondsUntilUtcMidnight();
+        return json(
+          {
+            code: "RATE_LIMITED",
+            error: "当前网络体验次数已达上限，登录账号即可保存导图并继续使用 AI。",
+            retryAfterSec,
+          },
+          429,
+          [],
+          { "Retry-After": String(retryAfterSec) },
+        );
+      }
+      consumedBuckets.push({ bucketKey: ipBucket, dayKey: today, tier: "free" });
+      remainingAfterConsume = deviceQuota.remaining;
+    } else {
+      // Cookie-less client (e.g. stateless script or first direct POST): cap strictly by IP at free limit
+      const ipQuota = await consumeQuotaAtomic(env, ipBucket, today, "free", limit);
+      if (!ipQuota.allowed) {
+        if (ipQuota.dbError) {
+          return json({ code: "UPSTREAM_ERROR", error: "服务暂时繁忙，请稍后重试。" }, 503);
+        }
+        return json(
+          {
+            code: "RATE_LIMITED",
+            error: "体验次数已用完，登录账号即可保存导图并继续使用 AI。",
+          },
+          429,
+        );
+      }
+      consumedBuckets.push({ bucketKey: ipBucket, dayKey: today, tier: "free" });
+      remainingAfterConsume = ipQuota.remaining;
+      const mintedTrialId = crypto.randomUUID();
+      setCookies.push(await issueTrialCookie(request, env, mintedTrialId));
+    }
   }
 
   const meta: ProviderMeta = {
@@ -242,8 +436,8 @@ export async function handleAi(
     providerLabel: status.providerLabel,
     modelLabel: status.modelLabel,
     isMock: status.isMock,
-    remainingToday: quota.remaining,
-    dailyLimit,
+    remainingToday: remainingAfterConsume,
+    dailyLimit: limit,
   };
 
   const encoder = new TextEncoder();
@@ -282,6 +476,10 @@ export async function handleAi(
             await runWorkersAiStream(env, req, emit);
           }
         } catch (err) {
+          // Refund quota if generation failed so users don't lose a trial on upstream errors
+          for (const b of consumedBuckets) {
+            await refundQuota(env, b.bucketKey, b.dayKey, b.tier);
+          }
           if (!abortController.signal.aborted) {
             const msg = err instanceof Error ? err.message : "AI 服务生成失败，请稍后重试。";
             emit("error", { code: "UPSTREAM_ERROR", message: msg });
@@ -304,13 +502,13 @@ export async function handleAi(
     },
   });
 
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-      "X-Content-Type-Options": "nosniff",
-    },
+  const headers = new Headers({
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+    "X-Content-Type-Options": "nosniff",
   });
+  for (const c of setCookies) headers.append("Set-Cookie", c);
+
+  return new Response(stream, { status: 200, headers });
 }
