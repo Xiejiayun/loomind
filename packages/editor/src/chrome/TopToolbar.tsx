@@ -77,7 +77,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
 
   return (
     <header
-      className={`flex h-11 shrink-0 items-center justify-between gap-2 border-b px-3 text-xs transition-colors ${
+      className={`flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 text-xs transition-colors ${
         isDark
           ? "border-white/[0.075] bg-[#0b0c0e] text-[#f4f5f8]"
           : "border-slate-900/[0.08] bg-[#f7f8fa] text-[#111318]"

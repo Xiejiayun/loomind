@@ -71,7 +71,7 @@ export function ShareDialog({ target, onClose }: { target: ShareTarget | null; o
   return <dialog ref={dialog} className="lm-modal" aria-labelledby="lm-share-title" onClose={onClose}>
     {target && <div className="lm-modal-inner">
       <div className="lm-modal-heading"><div><span className="lm-eyebrow">{t.shareDialog.eyebrow}</span><h2 id="lm-share-title">{target.type === "workspace" ? t.shareDialog.shareWorkspace : t.shareDialog.shareMap}</h2></div>
-        <button type="button" className="lm-icon-button" aria-label={t.common.close} onClick={() => dialog.current?.close()}><X size={18}/></button></div>
+        <button type="button" className="lm-icon-button-sm" aria-label={t.common.close} onClick={() => dialog.current?.close()}><X size={15}/></button></div>
       <p className="lm-modal-description">{t.shareDialog.desc(target.name)}</p>
       <div className="lm-share-roles" role="group" aria-label={t.shareDialog.roleAria}>
         <button type="button" aria-pressed={role === "editor"} onClick={() => setRole("editor")}><strong>{t.common.canEdit}</strong><span>{t.shareDialog.editorDesc}</span></button>

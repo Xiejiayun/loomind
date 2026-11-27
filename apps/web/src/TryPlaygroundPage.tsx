@@ -89,7 +89,7 @@ export function TryPlaygroundPage({
             <RotateCcw size={13} /> {t.tryPage.resetCanvas}
           </button>
           <LanguageToggle compact />
-          <ThemeToggle theme={theme} toggle={toggleTheme} />
+          <ThemeToggle theme={theme} toggle={toggleTheme} compact />
           <AppLink href={session.user ? "/app" : "/login?next=%2Fapp"} className="lm-primary-button lm-try-btn-sm">
             {session.user ? t.tryPage.openProWorkspace : t.tryPage.unlockProCta} <ArrowRight size={13} />
           </AppLink>
