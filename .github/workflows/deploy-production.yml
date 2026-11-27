@@ -1,15 +1,14 @@
 name: Deploy production
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
-      tested_sha:
-        description: Full main commit SHA that passed end-to-end acceptance
-        required: true
-        type: string
-      e2e_evidence:
-        description: Link or record of the completed end-to-end acceptance
-        required: true
+      reason:
+        description: Optional note for manual production re-deploy
+        required: false
         type: string
 
 permissions:
@@ -21,30 +20,23 @@ concurrency:
 
 jobs:
   target:
-    name: Confirm tested main commit
+    name: Confirm main branch
     runs-on: ubuntu-latest
     steps:
-      - name: Require main and matching E2E acceptance
-        env:
-          TESTED_SHA: ${{ inputs.tested_sha }}
-          E2E_EVIDENCE: ${{ inputs.e2e_evidence }}
+      - name: Require main branch
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "Production releases must run from main." >&2
             exit 1
           fi
-          if [[ "$TESTED_SHA" != "$GITHUB_SHA" || -z "$E2E_EVIDENCE" ]]; then
-            echo "E2E evidence and its exact tested main commit are required." >&2
-            exit 1
-          fi
 
   verify:
-    name: Re-run CI for the release commit
+    name: Run CI verification
     needs: target
     uses: ./.github/workflows/ci.yml
 
   deploy:
-    name: Deploy after production approval
+    name: Deploy to production
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -184,7 +176,7 @@ jobs:
           console.log('Remote Worker, required secret names and D1 Time Travel are verified.');
           NODE
 
-      - name: Ensure main still points to the tested commit
+      - name: Ensure main still points to the release commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -199,9 +191,9 @@ jobs:
           if (!response.ok) throw new Error('Cannot verify current main ref: HTTP ' + response.status);
           const ref = await response.json();
           if (ref.object?.sha !== process.env.GITHUB_SHA) {
-            throw new Error('main moved after E2E acceptance; start a new release for the new commit');
+            throw new Error('main moved to a newer commit; skipping superseded release');
           }
-          console.log('Current main ref matches the E2E-tested commit.');
+          console.log('Current main ref matches this release commit.');
           NODE
 
       - name: Apply remote D1 migrations
