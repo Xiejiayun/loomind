@@ -363,7 +363,7 @@ const MindmapEditorInner: React.FC<
           aria-live="polite"
           className="pointer-events-none fixed bottom-12 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-amber-300/60 bg-amber-50/95 px-3.5 py-2 text-xs font-medium text-amber-950 shadow-lg backdrop-blur dark:border-amber-500/40 dark:bg-amber-950/90 dark:text-amber-100"
         >
-          {lastRejection.message}
+          {t.rejections[lastRejection.code] ?? lastRejection.message}
         </div>
       )}
     </div>

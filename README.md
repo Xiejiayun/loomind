@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  9 Professional Structures · 10 Curated Palettes & Hand-Drawn Sketch Mode · Fullscreen Outliner · Pitch Mode · Multiple Mindmaps & Shared Workspaces · <code>.xmind</code> / Vector PDF / PPTX I/O
+  9 Professional Structures · 14 Curated Templates · 11 Palettes & Hand-Drawn Sketch Mode · Dual-Tier AI Co-Creation · Loro CRDT Live Sync & Version History · Fullscreen Outliner · Pitch Mode · <code>.xmind</code> / Vector PDF / PPTX I/O
 </p>
 
 <p align="center">
@@ -23,34 +23,43 @@
 
 ## Features
 
-### 9 Professional Structures & Mixed Layouts
+### 9 Professional Structures, Mixed Layouts & 14 Templates
 Switch layout structures per branch on a single canvas to fit every stage from brainstorming to executive presentation:
 - **Mind Map** (Balanced / One-Sided)
 - **Logic Chart** · **Org Chart** · **Brace Map**
 - **Timeline** · **Fishbone Diagram** · **Matrix**
 - **Tree Table** · **Indented List**
+- **14 curated starter templates** spanning all 9 structures (OKRs, SWOT Matrix, Annual Roadmap, System Architecture, Reading Notes, Fishbone RCA, Org Chart, Product Launch Tree Table, Meeting Minutes, Project WBS, Decision Evaluation, Sprint Retro, and Course Study Guide).
 
-### Curated Themes & Hand-Drawn Sketch Style
-- **10 built-in color palettes**: XMind Rainbow, Aurora, Warm Paper, Midnight Neon (luminous glow dark theme), Obsidian Gold, Minimal Ink, Prism Vibrant, Forest Calm, Sunset Coral, and Blueprint.
-- **Rough.js hand-drawn mode**, 8 distinct topic shapes, boundaries, summaries, relationship arrows, rich-text editing (TipTap), and **KaTeX math equations**.
+### Keyboard-First Canvas, Trackpad Gestures & Accessibility
+- **Structure-aware arrow-key navigation** (`↑ ↓ ← →`) across all 9 layouts with automatic viewport pan-to-reveal.
+- **Full clipboard & outline paste**: Copy (`Ctrl+C`), Cut (`Ctrl+X`), Paste (`Ctrl+V`), Duplicate (`Ctrl+D`), plus direct paste of multi-line indented text or Markdown checklists into nested subtrees.
+- **Native trackpad & touch gestures**: Two-finger scroll pans the canvas (`Shift+Wheel` pans horizontally), `Ctrl/Cmd+Wheel` or pinch zooms smoothly around the cursor, touch two-finger pinch-zooms + pans, and `Ctrl+= / - / 0 / 1` handle preset zoom & fit-to-view.
+- **Structure-aware drag-and-drop** adapting before/after insertion indicators to horizontal (`org`/`timeline`/`fishbone`) vs vertical structures, with zero-layout-recompute preview during `Alt+Drag` offset and width resizing.
+- **Global Find & Replace** (`Ctrl+F` / `Ctrl+H`) across titles, subtitles, notes, and labels with rich-text mark preservation and canvas match highlighting.
+- **Semantic ARIA accessibility** (`role="tree"` / `treeitem`, `aria-expanded`, `aria-level`, and polite screen-reader live announcements).
+
+### Curated Themes, Rich Media & Hand-Drawn Sketch Style
+- **11 built-in color palettes**: Workspace (light/dark adaptive), XMind Rainbow, Aurora, Warm Paper, Midnight Neon, Obsidian Gold, Minimal Ink, Prism Vibrant, Forest Calm, Sunset Coral, and Blueprint.
+- **Rough.js hand-drawn mode**, 8 distinct topic shapes, boundaries, summaries, relationship arrows, rich-text editing (TipTap), **KaTeX math equations**, and aspect-ratio-preserving **WebP image compression** for pasted and uploaded images.
 - Dark-mode adaptive chrome and an interactive **Minimap** viewport navigator.
 
-### Mindmap Library & Outline Import
-- Each Google account can create and switch between multiple independent mindmaps, search the library, and continue a saved map in the existing editor.
-- Import Markdown headings, lists, or indented text as a full hierarchy. Choose a visual template without replacing the imported content.
-- An idea can start a blank mindmap. Conversational AI co-creation is planned for Aerial Web; this release does not connect a model or generate AI content.
+### Dual-Tier AI Co-Creation
+- **Free `/try` Playground**: Powered by Cloudflare Workers AI (Gemma 4) with a per-device 3-trial signed cookie quota — try AI mind map generation and node actions without signing in.
+- **Logged-in Pro Co-Creation**: Streaming AI Chat panel (`⌘J`), inline node AI command bar (`⇧⌘J`), and 6 structured undoable node actions (Expand, Break into Tasks, Summarize, Cluster Boundary, Elaborate Note, Smart Restyle).
 
-### Workspace & Mindmap Sharing
-- Invite another Google account to an entire workspace or a single mindmap with editor or viewer access. Invitations expire after seven days and can be revoked before acceptance.
-- The Worker checks each read and write against the signed session. D1 revisions prevent one editor from silently overwriting another's changes; editing is not live multi-user sync.
+### Loro CRDT Live Sync, Cloud Version History & Workspace Sharing
+- **Real-time CRDT Collaboration**: Powered by `LoroSyncAdapter` (Movable Tree CRDT) with instant same-browser `BroadcastChannel` sync, Cloudflare D1 incremental delta sync (`/api/mindmaps/:id/collab`), and live collaborator selection presence badges.
+- **Cloud Version History**: Automatically snapshots up to 20 cloud revisions per mindmap (`mindmap_revisions`) with live SVG thumbnail previews, JSON download, and non-destructive one-click restore.
+- **Workspace & Mindmap Sharing**: Invite another Google account to an entire workspace or a single mindmap with editor or viewer access (7-day expiry, instant revocation, signed-session access control).
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
-- **Pitch Mode**: Automatically compiles your mind map into polished presentation slides and exports directly to **`.pptx`**.
-- **Dual-View Sync**: Switch seamlessly between the infinite canvas and fullscreen Outliner, complete with Zen focus mode, deep note cards, task drawer, and bi-directional backlinks.
+- **Pitch Mode**: Automatically compiles your mind map into polished presentation slides with speaker notes and exports directly to **`.pptx`**.
+- **Dual-View Sync**: Switch seamlessly between the infinite canvas, docked outline sidebar (`⌘O`), and fullscreen Outliner, complete with Zen focus mode, Markdown note cards, and task filtering.
 
 ### Lossless Import & Export
-- **`.xmind`**: Round-trip support for topics, notes, summaries, floating topics, and relationships.
-- **Markdown / OPML 2.0**: Bi-directional conversion preserving hierarchy, notes, and task states.
+- **`.xmind`**: Round-trip support for topics, notes, tasks, layouts, summaries, floating topics, and relationships.
+- **Markdown / OPML 2.0**: Bi-directional conversion preserving hierarchy, multi-root OPML documents, notes, and task states.
 - **Pure Vector SVG / Vector PDF / PNG / PPTX**: Native `<text>/<tspan>` SVG serialization with zero `foreignObject` distortion.
 
 ---
@@ -63,11 +72,12 @@ Loomind is organized as a **pnpm Monorepo**:
 loomind/
 ├── apps/
 │   └── web/              # Vite + React 19 + Tailwind CSS v4 web app & Cloudflare Workers config
-│       └── worker/       # Google / Turnstile authentication and private D1 draft API
+│       ├── migrations/   # D1 SQL migrations (0001..0007: maps, sharing, AI usage, revisions, CRDT collab)
+│       └── worker/       # Google / Turnstile auth, D1 drafts/revisions/collab, sharing & dual-tier AI proxy
 └── packages/
-    ├── core/             # Document schema, 9 layout engines, 10 palettes & I/O codecs
-    ├── editor/           # Hybrid canvas, TipTap editor, Outliner, Pitch Mode & chrome UI
-    └── ai/               # Existing experimental helpers; no production model connection
+    ├── core/             # Document schema, 9 layout engines, 14 templates, 11 palettes, Loro CRDT & I/O codecs
+    ├── editor/           # Hybrid canvas, TipTap editor, Find & Replace, Outliner, Pitch Mode & chrome UI
+    └── ai/               # Streaming SSE protocol, structured patcher & node-level AI action builders
 ```
 
 ---
@@ -91,15 +101,15 @@ pnpm --filter @mindmap/web run db:local
 pnpm dev
 ```
 
-Guest editing needs no credentials. For a real local login, copy `apps/web/.dev.vars.example` to the ignored `apps/web/.dev.vars`. Set `AUTH_ORIGIN` to the exact Vite origin, register that origin with Google, and use a separate Turnstile widget permitting `localhost`. To use another Vite port, set `LOOMIND_DEV_PORT` and match `AUTH_ORIGIN`. Do not reuse production secrets locally. The tests use a local D1 runtime and explicit Google/Turnstile fixtures, not live provider logins.
+Guest editing on `/try` needs no credentials. For a real local login, copy `apps/web/.dev.vars.example` to the ignored `apps/web/.dev.vars`. Set `AUTH_ORIGIN` to the exact Vite origin, register that origin with Google, and use a separate Turnstile widget permitting `localhost`. To use another Vite port, set `LOOMIND_DEV_PORT` and match `AUTH_ORIGIN`. Do not reuse production secrets locally. The tests use a local D1 runtime and explicit Google/Turnstile fixtures, not live provider logins.
 
 ### Scripts
 
 ```bash
-# Type-check all workspace packages
+# Type-check all workspace packages (including worker & web tests)
 pnpm typecheck
 
-# Run unit tests (Vitest)
+# Run unit & Worker D1 tests (Vitest)
 pnpm test
 
 # Build all packages and the web app
@@ -110,14 +120,12 @@ pnpm build
 
 - **Google:** use a Web application OAuth client with authorized JavaScript origin `https://loomind.jeremyxie.com` (no path). The Google button returns an ID token to a JavaScript popup callback, so no authorized redirect URI or Google client secret is needed. `/api/auth/google` is a same-origin JSON endpoint, not a redirect target.
 - **Turnstile:** use the Managed widget for `loomind.jeremyxie.com`. The Worker checks Siteverify success, hostname and `google_login` action before signing a session. `TURNSTILE_SITE_KEY` is public; `TURNSTILE_SECRET` is server-only. Store `GOOGLE_CLIENT_ID`, `TURNSTILE_SECRET` and an independent, randomly generated production `SESSION_SECRET` (at least 32 random bytes, encoded as hex or base64url) in the Worker's protected configuration. Never put secrets in `VITE_*`, the repository or the browser bundle.
-- **Mindmaps:** guests keep a separate IndexedDB document; it is never uploaded on login. Each verified Google account can create and switch between independent mindmaps in the workspace library. D1 stores each map by its own ID and Google `sub`, with a separate IndexedDB cache and revision. The editor account button shows sync status for the current map. Edits sync after 2.5 seconds idle. Revision conflicts stop uploads; export the local copy before choosing the cloud version. Maps larger than 1 MiB remain local. To move a guest map into an account, export it as `.xmind`, sign in, then import it intentionally.
-- **Cost:** the app uses the existing Workers and D1 Free resources and does not require R2, KV or a paid plan. If storage or quota is exhausted, cloud sync shows an error instead of discarding the local draft.
+- **Mindmaps & Sync:** each verified Google account can create and switch between independent mindmaps in the workspace library. D1 stores each map by its own ID, up to 20 historical revision snapshots, and incremental CRDT deltas for live collaboration, paired with per-tab isolated IndexedDB draft caching. Maps larger than 1 MiB remain local.
+- **Cost:** the app runs entirely on Cloudflare Workers, Workers AI, and D1 Free resources and does not require Durable Objects, R2, KV, or a paid plan.
 
 ### Release to Cloudflare Workers
 
-The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. The fourth migration adds shared workspaces, member roles and invitations to the existing `mindmaps` table. Worker rollback does not restore D1 data.
-
-PRs and pushes to `main` run GitHub Actions CI. Production deployment is a separate, manually dispatched workflow for an E2E-tested `main` commit; it waits for `production` environment approval, records the previous Worker version and a D1 Time Travel bookmark, applies pending migrations, deploys, and checks public health. See [production deployment and recovery](docs/DEPLOYMENT.md) for required repository settings, acceptance and rollback steps.
+The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. PRs run GitHub Actions CI (`Verify`), and pushes to `main` automatically verify, record a D1 Time Travel recovery point, apply pending D1 migrations (`0001..0007`), deploy the Worker + static assets, and run live production smoke checks. See [production deployment and recovery](docs/DEPLOYMENT.md) for recovery and rollback steps.
 
 ---
 
