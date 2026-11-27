@@ -1,11 +1,91 @@
 import { readFile } from "node:fs/promises";
-import { expect, type Page } from "@playwright/test";
+import { chromium, expect, type Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 import { cloudBrowser, test } from "./cloud-worker.js";
 
 const desktop = { ...cloudBrowser, isMobile: false, hasTouch: false, viewport: { width: 1280, height: 800 } };
 test.use(desktop);
 const topic = (page: Page, title: string) => page.getByRole("application").getByRole("treeitem").filter({ has: page.getByText(title, { exact: true }) });
+
+test("reads a real PDF locally and preserves physical pages in a reopened map and downloaded PowerPoint", async ({ browser, browserName, context, cloud }, testInfo) => {
+  test.setTimeout(90_000);
+  const first = "The field team confirmed the opening date.";
+  const last = "Finance approved the reserve on Thursday.";
+  const printer = browserName === "chromium" ? browser : await chromium.launch();
+  const printContext = await printer.newContext();
+  let packet: Buffer, noText: Buffer;
+  try {
+    const page = await printContext.newPage();
+    const style = "<style>@page{size:A4;margin:20mm}section{break-after:page}section:last-child{break-after:auto}</style>";
+    await page.setContent(`${style}<section><h1>Inspection date</h1><p>${first}</p></section><section><svg width='100' height='80'><rect width='100' height='80' fill='navy'/></svg></section><section><h1>Budget reserve</h1><p>${last}</p><p>周四核准预算。</p></section>`);
+    packet = await page.pdf({ preferCSSPageSize: true });
+    await page.setContent(`${style}<svg width='100' height='80'><rect width='80' height='60'/></svg>`);
+    noText = await page.pdf({ preferCSSPageSize: true });
+  } finally { await printContext.close(); if (printer !== browser) await printer.close(); }
+  const author = await cloud.openPage(context, "pdf-reader");
+  await author.goto(`${cloud.origin}/app/create/source`);
+  await author.getByLabel("Source text", { exact: true }).fill("An unsent note");
+  await author.getByRole("button", { name: "Import PDF" }).click();
+  const file = author.getByLabel("Choose PDF file");
+  const imported = author.getByRole("button", { name: "Create source-linked map" });
+  await file.setInputFiles({ name: "drawing.pdf", mimeType: "application/pdf", buffer: noText });
+  await expect(author.getByRole("alert")).toContainText("No extractable text", { timeout: 15_000 });
+  await expect(imported).toBeDisabled();
+  await file.setInputFiles({ name: "broken.pdf", mimeType: "application/pdf", buffer: Buffer.from("This is not a PDF") });
+  await expect(author.getByRole("alert")).toContainText("could not be read as a PDF");
+  await expect(imported).toBeDisabled();
+  await author.getByRole("button", { name: "Paste text" }).click();
+  await expect(author.getByLabel("Source text", { exact: true })).toHaveValue("An unsent note");
+  await author.getByRole("button", { name: "Import PDF" }).click();
+  const mutations: string[] = [];
+  const observe = (request: import("@playwright/test").Request) => { if (!["GET", "HEAD"].includes(request.method())) mutations.push(request.url()); };
+  author.on("request", observe);
+  await file.setInputFiles({ name: "field-evidence.pdf", mimeType: "application/pdf", buffer: packet });
+  await expect(author.getByRole("status").filter({ hasText: "3 pages; no extractable text on pages: 2" })).toBeVisible();
+  await expect(author.getByLabel("Source title", { exact: true })).toHaveValue("field-evidence");
+  const details = author.locator("details");
+  await expect(details).toHaveCount(2);
+  await details.filter({ hasText: "Page 3" }).locator("summary").click();
+  await expect(author.locator("details[open] p")).toContainText(last);
+  await author.getByLabel("Source title", { exact: true }).fill("Field review");
+  author.off("request", observe);
+  expect(mutations).toEqual([]);
+  const saving = author.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/mindmaps\/[^/]+$/.test(response.url()));
+  await imported.click();
+  const saved = await saving;
+  expect(saved.status()).toBe(200);
+  const stored = await author.request.get(saved.url(), { headers: { "X-Loomind-Owner": "pdf-reader" } });
+  expect(stored.status()).toBe(200);
+  const savedDoc = (await stored.json()).document;
+  const notes: string[] = savedDoc.sheets[0].rootTopic.children.map((entry: { note: { text: string } }) => entry.note.text);
+  expect(notes).toHaveLength(2);
+  expect(notes[0]).toContain("field-evidence.pdf · Page 1"); expect(notes[0]).toContain(first);
+  expect(notes[1]).toContain("field-evidence.pdf · Page 3"); expect(notes[1]).toContain(last); expect(notes[1]).toContain("周四核准预算。");
+  expect(savedDoc.assets).toEqual({});
+  const fresh = await browser.newContext(desktop);
+  try {
+    const reader = await cloud.openPage(fresh, "pdf-reader");
+    await reader.goto(author.url());
+    await expect(reader.getByTitle(notes[1], { exact: true })).toHaveCount(1);
+    await topic(reader, "Budget reserve").dblclick();
+    const field = reader.locator(".ProseMirror[contenteditable=true]");
+    await expect(field).toBeFocused(); await field.press("ControlOrMeta+a"); await field.press("Backspace");
+    await expect(field).toHaveText(""); await reader.keyboard.insertText("Approved reserve");
+    await expect(field).toHaveText("Approved reserve");
+    const update = reader.waitForResponse((response) => response.url() === saved.url() && response.request().method() === "PUT" && JSON.stringify(response.request().postDataJSON().sheets ?? []).includes('"text":"Approved reserve"'));
+    await field.press("Enter"); expect((await update).status()).toBe(200);
+    await expect(topic(reader, "Approved reserve").getByTitle(notes[1], { exact: true })).toHaveCount(1);
+    await reader.getByRole("button", { name: "Export", exact: true }).click();
+    const download = reader.waitForEvent("download");
+    await reader.getByRole("dialog", { name: "Import & Export" }).getByRole("button", { name: /Pitch Slides/ }).click();
+    const path = testInfo.outputPath("pdf-evidence.pptx"); await (await download).saveAs(path);
+    const archive = unzipSync(await readFile(path));
+    const speaker = Object.entries(archive).filter(([name]) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name)).map(([, bytes]) => strFromU8(bytes));
+    expect(Object.entries(archive).some(([name, bytes]) => /^ppt\/slides\/slide\d+\.xml$/.test(name) && strFromU8(bytes).includes("Approved reserve"))).toBe(true);
+    expect(speaker.some((note) => note.includes("field-evidence.pdf · Page 1") && note.includes(first))).toBe(true);
+    expect(speaker.some((note) => note.includes("field-evidence.pdf · Page 3") && note.includes(last))).toBe(true);
+  } finally { await fresh.close(); }
+});
 
 test("turns minutes into editable topics that retain their sources for an invited reader and an actual PowerPoint export", async ({ browser, context, cloud }, testInfo) => {
   test.setTimeout(75_000);
@@ -33,8 +113,13 @@ test("turns minutes into editable topics that retain their sources for an invite
   const old = topic(author, "Launch window");
   await old.dblclick();
   const field = author.locator(".ProseMirror[contenteditable=true]");
-  await field.fill("Pilot window");
-  const changed = put();
+  await expect(field).toBeFocused();
+  await field.press("ControlOrMeta+a");
+  await field.press("Backspace");
+  await expect(field).toHaveText("");
+  await author.keyboard.insertText("Pilot window");
+  await expect(field).toHaveText("Pilot window");
+  const changed = author.waitForResponse((response) => response.url() === created.url() && response.request().method() === "PUT" && JSON.stringify(response.request().postDataJSON().sheets ?? []).includes('"text":"Pilot window"'));
   await field.press("Enter");
   expect((await changed).status()).toBe(200);
 

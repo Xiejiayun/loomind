@@ -7,11 +7,14 @@ export function useWebLocale(): Locale {
 
 const zh = {
   source: {
-    heading: "从资料创建", description: "粘贴会议纪要或网页摘录，按原文生成可编辑节点。这里按段摘录，不会调用 AI 或打开链接。",
+    heading: "从资料创建", description: "粘贴原文或选择有文字层的 PDF，按原文生成可编辑节点。不会调用 AI 或打开原文链接。",
+    paste: "粘贴文字", pdf: "导入 PDF", pdfFile: "选择 PDF 文件", pdfReading: "正在本机读取 PDF…", pdfHint: "仅提取文字；不上传 PDF，不对扫描件进行 OCR。最多 16 MiB、100 页。",
+    pdfSize: "PDF 超过 16 MiB，请先拆分文件。", pdfPages: "PDF 超过 100 页，请先拆分文件。", pdfPassword: "PDF 受密码保护，请选择可读取的未加密副本。", pdfInvalid: "无法读取此 PDF，请选择有效的 PDF 文件。", pdfEmpty: "未找到可提取的文字；扫描件需要先进行 OCR。",
+    page: (number: number) => `第 ${number} 页`, pdfSummary: (pages: number, skipped: number[]) => `共 ${pages} 页${skipped.length ? `；没有可提取文字的页：${skipped.join("、")}` : ""}`,
     name: "资料标题", url: "原文链接（可选）", text: "原文", preview: "节点与原文预览", hint: "空行划分段落，也可使用项目符号。",
     empty: "粘贴一段原文即可预览节点。", invalidName: "请输入 1 至 120 个字符的资料标题。", invalidUrl: "原文链接须为不含账号信息的 HTTP 或 HTTPS 地址（最多 2,048 个字符）。",
     tooLong: "原文超过 16,000 个字符，请分次导入。", tooMany: "原文超过 80 个节点，请分次导入。", create: "创建带出处的导图",
-    privacy: "原文、行号和链接写入节点备注；分享导图或导出 PPTX 时，接收者也能看到。",
+    privacy: "原文、行号或 PDF 页码以及链接写入节点备注；分享导图或导出 PPTX 时，接收者也能看到。",
     lines: (first: number, last: number) => first === last ? `第 ${first} 行` : `第 ${first}–${last} 行`,
   },
   meta: {
@@ -545,11 +548,14 @@ const zh = {
 
 const en: typeof zh = {
   source: {
-    heading: "Create from source", description: "Paste meeting minutes or a web excerpt to create editable topics from the original passages. No AI request or webpage fetch is made.",
+    heading: "Create from source", description: "Paste text or select a PDF with a text layer to create editable topics from the original passages. No AI request or source webpage fetch is made.",
+    paste: "Paste text", pdf: "Import PDF", pdfFile: "Choose PDF file", pdfReading: "Reading PDF on this device…", pdfHint: "Extracts text locally. No PDF upload or OCR. Up to 16 MiB and 100 pages.",
+    pdfSize: "PDF exceeds 16 MiB; split it into smaller files.", pdfPages: "PDF exceeds 100 pages; split it into smaller files.", pdfPassword: "This PDF is password-protected. Choose an unlocked copy.", pdfInvalid: "This file could not be read as a PDF. Choose a valid PDF.", pdfEmpty: "No extractable text found. Scanned pages require OCR first.",
+    page: (number: number) => `Page ${number}`, pdfSummary: (pages: number, skipped: number[]) => `${pages} pages${skipped.length ? `; no extractable text on pages: ${skipped.join(", ")}` : ""}`,
     name: "Source title", url: "Original link (optional)", text: "Source text", preview: "Preview topics and quotes", hint: "Separate passages with blank lines, or use list items.",
     empty: "Paste a passage to preview its topic.", invalidName: "Enter a source title of 1–120 characters.", invalidUrl: "Use an HTTP or HTTPS address without credentials (at most 2,048 characters).",
     tooLong: "The source exceeds 16,000 characters; split it into smaller imports.", tooMany: "The source exceeds 80 topics; split it into smaller imports.", create: "Create source-linked map",
-    privacy: "Quotes, line numbers and links are saved in topic notes and are visible to people who receive the map or exported PowerPoint.",
+    privacy: "Quotes, line numbers or PDF page numbers, and links are saved in topic notes and are visible to people who receive the map or exported PowerPoint.",
     lines: (first: number, last: number) => first === last ? `Line ${first}` : `Lines ${first}–${last}`,
   },
   meta: {

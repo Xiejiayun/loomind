@@ -6,6 +6,12 @@ export const SOURCE_PASSAGE_LIMIT = 80;
 const marker = /^\s*(?:#{1,6}\s+|[-*+•]\s+|\d+[.)]\s+|\d+、\s*)/u;
 
 export interface SourcePassage { title: string; quote: string; firstLine: number; lastLine: number }
+export type CitedPassage = SourcePassage & { page?: number };
+
+export function passageLocation(passage: CitedPassage, locale: Locale) {
+  const messages = getWebMessages(locale).source;
+  return passage.page ? messages.page(passage.page) : messages.lines(passage.firstLine, passage.lastLine);
+}
 
 export function sourcePassages(text: string, locale: Locale): SourcePassage[] {
   const messages = getWebMessages(locale).source;
@@ -43,16 +49,18 @@ export function sourceAddress(value: string, locale: Locale) {
 }
 
 export function documentFromSource(name: string, text: string, address: string, locale: Locale) {
+  return documentFromPassages(name, sourcePassages(text, locale), address, locale);
+}
+
+export function documentFromPassages(name: string, passages: CitedPassage[], address: string, locale: Locale, filename?: string) {
   const messages = getWebMessages(locale).source;
   const title = name.trim();
   if (!title || title.length > 120) throw new Error(messages.invalidName);
-  const passages = sourcePassages(text, locale);
   if (!passages.length) throw new Error(messages.empty);
   const url = sourceAddress(address, locale);
   const href = url ? { kind: "url" as const, target: url } : undefined;
   const children = passages.map((passage) => {
-    const location = messages.lines(passage.firstLine, passage.lastLine);
-    const citation = [title, location, url].filter(Boolean).join(" · ");
+    const citation = [filename ?? title, passageLocation(passage, locale), url].filter(Boolean).join(" · ");
     return createTopic(generateId("topic"), passage.title, { note: { format: "markdown", text: `${citation}\n\n${passage.quote}` }, ...(href ? { href } : {}) });
   });
   const root = createTopic(generateId("topic"), title, { children, ...(href ? { href } : {}) });

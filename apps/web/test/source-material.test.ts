@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { MindmapDocumentSchema, richTextToPlainText, validateDocumentInvariants } from "@mindmap/core/model";
-import { documentFromSource, SOURCE_PASSAGE_LIMIT, SOURCE_TEXT_LIMIT, sourceAddress, sourcePassages } from "../src/source-material.js";
+import { documentFromPassages, documentFromSource, passageLocation, SOURCE_PASSAGE_LIMIT, SOURCE_TEXT_LIMIT, sourceAddress, sourcePassages } from "../src/source-material.js";
 
 describe("source-linked map creation", () => {
+  it("keeps the physical PDF page and original filename even when the map name changes", () => {
+    const passage = { title: "结论", quote: "结论：保持既定日期。", page: 5, firstLine: 1, lastLine: 1 };
+    const doc = documentFromPassages("团队评审", [passage], "https://example.test/a.pdf", "zh", "会议原件.pdf");
+    expect(doc.sheets[0].rootTopic.children[0].note?.text).toBe("会议原件.pdf · 第 5 页 · https://example.test/a.pdf\n\n结论：保持既定日期。");
+    expect(passageLocation(passage, "en")).toBe("Page 5");
+    expect(passageLocation({ ...passage, page: undefined }, "en")).toBe("Line 1");
+  });
   it("preserves source lines and citation text while shortening only the visible node title", () => {
     const long = "研究资料".repeat(30);
     const text = `\r\n- 上线日期\r\n  确认礼拜五。  \r\n\r\n1、${long}\r\n2.5 天用于复核。`;
