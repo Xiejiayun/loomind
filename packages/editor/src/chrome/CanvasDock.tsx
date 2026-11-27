@@ -19,8 +19,8 @@ import {
   createTopic,
   findTopicLocation,
   generateId,
-  isAllowedImageMimeType,
 } from "@mindmap/core";
+import { processImageFileForTopic } from "../canvas/image-utils.js";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
 
@@ -131,38 +131,34 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
   const handleUploadImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!isAllowedImageMimeType(file.type)) {
-      reportRejection({
-        code: "UNSUPPORTED_IMAGE_MIME",
-        message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
-      });
-      e.target.value = "";
-      return;
-    }
-    const mimeType = file.type;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result ?? "");
-      const base64 = dataUrl.split(",")[1];
-      if (!base64) return;
+    e.target.value = "";
+    void processImageFileForTopic(file, file.type).then((res) => {
+      if (!res.ok) {
+        reportRejection({
+          code: "UNSUPPORTED_IMAGE_MIME",
+          message:
+            res.error === "IMAGE_TOO_LARGE"
+              ? t.topic.imageTooLarge
+              : t.topic.unsupportedImageMime,
+        });
+        return;
+      }
       const resourceId = generateId("img", deletedSet);
       dispatch({
         type: "topic/setImage",
         sheetId: sheet.id,
         topicId: primaryId,
-        image: { resourceId, width: 180, height: 120, pos: "top" },
+        image: { resourceId, width: res.displayWidth, height: res.displayHeight, pos: "top" },
         asset: {
           resourceId,
-          mimeType,
-          width: 180,
-          height: 120,
-          sha256: resourceId,
-          dataBase64: base64,
+          mimeType: res.mimeType,
+          width: res.assetWidth,
+          height: res.assetHeight,
+          sha256: res.sha256,
+          dataBase64: res.dataBase64,
         },
       });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
+    });
   };
 
   const hoverCls = isDark
