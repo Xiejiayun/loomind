@@ -1,10 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
-  ChevronsUpDown,
   Command,
   FolderOpen,
   GitBranch,
+  Home,
   Languages,
   Layers,
   LogOut,
@@ -72,7 +72,6 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const picker = useRef<HTMLDetailsElement>(null);
 
   const editorMatch = /^\/app\/mindmaps\/([^/]+)$/.exec(route.pathname);
   const mapId = editorMatch?.[1] ?? null;
@@ -129,26 +128,6 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   useEffect(() => {
     try { localStorage.setItem(`loomind:space:${owner}`, activeWorkspaceId ?? ""); } catch { /* Optional preference. */ }
   }, [owner, activeWorkspaceId]);
-
-  // Close workspace dropdown when clicking outside or pressing Escape
-  useEffect(() => {
-    const closeOnOutside = (event: MouseEvent) => {
-      if (picker.current?.open && event.target instanceof Node && !picker.current.contains(event.target)) {
-        picker.current.open = false;
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && picker.current?.open) {
-        picker.current.open = false;
-      }
-    };
-    document.addEventListener("mousedown", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, []);
 
   // Global shortcuts: [ toggles sidebar, Cmd/Ctrl+K opens Workspace CommandK when outside editor
   useEffect(() => {
@@ -230,7 +209,6 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   const crumb = isLibrary ? t.workspace.navLibrary : isShared ? t.workspace.navShared : isCreate ? t.workspace.navCreate : t.workspace.navHome;
   const chooseSpace = (id: string | null) => {
     setActiveWorkspaceId(id);
-    picker.current && (picker.current.open = false);
     setMobileOpen(false);
     if (mapId) navigate("/app");
   };
@@ -249,44 +227,12 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
     <aside className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label={t.workspace.sidebarAria}>
       <div className="lm-sidebar-head">
         <Brand to="/app" compact onClick={() => setMobileOpen(false)}/>
-
-        <div className="lm-sidebar-head-actions">
-          <button type="button" className="lm-icon-button-sm" title={t.workspace.searchTitle} aria-label={t.workspace.searchAria} onClick={() => setCmdkOpen(true)}><Search size={14}/></button>
-          <AppLink href="/app" className="lm-icon-button-sm" title={t.workspace.newMapTitle} aria-label={t.workspace.newMapAria} onClick={() => setMobileOpen(false)}><Plus size={15}/></AppLink>
-          <button type="button" className="lm-mobile-close" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}><X size={15}/></button>
-        </div>
-      </div>
-
-      <div className="lm-sidebar-space">
-        <details ref={picker} className="lm-space-picker">
-          <summary aria-label={t.workspace.selectSpaceAria}>
-            <span className="lm-space-avatar" aria-hidden="true">
-              {activeSpace ? activeSpace.name.slice(0, 1).toUpperCase() : <Layers size={12}/>}
-            </span>
-            <strong>{activeSpace?.name ?? t.common.myMaps}</strong>
-            <ChevronsUpDown size={13}/>
-          </summary>
-          <div className="lm-space-menu">
-            <span className="lm-eyebrow">{t.workspace.spacesEyebrow}</span>
-            <button type="button" aria-current={!activeWorkspaceId ? "page" : undefined} onClick={() => chooseSpace(null)}>{t.common.myMaps}</button>
-            {workspaces.map((space) => (
-              <button key={space.id} type="button" aria-current={activeWorkspaceId === space.id ? "page" : undefined} onClick={() => chooseSpace(space.id)}>
-                {space.name}<small>{space.role === "owner" ? t.common.owner : space.role === "editor" ? t.common.editor : t.common.viewer}</small>
-              </button>
-            ))}
-            <div className="lm-space-menu-actions">
-              <button type="button" onClick={() => { picker.current && (picker.current.open = false); setWorkspaceDialogOpen(true); }}><Plus size={13}/> {t.workspace.newSpace}</button>
-              {activeSpace?.role === "owner" && (
-                <button type="button" onClick={() => { picker.current && (picker.current.open = false); setShareTarget({ type: "workspace", id: activeSpace.id, name: activeSpace.name }); }}><Share2 size={13}/> {t.workspace.shareSpace}</button>
-              )}
-            </div>
-          </div>
-        </details>
+        <button type="button" className="lm-mobile-close" aria-label={t.workspace.closeSidebarAria} onClick={() => setMobileOpen(false)}><X size={15}/></button>
       </div>
 
       <nav className="lm-sidebar-nav" aria-label={t.workspace.mainNavAria}>
         <AppLink href="/app" className={`lm-nav-item ${route.pathname === "/app" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
-          <Sparkles size={14}/><span>{t.workspace.navHome}</span><kbd>N</kbd>
+          <Home size={14}/><span>{t.workspace.navHome}</span><kbd>N</kbd>
         </AppLink>
         <AppLink href="/app/library" className={`lm-nav-item ${isLibrary ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
           <FolderOpen size={14}/><span>{t.workspace.navLibrary}</span>
@@ -295,6 +241,61 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           <Users size={14}/><span>{t.workspace.navShared}</span>
         </AppLink>
       </nav>
+
+      <section className="lm-sidebar-section" aria-label={t.workspace.selectSpaceAria}>
+        <div className="lm-sidebar-section-title">
+          <span>{t.workspace.spacesEyebrow}</span>
+          <button
+            type="button"
+            className="lm-sidebar-section-action"
+            title={t.workspace.newSpace}
+            aria-label={t.workspace.newSpace}
+            onClick={() => setWorkspaceDialogOpen(true)}
+          >
+            <Plus size={12}/>
+          </button>
+        </div>
+        <div className="lm-space-list">
+          <button
+            type="button"
+            className={`lm-space-item ${!activeWorkspaceId ? "is-selected" : ""}`}
+            aria-pressed={!activeWorkspaceId}
+            onClick={() => chooseSpace(null)}
+          >
+            <Layers size={13} className="lm-space-icon"/>
+            <span className="lm-space-name">{t.common.myMaps}</span>
+            {!activeWorkspaceId && <span className="lm-space-active-dot" aria-hidden="true"/>}
+          </button>
+          {workspaces.map((space) => {
+            const selected = activeWorkspaceId === space.id;
+            return (
+              <div key={space.id} className={`lm-space-row ${selected ? "is-selected" : ""}`}>
+                <button
+                  type="button"
+                  className={`lm-space-item ${selected ? "is-selected" : ""}`}
+                  aria-pressed={selected}
+                  onClick={() => chooseSpace(space.id)}
+                >
+                  <span className="lm-space-glyph" aria-hidden="true">{space.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="lm-space-name">{space.name}</span>
+                  {selected && space.role !== "owner" && <span className="lm-space-active-dot" aria-hidden="true"/>}
+                </button>
+                {space.role === "owner" && (
+                  <button
+                    type="button"
+                    className="lm-space-share-btn"
+                    title={t.workspace.shareSpace}
+                    aria-label={`${t.workspace.shareSpace}: ${space.name}`}
+                    onClick={() => setShareTarget({ type: "workspace", id: space.id, name: space.name })}
+                  >
+                    <Share2 size={12}/>
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       <nav className="lm-recent-nav" aria-label={t.workspace.recentNavAria}>
         <div className="lm-sidebar-section-title">
@@ -367,9 +368,15 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             <button type="button" className="lm-mobile-menu" aria-label={t.workspace.openSidebarAria} onClick={() => setMobileOpen(true)}><Menu size={16}/></button>
             <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={() => setSidebarCollapsed((v) => !v)}><PanelLeft size={15}/></button>
             <div className="lm-breadcrumb">
-              <AppLink href="/app">{activeSpace?.name ?? t.common.myMaps}</AppLink>
-              <span>/</span>
-              <strong>{crumb}</strong>
+              {isLibrary || isShared ? (
+                <strong>{crumb}</strong>
+              ) : (
+                <>
+                  <AppLink href="/app">{activeSpace?.name ?? t.common.myMaps}</AppLink>
+                  <span>/</span>
+                  <strong>{crumb}</strong>
+                </>
+              )}
             </div>
             <div className="lm-topbar-actions">
               <button type="button" className="lm-search-button" onClick={() => setCmdkOpen(true)}>
