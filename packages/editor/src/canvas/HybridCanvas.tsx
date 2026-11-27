@@ -71,7 +71,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
 
   const applyTransformDom = useCallback((c: { x: number; y: number; scale: number }) => {
     if (worldRef.current) {
-      worldRef.current.style.transform = `translate3d(${c.x}px, ${c.y}px, 0) scale(${c.scale})`;
+      worldRef.current.style.transform = `translate(${c.x}px, ${c.y}px) scale(${c.scale})`;
     }
   }, []);
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
@@ -792,9 +792,9 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       {/* Layer 1: GPU-accelerated world container */}
       <div
         ref={worldRef}
-        className="absolute left-0 top-0 will-change-transform"
+        className="mindmap-world absolute left-0 top-0"
         style={{
-          transform: `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.scale})`,
+          transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
           transformOrigin: "0 0",
           visibility: cameraReady ? "visible" : "hidden",
         }}
