@@ -203,7 +203,11 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   async function createMap(document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) {
     const id = crypto.randomUUID();
     await saveLocal(owner, { document, revision: 0, dirty: true, workspaceId, access: "owner" }, id);
-    setMaps((current) => [{ id, title: mapTitle(document), updatedAt: new Date().toISOString(), workspaceId, access: "owner" }, ...current]);
+    openCreatedMap(id, mapTitle(document), workspaceId, aiPrompt);
+  }
+
+  function openCreatedMap(id: string, title: string, workspaceId: string | null, aiPrompt?: string) {
+    setMaps((current) => [{ id, title, updatedAt: new Date().toISOString(), workspaceId, access: "owner" }, ...current]);
     setActiveWorkspaceId(workspaceId);
     setPendingAiPrompt(aiPrompt);
     navigate(`/app/mindmaps/${id}`);
@@ -389,6 +393,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
               onConsumeAiPrompt={consumeAiPrompt}
               onToggleSidebar={toggleSidebar}
               onRename={rename}
+              onRecoveredMap={(id, title) => openCreatedMap(id, title, null)}
               onShare={() => setShareTarget({ type: "mindmap", id: activeMap.id, name: activeMap.title })}
               listError={listError}
             />

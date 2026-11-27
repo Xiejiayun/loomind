@@ -2,6 +2,12 @@
 
 This runbook documents the standalone, zero-dependency read-only recovery path for Loomind's IndexedDB (`loomind-db` / `docs` object store) in case of a frontend rollback or local corruption.
 
+## Live editor recovery
+
+- Reconnect with the editor open. When a saved snapshot is available for the same collaboration room, it is merged with in-memory edits even if the corresponding incremental updates have already expired. Only a snapshot that materializes the saved JSON for that revision is accepted.
+- If a JSON-only client wrote a new history, or verification fails, keep the local draft. In **Account & Sync** export a JSON backup or **Save as new map** before choosing between divergent versions. A recovery copy starts in your personal library with a new ID and history; the original and its sharing permissions are unchanged. Invite collaborators to the copy if needed.
+- The document limit and the collaboration history limit are separate. If the encoded history exceeds 8 MiB but the document fits the cloud limit, **Save as new map** starts a compact history from the current content. If the document itself exceeds the cloud limit, keep the backup and reduce its media size before retrying. Do not clear IndexedDB as a recovery step.
+
 ## Rollback Rules
 
 1. **Never clear `v2:*` keys during a rollback.** Keeping `DB_VERSION = 1` ensures the previous UI (`main@7fc979c`) does not fail with `VersionError` and ignores `v2:*` keys without crashing.

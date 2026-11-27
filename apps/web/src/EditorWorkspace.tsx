@@ -14,10 +14,10 @@ import { AccountControl } from "./auth/AccountControl.js";
 import type { Session } from "./auth/shared.js";
 import { readCloud } from "./drafts/cloud.js";
 import { createMapAiChatPersistence } from "./drafts/ai-chat.js";
-import { CollabSession, randomLoroPeerId } from "./drafts/collab.js";
+import { LiveDraft } from "./drafts/live-draft.js";
 import { mapTitle, type MindmapSummary } from "./drafts/shared.js";
-import { DraftWorkspace, type SyncState } from "./drafts/workspace.js";
-import { useI18n } from "./i18n.js";
+import { DEFAULT_STORAGE, DraftWorkspace, type SyncState } from "./drafts/workspace.js";
+import { getWebMessages, useI18n } from "./i18n.js";
 import { AppLink, navigate } from "./navigation.js";
 import type { UiTheme } from "./ui.js";
 import { VersionHistoryDialog } from "./VersionHistoryDialog.js";
@@ -45,7 +45,7 @@ function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
 }
 
-export function EditorWorkspace({ map, owner, session, changeSession, theme, initialAiPrompt, onConsumeAiPrompt, onToggleSidebar, onRename, onShare, listError }: {
+export function EditorWorkspace({ map, owner, session, changeSession, theme, initialAiPrompt, onConsumeAiPrompt, onToggleSidebar, onRename, onRecoveredMap, onShare, listError }: {
   map: MindmapSummary;
   owner: string;
   session: Session;
@@ -55,6 +55,7 @@ export function EditorWorkspace({ map, owner, session, changeSession, theme, ini
   onConsumeAiPrompt?: () => void;
   onToggleSidebar: () => void;
   onRename: (id: string, title: string) => void;
+  onRecoveredMap: (id: string, title: string) => void;
   onShare: () => void;
   listError: string;
 }) {
@@ -71,12 +72,13 @@ export function EditorWorkspace({ map, owner, session, changeSession, theme, ini
     onConsumeAiPrompt={onConsumeAiPrompt}
     onToggleSidebar={onToggleSidebar}
     onRename={onRename}
+    onRecoveredMap={onRecoveredMap}
     onShare={onShare}
     listError={listError}
   />;
 }
 
-function EditableEditor({ map, owner, session, changeSession, theme, initialAiPrompt, onConsumeAiPrompt, onToggleSidebar, onRename, onShare, listError }: {
+function EditableEditor({ map, owner, session, changeSession, theme, initialAiPrompt, onConsumeAiPrompt, onToggleSidebar, onRename, onRecoveredMap, onShare, listError }: {
   map: MindmapSummary;
   owner: string;
   session: Session;
@@ -86,19 +88,20 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
   onConsumeAiPrompt?: () => void;
   onToggleSidebar: () => void;
   onRename: (id: string, title: string) => void;
+  onRecoveredMap: (id: string, title: string) => void;
   onShare: () => void;
   listError: string;
 }) {
   const { t } = useI18n();
   const proAiRuntime = useWebAiRuntime("pro");
-  const [initial, setInitial] = useState<{ document: MindmapDocument; key: number }>();
+  const [initial, setInitial] = useState<{ adapter: SyncAdapter; key: number }>();
   const [loroReady, setLoroReady] = useState<{ ctor: typeof LoroSyncAdapter | null; loaded: boolean }>({ ctor: null, loaded: false });
   const [remotePeers, setRemotePeers] = useState<PeerPresence[]>([]);
   const [sync, setSync] = useState<SyncState>(() => ({ label: t.sync.connectingLabel, detail: t.sync.connectingDetail, status: "connecting" }));
   const [localError, setLocalError] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const workspace = useRef<DraftWorkspace | null>(null);
-  const collabRef = useRef<CollabSession | null>(null);
+  const liveRef = useRef<LiveDraft | null>(null);
   const promptOnce = useRef(initialAiPrompt);
   const chatPersistence = useMemo(
     () => createMapAiChatPersistence(owner, map.id, false),
@@ -126,10 +129,22 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
     }
   }, [initialAiPrompt, onConsumeAiPrompt]);
 
+  const displayName = session.user?.email.split("@")[0] || "Collaborator";
   useEffect(() => {
-    const current = new DraftWorkspace(owner, map.id,
-      (document) => setInitial((old) => ({ document, key: (old?.key ?? 0) + 1 })), setSync, setLocalError,
-      undefined, map.workspaceId, map.access);
+    if (!loroReady.loaded) return;
+    const open = (adapter: SyncAdapter) => setInitial((old) => ({ adapter, key: (old?.key ?? 0) + 1 }));
+    const live: LiveDraft | null = loroReady.ctor ? new LiveDraft(loroReady.ctor, owner, map.id, displayName, {
+      open, peers: setRemotePeers, refresh: () => current.refreshLive(), change: (doc, remote) => {
+        if (remote) current.acceptRemoteDocument(doc); else current.edit(doc);
+        onRename(map.id, mapTitle(doc));
+      },
+    }) : null;
+    const current: DraftWorkspace = new DraftWorkspace(owner, map.id,
+      live?.show ?? ((doc) => open(new LocalImmerSyncAdapter(doc))), setSync, setLocalError,
+      live ? { ...DEFAULT_STORAGE, readCloud: live.read, writeCloud: live.write, mergeLive: live.merge, keepLiveLocal: live.keepLocal }
+        : { ...DEFAULT_STORAGE, writeCloud: async () => { throw new Error(getWebMessages().editorWorkspace.liveUnavailable); } },
+      map.workspaceId, map.access);
+    liveRef.current = live;
     workspace.current = current;
     void current.start();
     const flush = () => void current.flush();
@@ -137,62 +152,28 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
     window.addEventListener("pagehide", flush);
     window.addEventListener("online", syncOnline);
     return () => {
+      live?.close();
+      liveRef.current = null;
       current.close();
       workspace.current = null;
       window.removeEventListener("pagehide", flush);
       window.removeEventListener("online", syncOnline);
     };
-  }, [owner, map.id, map.workspaceId, map.access]);
+  }, [owner, map.id, map.workspaceId, map.access, displayName, loroReady, onRename]);
 
   const edit = useCallback((document: MindmapDocument) => {
-    if (collabRef.current?.isApplyingRemote()) {
-      workspace.current?.acceptRemoteDocument(document);
-    } else {
-      workspace.current?.edit(document);
-    }
-    onRename(map.id, mapTitle(document));
-  }, [map.id, onRename]);
-
-  const restoreRevision = useCallback((document: MindmapDocument) => {
-    setInitial((old) => ({ document, key: (old?.key ?? 0) + 1 }));
     workspace.current?.edit(document);
     onRename(map.id, mapTitle(document));
   }, [map.id, onRename]);
 
-  const editorAdapter = useMemo<SyncAdapter | null>(() => {
-    if (!initial || !loroReady.loaded) return null;
-    if (loroReady.ctor) {
-      return new loroReady.ctor(initial.document, randomLoroPeerId());
-    }
-    return new LocalImmerSyncAdapter(initial.document);
-  }, [initial, loroReady]);
+  const restoreRevision = useCallback((document: MindmapDocument) => {
+    initial?.adapter.replaceDocument(document);
+  }, [initial]);
 
-  const displayName = session.user?.email.split("@")[0] || "Collaborator";
-
-  useEffect(() => {
-    if (!editorAdapter || !loroReady.ctor || !(editorAdapter instanceof loroReady.ctor)) {
-      setRemotePeers([]);
-      return;
-    }
-    const collab = new CollabSession(
-      owner,
-      map.id,
-      displayName,
-      editorAdapter,
-      false,
-      setRemotePeers,
-      (doc) => onRename(map.id, mapTitle(doc)),
-    );
-    collabRef.current = collab;
-    collab.start();
-    return () => {
-      collab.close();
-      collabRef.current = null;
-    };
-  }, [editorAdapter, loroReady.ctor, owner, map.id, displayName, onRename]);
+  const editorAdapter = initial?.adapter;
 
   const handleSelectionChange = useCallback((topicIds: string[]) => {
-    collabRef.current?.setLocalSelection(topicIds);
+    liveRef.current?.session?.setLocalSelection(topicIds);
   }, []);
 
   const downloadJson = useCallback((filename: string, json: string | null) => {
@@ -209,11 +190,12 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
   if (!initial || !editorAdapter) return <div className="lm-loading">{t.common.openingMap}</div>;
 
   return <div className="lm-editor-host">
+    {!loroReady.ctor && <div className="lm-editor-error" role="status">{t.editorWorkspace.liveUnavailable}</div>}
     {(localError || listError) && <div className="lm-editor-error" role="alert">{localError || listError}</div>}
     <MindmapEditor
       key={initial.key}
       adapter={editorAdapter}
-      onDocumentChange={edit}
+      onDocumentChange={loroReady.ctor ? undefined : edit}
       remotePeers={remotePeers}
       onSelectionChange={handleSelectionChange}
       chromeTheme={theme}
@@ -242,7 +224,13 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
           onSync={(useCloud) => void workspace.current?.sync(useCloud)}
           onKeepLocal={() => void workspace.current?.resolveConflictKeepLocal()}
           onLogin={() => navigate("/login")}
-          onSaveAsNew={() => void workspace.current?.saveAsNewMap().then((newId) => { if (newId) navigate(`/app/mindmaps/${newId}`); })}
+          onSaveAsNew={() => {
+            const source = workspace.current;
+            const title = mapTitle(editorAdapter.getDocument());
+            void source?.saveAsNewMap().then((id) => {
+              if (id && workspace.current === source) onRecoveredMap(id, title);
+            }).catch((reason) => { if (workspace.current === source) setLocalError(errorText(reason, t.sync.localSaveError)); });
+          }}
           onExportBackup={() => downloadJson(`loomind-backup-${map.id}.json`, workspace.current?.exportCurrentJson() ?? null)}
           onExportCorrupt={() => {
             const first = workspace.current?.getCorruptRecords()[0];

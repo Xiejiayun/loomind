@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { getPlatformProxy, unstable_readConfig, type PlatformProxy } from "wrangler";
-import { getTemplate } from "@mindmap/core";
+import { createRichText, getTemplate } from "@mindmap/core";
+import { LoroSyncAdapter } from "@mindmap/core/loro";
+import { randomBytes } from "node:crypto";
 import worker from "../worker/auth.js";
-import { DRAFT_LIMIT, OWNER_HEADER } from "../src/drafts/shared.js";
+import { DRAFT_LIMIT, LIVE_HEADER, OWNER_HEADER, type LiveCheckpoint } from "../src/drafts/shared.js";
 
 const origin = "https://loomind.test";
 const client = "unit-test.apps.googleusercontent.com";
@@ -75,6 +77,8 @@ beforeAll(async () => {
   for (const statement of aiChatMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const checkpoints = await readFile(new URL("../migrations/0012_live_checkpoints.sql", import.meta.url), "utf8");
+  for (const statement of checkpoints.split(";").map((part) => part.trim()).filter(Boolean)) await platform.env.DB.prepare(statement).run();
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -590,6 +594,75 @@ describe("Version history API (D1 snapshots & pruning)", () => {
   });
 });
 
+
+describe("revision-bound live checkpoints (local D1)", () => {
+  const headers = (subject: string, revision = 0, mode = "1") => ({ [OWNER_HEADER]: subject, [LIVE_HEADER]: mode, "If-Match": `"${revision}"` });
+  const checkpoint = (adapter: LoroSyncAdapter, room = crypto.randomUUID(), cursor = 0): LiveCheckpoint =>
+    ({ room, cursor, snapshot: Buffer.from(adapter.exportSnapshot()).toString("base64") });
+
+  it("only lets one editor seed legacy JSON without changing its revision or disclosing the snapshot to other accounts", async () => {
+    const owner = "seed-owner", editor = "seed-editor", viewer = "seed-viewer", outsider = "seed-outsider";
+    const [alice, bob, cara, dan] = await Promise.all([owner, editor, viewer, outsider].map(login));
+    const id = crypto.randomUUID();
+    const path = `mindmaps/${id}`;
+    const doc = getTemplate("blank-organic").create();
+    expect((await request(path, "PUT", alice, doc, { [OWNER_HEADER]: owner, "If-Match": '"0"' })).status).toBe(200);
+    for (const [member, role] of [[editor, "editor"], [viewer, "viewer"]]) {
+      await env.DB.prepare("INSERT INTO mindmap_members (mindmap_id, subject, role) VALUES (?, ?, ?)").bind(id, member, role).run();
+    }
+    const offer = (cookie: string, subject: string, seed: LiveCheckpoint) => request(path, "PUT", cookie, { checkpoint: seed }, headers(subject, 1, "seed"));
+    const seeds = [checkpoint(new LoroSyncAdapter(doc)), checkpoint(new LoroSyncAdapter(doc))];
+    expect((await offer(cara, viewer, seeds[0])).status).toBe(403);
+    expect((await offer(bob, editor, { ...seeds[0], cursor: 9 })).status).toBe(422);
+    const claims = await Promise.all([offer(alice, owner, seeds[0]), offer(bob, editor, seeds[1])]);
+    expect(claims.map((res) => res.status).sort()).toEqual([200, 409]);
+    const winner = seeds[claims.findIndex((res) => res.ok)];
+    expect(await (await request(path, "GET", cara, undefined, headers(viewer))).json()).toEqual({ revision: 1, document: doc, checkpoint: winner });
+    expect(await (await request(path, "GET", dan, undefined, headers(outsider))).json()).toEqual({ revision: 0, document: null });
+    expect(await (await request(path, "GET", alice, undefined, { [OWNER_HEADER]: owner })).json()).toEqual({ revision: 1, document: doc });
+    expect(await env.DB.prepare("SELECT count(*) FROM mindmap_revisions WHERE mindmap_id = ?").bind(id).first("count(*)")).toBe(1);
+  });
+
+  it("atomically stores a multipart snapshot, rejects stale saves and cursors, and retires the room on a legacy write", async () => {
+    const owner = "parts-owner", cookie = await login(owner);
+    const id = crypto.randomUUID(), path = `mindmaps/${id}`;
+    const doc = getTemplate("blank-organic").create(), adapter = new LoroSyncAdapter(doc);
+    const first = checkpoint(adapter);
+    const put = (rev: number, draft: LiveCheckpoint) => request(path, "PUT", cookie, { ...adapter.getDocument(), checkpoint: draft }, headers(owner, rev));
+    const read = async () => (await request(path, "GET", cookie, undefined, headers(owner))).json();
+    const roomHeaders = { [OWNER_HEADER]: owner, "X-Loomind-Room": first.room };
+    const delta = { peerId: "sender", updateB64: Buffer.from(adapter.exportUpdates()).toString("base64") };
+    expect((await put(0, first)).status).toBe(200);
+    const posted = await request(`${path}/collab`, "POST", cookie, delta, roomHeaders);
+    expect(posted.status).toBe(200);
+    const { seq } = await posted.json() as { seq: number };
+    for (let index = 0; index < 19; index++) {
+      adapter.applyCommand({ type: "topic/setTitle", sheetId: doc.activeSheetId, topicId: "b1", title: createRichText(randomBytes(96 * 1024).toString("base64")) });
+    }
+    adapter.applyCommand({ type: "topic/setTitle", sheetId: doc.activeSheetId, topicId: "b1", title: createRichText("Compact document, long history") });
+    const second = { ...checkpoint(adapter), room: first.room, cursor: seq };
+    expect(second.snapshot.length).toBeGreaterThan(2 * 1024 * 1024);
+    expect((await put(1, second)).status).toBe(200);
+    expect((await put(1, first)).status).toBe(409);
+    expect((await put(2, { ...second, cursor: seq + 1 })).status).toBe(409);
+    expect((await put(2, { ...first, room: crypto.randomUUID() })).status).toBe(409);
+    const current = await read() as { revision: number; document: unknown; checkpoint: LiveCheckpoint };
+    expect(current.revision).toBe(2);
+    expect(current.checkpoint.snapshot === second.snapshot).toBe(true);
+    expect(LoroSyncAdapter.fromSnapshot(Buffer.from(current.checkpoint.snapshot, "base64")).getDocument()).toEqual(current.document);
+    expect(await env.DB.prepare("SELECT count(*) FROM mindmap_revisions WHERE mindmap_id = ?").bind(id).first("count(*)")).toBe(2);
+    expect((await request(path, "PUT", cookie, doc, { [OWNER_HEADER]: owner, "If-Match": '"2"' })).status).toBe(200);
+    expect(await read()).toEqual({ revision: 3, document: doc, checkpoint: null });
+    expect((await request(`${path}/collab`, "POST", cookie, delta, roomHeaders)).status).toBe(409);
+    expect((await request(`${path}/collab`, "GET", cookie, undefined, roomHeaders)).status).toBe(409);
+    expect((await request(path, "PUT", cookie, { checkpoint: checkpoint(new LoroSyncAdapter(doc)) }, headers(owner, 3, "seed"))).status).toBe(200);
+    await env.DB.prepare("UPDATE mindmaps SET revision = revision + 1 WHERE id = ?").bind(id).run();
+    expect(await read()).toEqual({ revision: 4, document: doc, checkpoint: null });
+    expect((await request(path, "PUT", cookie, { checkpoint: checkpoint(new LoroSyncAdapter(doc)) }, headers(owner, 4, "seed"))).status).toBe(200);
+    expect((await request(path, "DELETE", cookie, undefined, { [OWNER_HEADER]: owner })).status).toBe(200);
+    expect(await env.DB.prepare("SELECT count(*) FROM mindmap_live_parts WHERE mindmap_id = ?").bind(id).first("count(*)")).toBe(0);
+  });
+});
 
 describe("Loro CRDT realtime collab API (updates & peer presence)", () => {
   it("exchanges binary Loro CRDT updates and live presence between collaborators while blocking viewers from writing", async () => {

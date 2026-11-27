@@ -51,6 +51,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 ### Loro CRDT Live Sync, Cloud Version History & Workspace Sharing
 - **Real-time CRDT Collaboration**: Powered by `LoroSyncAdapter` (Movable Tree CRDT) with instant same-browser `BroadcastChannel` sync, Cloudflare D1 incremental delta sync (`/api/mindmaps/:id/collab`), and live collaborator selection presence badges.
 - **Cloud Version History**: Automatically snapshots up to 20 cloud revisions per mindmap (`mindmap_revisions`) with live SVG thumbnail previews, JSON download, and non-destructive one-click restore.
+- **Concurrent editing and reconnect**: Editors share a persisted Loro history rather than creating independent trees from the same JSON. An editor can merge a newer saved checkpoint with unsaved edits after disconnecting or missing deltas. A legacy JSON-only save starts a new history; incompatible unsaved drafts are kept locally for explicit recovery.
 - **Workspace & Mindmap Sharing**: Invite another Google account to an entire workspace or a single mindmap with editor or viewer access (7-day expiry, instant revocation, signed-session access control).
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
@@ -123,7 +124,7 @@ pnpm exec playwright install chromium webkit
 pnpm test:mobile
 ```
 
-The mobile checks serve the built app on loopback and use explicit API fixtures. They exercise real browser layout, touch input and local map storage, not live Google login, AI generation or cloud sync.
+Mobile layout tests use loopback and explicit API fixtures. The live editing tests run the built app against a real local Worker and D1, with isolated signed test accounts in Chromium and WebKit. They check unsaved changes in both canvases, late joining, retry, offline recovery, images and cold reopen; they do not call production, Google login or AI models. On a build with enlarged delta transport, run the image test with `LOOMIND_E2E_LARGE_FRAME=1` to require a successful delta larger than 192 KiB without reloading the document.
 
 ### Login and storage
 
@@ -134,7 +135,7 @@ The mobile checks serve the built app on loopback and use explicit API fixtures.
 
 ### Release to Cloudflare Workers
 
-The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. PRs run GitHub Actions CI (`Verify`), and pushes to `main` automatically verify, record a D1 Time Travel recovery point, apply pending D1 migrations (`0001..0007`), deploy the Worker + static assets, and run live production smoke checks. See [production deployment and recovery](docs/DEPLOYMENT.md) for recovery and rollback steps.
+The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. PRs run GitHub Actions CI (`Verify`), and pushes to `main` automatically verify, record a D1 Time Travel recovery point, apply pending D1 migrations, deploy the Worker + static assets, and run live production smoke checks. Live checkpoint sync requires `0012_live_checkpoints.sql` before the new Worker handles requests. See [production deployment and recovery](docs/DEPLOYMENT.md) for recovery and rollback steps.
 
 ---
 

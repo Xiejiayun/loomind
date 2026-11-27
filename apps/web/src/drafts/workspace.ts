@@ -46,6 +46,8 @@ export interface SyncState {
 }
 
 export interface WorkspaceStorage {
+  mergeLive?: (remote: CloudDraft) => boolean;
+  keepLiveLocal?: (remote: CloudDraft, doc: MindmapDocument) => void;
   loadLocal: (owner: string | null, id?: string) => Promise<LocalDraft | null>;
   saveLocal: (owner: string | null, draft: LocalDraft, id?: string) => Promise<void>;
   readCloud: (owner: string, id: string) => Promise<CloudDraft>;
@@ -80,7 +82,7 @@ export interface WorkspaceStorage {
   markMigrated?: (owner: string, mapId: string, sourceKey: string, sourceFingerprint: string) => Promise<void>;
 }
 
-const DEFAULT_STORAGE: WorkspaceStorage = {
+export const DEFAULT_STORAGE: WorkspaceStorage = {
   loadLocal,
   saveLocal,
   readCloud,
@@ -265,7 +267,7 @@ export class DraftWorkspace {
       document: doc,
       revision: 0,
       dirty: true,
-      workspaceId: this.workspaceId ?? this.draft.workspaceId ?? null,
+      workspaceId: null,
       access: "owner",
     };
     if (this.storage.putDraftCas) {
@@ -551,6 +553,11 @@ export class DraftWorkspace {
     return true;
   }
 
+  refreshLive() {
+    this.pullingRequired = true;
+    void this.sync();
+  }
+
   async sync(useCloud = false) {
     if (
       !this.owner ||
@@ -606,6 +613,8 @@ export class DraftWorkspace {
         }
 
         const remoteCanon = remote.document ? canonicalJson(remote.document) : null;
+        const mergedLive = !useCloud && !!this.storage.mergeLive?.(remote);
+        if (mergedLive && remote.document) this.recordAcceptedRemote(remote.document);
 
         if (!useCloud && this.draft.dirty && remote.revision !== this.draft.revision) {
           const localCanon = canonicalJson(this.draft.document);
@@ -652,7 +661,7 @@ export class DraftWorkspace {
           (useCloud || (!this.draft.dirty && remote.revision !== this.draft.revision))
         ) {
           const currentCanon = canonicalJson(this.draft.document);
-          if (!useCloud && remoteCanon !== currentCanon && remoteCanon !== null && this.acceptedRemoteCanonicals.has(remoteCanon)) {
+          if (!useCloud && remoteCanon !== currentCanon && remoteCanon !== null && (mergedLive || this.acceptedRemoteCanonicals.has(remoteCanon))) {
             // Cloud is at an earlier CRDT state already superseded locally by newer remote CRDT deltas:
             // advance baseRevision without reverting the live canvas document.
             this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
@@ -727,6 +736,14 @@ export class DraftWorkspace {
           }
 
           const remoteCanon = remote.document ? canonicalJson(remote.document) : null;
+          if (remote.document && remoteCanon !== canonicalJson(docSnapshot) && this.storage.mergeLive?.(remote)) {
+            this.confirmedBaseRevision = Math.max(this.confirmedBaseRevision, remote.revision);
+            this.draft = { ...this.draft, revision: this.confirmedBaseRevision, dirty: true };
+            this.needsLocalSave = true;
+            await this.flush();
+            if (!this.closed) { this.emitStatus(this.pendingState()); this.scheduleCloud(); }
+            return;
+          }
           if (remote.document && remoteCanon === canonicalJson(docSnapshot)) {
             newRevision = remote.revision;
           } else if (remote.document && remoteCanon !== null && this.acceptedRemoteCanonicals.has(remoteCanon)) {
@@ -801,6 +818,7 @@ export class DraftWorkspace {
       const sentGen = this.localGen;
       const docSnapshot = this.draft.document;
       const targetBaseRevision = remote.revision;
+      this.storage.keepLiveLocal?.(remote, docSnapshot);
 
       let newRevision: number;
       if (remote.document && canonicalJson(remote.document) === canonicalJson(docSnapshot)) {
