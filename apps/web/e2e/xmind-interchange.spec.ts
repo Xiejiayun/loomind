@@ -26,6 +26,7 @@ test("opens the topics and embedded picture from a workbook produced by Xmind's 
   const page = await cloud.openPage(context);
   await page.goto(`${cloud.origin}/try`);
   const dialog = await fileDialog(page);
+  page.once("dialog", (confirmation) => confirmation.accept());
   await dialog.locator("input[type=file]").setInputFiles(fileURLToPath(new URL("./fixtures/xmind-generator-image.xmind", import.meta.url)));
   await expect(dialog).toBeHidden();
   const canvas = page.getByRole("application");
@@ -61,6 +62,7 @@ test("transfers both sheets, editable rich titles, equation source and identical
     const { api, headers } = await openSavedMap(reader, cloud.origin, "reviewer", createDocument());
     const importing = await fileDialog(reader);
     const persisted = reader.waitForResponse((response) => response.url() === api && response.request().method() === "PUT" && response.request().postDataJSON().assets?.photo);
+    reader.once("dialog", (confirmation) => confirmation.accept());
     await importing.locator("input[type=file]").setInputFiles(path);
     await expect(importing).toBeHidden();
     expect((await persisted).status()).toBe(200);

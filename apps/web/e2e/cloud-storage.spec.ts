@@ -38,6 +38,98 @@ async function imageDigest(page: Page, title: string) {
   return createHash("sha256").update(Buffer.from(source!.split(",")[1], "base64")).digest("hex");
 }
 
+test("large source-linked maps keep photos, private reviews and revocable public snapshots separate", async ({ browserName, context, cloud }) => {
+  test.setTimeout(150_000);
+  const author = await cloud.openPage(context, "field-editor");
+  await author.goto(`${cloud.origin}/app/create/source`);
+  const titles = ["North elevation", "South elevation", "Entrance detail", "Roof detail", "Window detail", "Floor detail"];
+  const quote = "Surveyors measured the elevation twice on site.";
+  const original = "https://example.test/field-report";
+  await author.getByLabel("Source title", { exact: true }).fill("Field minutes");
+  await author.getByLabel("Original link (optional)").fill(original);
+  await author.getByLabel("Source text", { exact: true }).fill(titles.map((title) => `- ${title}\n${quote}`).join("\n\n"));
+  await author.getByRole("button", { name: "Create source-linked map" }).click();
+  await expect(topic(author, titles[0])).toBeVisible();
+  const mapId = new URL(author.url()).pathname.split("/").at(-1);
+  const api = `${cloud.origin}/api/mindmaps/${mapId}`;
+  let documentBytes = 0;
+  for (const [index, title] of titles.entries()) {
+    const saved = author.waitForResponse((response) => response.url() === api && response.request().method() === "PUT" && Object.keys(response.request().postDataJSON().assets ?? {}).length === index + 1);
+    await uploadPhoto(author, title, 123 + index);
+    const response = await saved;
+    expect(response.status()).toBe(200);
+    documentBytes = Buffer.byteLength(JSON.stringify(MindmapDocumentSchema.parse(response.request().postDataJSON())));
+    if (documentBytes > mib) break;
+  }
+  expect(documentBytes).toBeGreaterThan(mib);
+  const digest = await imageDigest(author, titles[0]);
+  const label = `Field minutes · Lines 1–2 · ${original}\n\n- ${titles[0]}\n${quote}`;
+  const privateText = "Review team only: verify this measurement before sign-off.";
+  const share = author.getByRole("button", { name: "Share", exact: true });
+  const sharing = author.getByRole("dialog", { name: "Share Mind Map" });
+  await share.click();
+  await sharing.getByRole("button", { name: "Enable read-only link" }).click();
+  const link = await sharing.locator("#lm-public-url").inputValue();
+  await sharing.getByRole("button", { name: /^Can view/i }).click();
+  await sharing.getByRole("button", { name: "Create Invite Link" }).click();
+  const invite = await sharing.locator("#lm-share-url").inputValue();
+  await sharing.getByRole("button", { name: "Close" }).click();
+  const review = author.getByRole("dialog", { name: "Node comments" });
+  await author.getByRole("button", { name: "Node comments" }).click();
+  const policy = review.getByRole("checkbox", { name: "Allow viewers to comment" });
+  await expect(policy).not.toBeChecked();
+  await policy.click();
+  await expect(policy).toBeChecked();
+  await review.getByRole("button", { name: "Close" }).click();
+
+  const readers = await (browserName === "chromium" ? webkit : chromium).launch();
+  try {
+    const member = await cloud.openPage(await readers.newContext(desktop), "field-reviewer");
+    await member.goto(invite);
+    await member.getByRole("button", { name: "Accept invite" }).click();
+    expect(await imageDigest(member, titles[0])).toBe(digest);
+    await topic(member, titles[0]).click();
+    await member.getByRole("button", { name: "Node comments" }).click();
+    const comments = member.getByRole("dialog", { name: "Node comments" });
+    await comments.getByRole("textbox", { name: "New comment" }).fill(privateText);
+    const posted = member.waitForResponse((response) => response.url() === `${api}/comments` && response.request().method() === "POST");
+    await comments.getByRole("button", { name: "Start discussion" }).click();
+    expect((await posted).status()).toBe(201);
+    await expect(comments.getByText(privateText, { exact: true })).toBeVisible();
+    await comments.getByRole("button", { name: "Close" }).click();
+
+    const guest = await cloud.openPage(await readers.newContext(desktop));
+    const publicApi = `${cloud.origin}/api/public-maps/${mapId}`;
+    const loaded = guest.waitForResponse(publicApi);
+    await guest.goto(link);
+    const snapshot = await loaded;
+    expect(snapshot.status()).toBe(200);
+    const tag = (await snapshot.allHeaders()).etag;
+    expect(tag).toMatch(/^"\d+"$/);
+    const published = await snapshot.text();
+    expect(published).not.toContain(privateText);
+    expect(published).not.toContain("field-reviewer@example.test");
+    expect(await imageDigest(guest, titles[0])).toBe(digest);
+    await expect(topic(guest, titles[0]).getByTitle(label, { exact: true })).toHaveCount(1);
+    await expect(guest.getByRole("button", { name: "Node comments" })).toHaveCount(0);
+    const headers = { Authorization: `Bearer ${new URL(link).hash.slice(1)}`, "If-None-Match": tag };
+    expect((await guest.request.get(publicApi, { headers })).status()).toBe(304);
+    expect((await guest.request.get(`${api}/comments`, { headers })).status()).toBe(401);
+    await share.click();
+    author.once("dialog", (dialog) => dialog.accept());
+    await sharing.getByRole("button", { name: "Revoke read-only link" }).click();
+    await expect(sharing.getByRole("button", { name: "Enable read-only link" })).toBeVisible();
+    expect((await guest.request.get(publicApi, { headers })).status()).toBe(404);
+    await guest.bringToFront();
+    await expect(guest.getByRole("heading", { name: "Cannot open shared map" })).toBeVisible({ timeout: 20_000 });
+    await member.bringToFront();
+    await member.reload();
+    expect(await imageDigest(member, titles[0])).toBe(digest);
+    await member.getByRole("button", { name: "Node comments" }).click();
+    await expect(comments.getByText(privateText, { exact: true })).toBeVisible();
+  } finally { await readers.close(); }
+});
+
 test("large maps retain every uploaded photo across browsers and in a downloaded earlier version", async ({ browserName, context, cloud }) => {
   test.setTimeout(120_000);
   const writer = await cloud.openPage(context, "reporter");

@@ -1,13 +1,16 @@
 import { expect, type Page } from "@playwright/test";
-import { getTemplate, getTemplateInfo, richTextToPlainText, TEMPLATES, type MindmapDocument } from "@mindmap/core";
+import { getTemplate, getTemplateInfo, richTextToPlainText, TEMPLATES } from "@mindmap/core";
+import { MindmapDocumentSchema } from "@mindmap/core/model";
 import { cloudBrowser, test } from "./cloud-worker.js";
 
 async function saveNewMap(page: Page, create: () => Promise<void>) {
-  const saved = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/mindmaps\/[^/]+$/.test(response.url()));
+  const saved = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/mindmaps\/[^/]+$/.test(response.url()) && Array.isArray(response.request().postDataJSON().sheets));
   await create();
   const response = await saved;
   expect(response.status()).toBe(200);
-  return response.request().postDataJSON() as MindmapDocument;
+  const snapshot = await page.request.get(response.url(), { headers: { "X-Loomind-Owner": "planner" } });
+  expect(snapshot.status()).toBe(200);
+  return MindmapDocumentSchema.parse((await snapshot.json()).document);
 }
 
 test("the full template catalog applies layouts to user content or creates a separate copy of the sample", async ({ browser, browserName, cloud }) => {
