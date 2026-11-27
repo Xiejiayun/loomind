@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { FilePlus2, GitBranch, MoveRight, Search, Share2, Trash2 } from "lucide-react";
+import { BookCopy, FilePlus2, GitBranch, MoveRight, Search, Share2, Trash2 } from "lucide-react";
 import { getIntlLocale, getLocale, type Locale } from "@mindmap/core";
-import type { WorkspaceSummary } from "./api.js";
+import { saveTeamTemplate, type WorkspaceSummary } from "./api.js";
 import type { MindmapSummary } from "./drafts/shared.js";
 import { getWebMessages, useI18n } from "./i18n.js";
 import { AppLink } from "./navigation.js";
+import { TeamTemplates, type OpenTemplateCopy } from "./TeamTemplates.js";
 
 export function formatRelativeTime(value: string, locale: Locale = getLocale()) {
   const t = getWebMessages(locale).library;
@@ -22,7 +23,7 @@ export function formatRelativeTime(value: string, locale: Locale = getLocale()) 
   return new Intl.DateTimeFormat(getIntlLocale(locale), { month: "short", day: "numeric" }).format(date);
 }
 
-export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedView = false, onShare, onMove, onDelete }: {
+export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedView = false, onShare, onMove, onDelete, onTemplateCopy }: {
   maps: MindmapSummary[];
   workspaces: WorkspaceSummary[];
   initialFilter?: string;
@@ -30,6 +31,7 @@ export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedV
   onShare: (map: MindmapSummary) => void;
   onMove: (map: MindmapSummary, workspaceId: string) => Promise<void>;
   onDelete: (map: MindmapSummary) => Promise<void>;
+  onTemplateCopy: OpenTemplateCopy;
 }) {
   const { locale, t } = useI18n();
   const intlLocale = getIntlLocale(locale);
@@ -38,6 +40,9 @@ export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedV
   const [sort, setSort] = useState<"recent" | "title">("recent");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [templateVersion, setTemplateVersion] = useState(0);
+  const selectedSpace = workspaces.find((space) => space.id === filter);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase(intlLocale);
@@ -61,6 +66,7 @@ export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedV
 
   async function perform(map: MindmapSummary, action: () => Promise<void>) {
     setBusyId(map.id);
+    setNotice("");
     setError("");
     try { await action(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : t.library.actionFailed); }
@@ -104,9 +110,12 @@ export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedV
 
     {error && <p className="lm-form-error" role="alert">{error}</p>}
 
+    {notice && <p role="status">{notice}</p>}
+    {selectedSpace && <TeamTemplates key={selectedSpace.id} space={selectedSpace} refresh={templateVersion} onCopy={onTemplateCopy}/>}
     <div className="lm-library-list" role="list" aria-label={t.library.listAria}>
       {visible.map((map) => {
-        const spaceName = workspaces.find((space) => space.id === map.workspaceId)?.name ?? t.common.myMaps;
+        const space = workspaces.find((entry) => entry.id === map.workspaceId);
+        const spaceName = space?.name ?? t.common.myMaps;
         const moveTargets = workspaces.filter((space) => space.role !== "viewer" && space.id !== map.workspaceId);
         return <div key={map.id} className="lm-library-row" role="listitem">
           <span className="lm-map-icon" aria-hidden="true"><GitBranch size={14}/></span>
@@ -117,6 +126,9 @@ export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedV
             <span>{formatRelativeTime(map.updatedAt, locale)}</span>
           </div>
           <div className="lm-library-actions">
+            {space && !map.localOnly && space.role !== "viewer" && map.access !== "viewer" && <button type="button" title={t.library.teamSave(map.title)} aria-label={t.library.teamSave(map.title)} disabled={busyId === map.id} onClick={() => void perform(map, async () => {
+              await saveTeamTemplate(space.id, map.id); setFilter(space.id); setTemplateVersion((value) => value + 1); setNotice(t.library.teamSaved(map.title));
+            })}><BookCopy size={14}/></button>}
             {map.access === "owner" && <>
               <button type="button" title={t.library.shareTitle} aria-label={t.library.shareAria(map.title)} onClick={() => onShare(map)}><Share2 size={14}/></button>
               {!!moveTargets.length && (

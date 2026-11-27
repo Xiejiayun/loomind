@@ -24,6 +24,8 @@
 ## Features
 
 ### 9 Professional Structures, Mixed Layouts & 14 Templates
+
+**Team templates:** In the Library, a workspace owner or editor can save a workspace map’s last cloud revision as a team template. Select that workspace’s filter to see its templates, or use **Browse team templates** from the creation page after selecting a team. Creating a copy starts a new map and revision history in the same workspace; editing or deleting the source, template, or copy does not change the others. Image blocks are copied too. Workspace viewers can see the catalog but cannot publish, remove, or create copies. Each workspace can hold 50 templates.
 Switch layout structures per branch on a single canvas to fit every stage from brainstorming to executive presentation:
 - **Mind Map** (Balanced / One-Sided)
 - **Logic Chart** · **Org Chart** · **Brace Map**

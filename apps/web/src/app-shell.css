@@ -1088,6 +1088,11 @@
   transition: background .1s var(--lm-ease);
 }
 .lm-library-row + .lm-library-row { border-top: 1px solid var(--lm-border-subtle); }
+.lm-team-templates { margin: 16px 0; padding: 16px; border: 1px solid var(--lm-border-subtle); border-radius: 12px; }
+.lm-team-templates h2 { margin: 0; font-size: 16px; }
+.lm-team-templates > p { font-size: 13px; }
+.lm-team-template-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+.lm-team-template-row > strong { flex: 1; min-width: 6rem; overflow-wrap: anywhere; }
 .lm-library-row:hover { background: var(--lm-bg-elevated); }
 .lm-map-icon {
   display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none;

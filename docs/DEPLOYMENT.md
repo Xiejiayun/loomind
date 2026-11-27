@@ -50,4 +50,6 @@ PR 本身不发布。引入实时协作快照时，必须在部署新 Worker 前
 
 `0011_node_reviews.sql` 新增独立的讨论表和默认关闭的查看者评论权限，不重写已有导图。验收时用已受邀的查看者确认默认只读；由所有者开启后留言，再用未登录和未获邀请的身份确认评论不可见。回滚到上一版应用不需要删除评论表或恢复整库。
 
+团队模板迁移 `0013_workspace_templates.sql` 只新增模板快照及图片分块表，不改写已有导图。发布后，使用测试工作空间验证一名编辑者保存模板、另一名成员创建并修改独立副本。回退到支持分块但不支持模板的 Worker 会暂时隐藏模板；不要删除模板表。已有副本是普通工作空间导图。
+
 参考：[D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)、[D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)、[Worker 回滚](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)、[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。

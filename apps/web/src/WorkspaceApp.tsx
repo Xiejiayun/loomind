@@ -420,9 +420,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           )}
 
           {isLibrary ? (
-            <LibraryView key="library" maps={maps} workspaces={workspaces} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+            <LibraryView key={`library:${route.search}`} maps={maps} workspaces={workspaces} initialFilter={workspaces.find((space) => space.id === new URLSearchParams(route.search).get("workspace"))?.id} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
           ) : isShared ? (
-            <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+            <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
           ) : route.pathname === "/app/create/source" ? (
             <SourceView workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onCreate={createMap}/>
           ) : isCreate ? (

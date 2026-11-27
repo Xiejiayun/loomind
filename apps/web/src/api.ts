@@ -37,6 +37,14 @@ function send<T>(path: string, value: unknown, method = "POST") {
 export const listWorkspaces = () => request<WorkspaceSummary[]>("/api/workspaces");
 export const webpageOrigins = () => request<string[]>("/api/sources/webpage");
 export const readWebpage = (url: string) => send<WebpageSource>("/api/sources/webpage", { url });
+export interface TeamTemplate { id: string; title: string; createdAt: string }
+const templatesPath = (workspace: string) => `/api/workspaces/${encodeURIComponent(workspace)}/templates`;
+export const listTeamTemplates = (workspace: string) => request<TeamTemplate[]>(templatesPath(workspace));
+export const saveTeamTemplate = (workspace: string, mindmapId: string) => send<{ id: string }>(templatesPath(workspace), { mindmapId });
+export const copyTeamTemplate = (workspace: string, template: string) =>
+  send<{ id: string; title: string; workspaceId: string }>(`${templatesPath(workspace)}/${encodeURIComponent(template)}/copies`, {});
+export const removeTeamTemplate = (workspace: string, template: string) =>
+  request<{ deleted: boolean }>(`${templatesPath(workspace)}/${encodeURIComponent(template)}`, { method: "DELETE" });
 export const createWorkspace = (name: string) => send<WorkspaceSummary>("/api/workspaces", { name });
 export const moveMindmap = (workspaceId: string, mindmapId: string) => send<{ workspaceId: string }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/mindmaps`, { mindmapId });
 export const createShare = (type: "workspace" | "mindmap", resourceId: string, role: "viewer" | "editor") =>
