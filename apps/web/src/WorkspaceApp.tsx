@@ -203,7 +203,11 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   async function createMap(document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) {
     const id = crypto.randomUUID();
     await saveLocal(owner, { document, revision: 0, dirty: true, workspaceId, access: "owner" }, id);
-    setMaps((current) => [{ id, title: mapTitle(document), updatedAt: new Date().toISOString(), workspaceId, access: "owner" }, ...current]);
+    openCreatedMap(id, mapTitle(document), workspaceId, aiPrompt);
+  }
+
+  function openCreatedMap(id: string, title: string, workspaceId: string | null, aiPrompt?: string) {
+    setMaps((current) => [{ id, title, updatedAt: new Date().toISOString(), workspaceId, access: "owner" }, ...current]);
     setActiveWorkspaceId(workspaceId);
     setPendingAiPrompt(aiPrompt);
     navigate(`/app/mindmaps/${id}`);
@@ -416,9 +420,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           )}
 
           {isLibrary ? (
-            <LibraryView key="library" maps={maps} workspaces={workspaces} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+            <LibraryView key={`library:${route.search}`} maps={maps} workspaces={workspaces} initialFilter={workspaces.find((space) => space.id === new URLSearchParams(route.search).get("workspace"))?.id} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
           ) : isShared ? (
-            <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+            <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
           ) : isCreate ? (
             <CreateView
               mode={createMode}

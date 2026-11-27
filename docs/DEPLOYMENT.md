@@ -44,4 +44,6 @@ CD **没有** `push`、`workflow_run` 或 PR 自动发布触发器。审批前�
 
 `0009_mindmap_document_blocks.sql` 是增量迁移，不重写既有快照。以实际工作流为准：当前 `deploy-production.yml` 也监听 `main` push，应在合并前确认发布批准、D1 bookmark 和回退版本。发布后验证旧图、超过 1 MiB 的带图导图及其历史版都能跨会话打开。一旦已有分块快照，不要回滚到只认识内联 JSON 的 Worker；优先向前修复，或发布保留分块读取能力的修复版。不要删除分块表或为代码回滚而直接恢复整库。
 
+团队模板迁移 `0013_workspace_templates.sql` 只新增模板快照及图片分块表，不改写已有导图。发布后，使用测试工作空间验证一名编辑者保存模板、另一名成员创建并修改独立副本。回退到支持分块但不支持模板的 Worker 会暂时隐藏模板；不要删除模板表。已有副本是普通工作空间导图。
+
 参考：[D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)、[D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)、[Worker 回滚](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)、[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。

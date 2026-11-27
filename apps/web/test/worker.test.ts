@@ -79,6 +79,10 @@ beforeAll(async () => {
   for (const statement of blocksMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const templatesMigration = await readFile(new URL("../migrations/0013_workspace_templates.sql", import.meta.url), "utf8");
+  for (const statement of templatesMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -153,6 +157,39 @@ describe("collaboration API (signed sessions and local D1)", () => {
     expect(created.role).toBe(role);
     return created;
   }
+
+  it("limits template publishing and copies to the correct team and starts copies with their own history", async () => {
+    const owner = await login("template-host"), editor = await login("template-author"), viewer = await login("template-reader"), outsider = await login("other-team");
+    const space = await (await request("workspaces", "POST", owner, { name: "Template studio" })).json() as { id: string };
+    const other = await (await request("workspaces", "POST", outsider, { name: "Other studio" })).json() as { id: string };
+    const list = `workspaces/${space.id}/templates`, source = crypto.randomUUID(), personal = crypto.randomUUID();
+    const original = getTemplate("blank-organic").create();
+    const headers = { [OWNER_HEADER]: "template-host", "If-Match": '"0"' };
+    expect((await request(`mindmaps/${source}`, "PUT", owner, original, { ...headers, "X-Loomind-Workspace": space.id })).status).toBe(200);
+    expect((await request(`mindmaps/${personal}`, "PUT", owner, original, headers)).status).toBe(200);
+    const writers = await share(owner, "workspace", space.id, "editor"), readers = await share(owner, "workspace", space.id, "viewer");
+    expect((await request(`invites/${writers.token}/accept`, "POST", editor)).status).toBe(200);
+    expect((await request(`invites/${readers.token}/accept`, "POST", viewer)).status).toBe(200);
+    expect((await request(list, "GET")).status).toBe(401); expect((await request(list, "GET", outsider)).status).toBe(404);
+    expect((await request(list, "POST", viewer, { mindmapId: source })).status).toBe(403);
+    expect((await request(list, "POST", owner, { mindmapId: personal })).status).toBe(404);
+    expect((await request(list, "POST", editor, { mindmapId: source }, { Origin: "https://unrelated.example" })).status).toBe(403);
+    const published = await request(list, "POST", editor, { mindmapId: source }); expect(published.status).toBe(201);
+    const { id } = await published.json() as { id: string };
+    const catalog = await (await request(list, "GET", viewer)).json() as Record<string, unknown>[];
+    expect(catalog).toHaveLength(1); expect(catalog[0].id).toBe(id); expect(catalog[0]).not.toHaveProperty("document");
+    expect((await request(`workspaces/${other.id}/templates/${id}/copies`, "POST", outsider, {})).status).toBe(404);
+    expect((await request(`${list}/${id}/copies`, "POST", viewer, {})).status).toBe(403);
+    expect((await request(`${list}/${id}`, "DELETE", viewer)).status).toBe(403);
+    expect((await request(`mindmaps/${source}`, "DELETE", owner, undefined, { [OWNER_HEADER]: "template-host" })).status).toBe(200);
+    const copy = await request(`${list}/${id}/copies`, "POST", editor, {}); expect(copy.status).toBe(201);
+    const copied = await copy.json() as { id: string; workspaceId: string }; expect(copied.id).not.toBe(source); expect(copied.workspaceId).toBe(space.id);
+    expect((await request(`${list}/${id}`, "DELETE", owner)).status).toBe(200);
+    expect((await request(`${list}/${id}/copies`, "POST", editor, {})).status).toBe(404);
+    const readHeaders = { [OWNER_HEADER]: "template-author" };
+    expect(await (await request(`mindmaps/${copied.id}`, "GET", editor, undefined, readHeaders)).json()).toMatchObject({ revision: 1, document: original });
+    expect(await (await request(`mindmaps/${copied.id}/revisions`, "GET", editor, undefined, readHeaders)).json()).toMatchObject([{ revision: 1, savedBy: "template-author" }]);
+  });
 
   it("keeps ownership and revision while granting workspace editors and viewers distinct rights", async () => {
     const alice = await login("space-owner");

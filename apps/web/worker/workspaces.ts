@@ -1,12 +1,15 @@
 import { MAP_ID } from "../src/drafts/shared.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import { database, workspaceRole, type Access } from "./permissions.js";
+import { workspaceTemplates } from "./workspace-templates.js";
 
 type Workspace = { id: string; name: string; role: Access; createdAt: string };
 
 export async function handleWorkspace(request: Request, env: Env, subject: string | undefined, path: string): Promise<Response> {
   if (!subject) throw new HttpError(401, "请先登录后访问工作空间。");
   const db = database(env);
+  const templateRoute = /^\/api\/workspaces\/([^/]+)\/templates(?:\/([^/]+)(?:\/(copies))?)?$/.exec(path);
+  if (templateRoute) return workspaceTemplates(request, env, db, subject, templateRoute[1], templateRoute[2], templateRoute[3]);
   if (path === "/api/workspaces") {
     if (request.method === "GET") {
       const rows = await db.prepare(`
