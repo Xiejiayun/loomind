@@ -65,7 +65,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 
 ### Lossless Import & Export
 - **Loomind full backup (`.loomind.json`)**: In **Export**, save a complete editable copy with every sheet, image, equation and text style. To restore it (or an existing map/revision JSON download), open a blank map, select **Export → Import backup or file**, then confirm replacement. No cloud connection is required once the editor is loaded.
-- **`.xmind`**: Use for exchanging topics, notes, tasks, layouts, summaries, floating topics and relationships, not as a lossless backup.
+- **`.xmind`**: Exchanges topics, notes, tasks, layouts, summaries, floating topics and relationships. Workbooks now include embedded PNG/JPEG/WebP/SVG resources, editable equation source and styled titles. Other clients can reinterpret formatting; this is interchange, not a full-document backup. A workbook from Xmind's generator is tested, but desktop edit-and-save fidelity is not verified.
 - **Markdown / OPML 2.0**: Bi-directional conversion preserving hierarchy, multi-root OPML documents, notes, and task states.
 - **Pure Vector SVG / Vector PDF / PNG / PPTX**: Native `<text>/<tspan>` SVG serialization with zero `foreignObject` distortion.
 
