@@ -78,7 +78,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
       className="relative min-w-[48px]"
       onPointerDown={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
+      onKeyDownCapture={(e) => {
         // Strict Chinese IME guard
         if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter" && !e.shiftKey) {
