@@ -1,0 +1,70 @@
+import { readFile } from "node:fs/promises";
+import { expect, type Page } from "@playwright/test";
+import { strFromU8, unzipSync } from "fflate";
+import { cloudBrowser, test } from "./cloud-worker.js";
+
+const desktop = { ...cloudBrowser, isMobile: false, hasTouch: false, viewport: { width: 1280, height: 800 } };
+test.use(desktop);
+const topic = (page: Page, title: string) => page.getByRole("application").getByRole("treeitem").filter({ has: page.getByText(title, { exact: true }) });
+
+test("turns minutes into editable topics that retain their sources for an invited reader and an actual PowerPoint export", async ({ browser, context, cloud }, testInfo) => {
+  test.setTimeout(75_000);
+  const author = await cloud.openPage(context, "minutes-author");
+  const original = "https://source.example.test/meetings/42#decision";
+  const sourceRequests: string[] = [];
+  const aiRequests: string[] = [];
+  await context.route("https://source.example.test/**", (route) => { sourceRequests.push(route.request().url()); return route.abort(); });
+  author.on("request", (request) => { if (new URL(request.url()).pathname === "/api/ai/stream") aiRequests.push(request.url()); });
+  await author.goto(`${cloud.origin}/app`);
+  await author.getByRole("link", { name: "Create from source" }).click();
+  await author.getByLabel("Source title", { exact: true }).fill("Pilot minutes");
+  await author.getByLabel("Original link (optional)").fill(original);
+  const first = "The team kept the Friday date after the vendor call.";
+  const second = "Sam will confirm sign-off before Thursday.";
+  await author.getByLabel("Source text", { exact: true }).fill(`- Launch window\n${first}\n\n- Release checklist\n${second}`);
+  await author.locator("summary").filter({ hasText: "Lines 1–2" }).click();
+  await expect(author.locator("details[open] p")).toContainText(first);
+  const put = () => author.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/mindmaps\/[^/]+$/.test(response.url()));
+  const initial = put();
+  await author.getByRole("button", { name: "Create source-linked map" }).click();
+  const created = await initial;
+  expect(created.status()).toBe(200);
+  expect(created.request().postDataJSON().sheets[0].rootTopic.children[1].href.target).toBe(original);
+  const old = topic(author, "Launch window");
+  await old.dblclick();
+  const field = author.locator(".ProseMirror[contenteditable=true]");
+  await field.fill("Pilot window");
+  const changed = put();
+  await field.press("Enter");
+  expect((await changed).status()).toBe(200);
+
+  await author.getByRole("button", { name: "Share", exact: true }).click();
+  const sharing = author.getByRole("dialog", { name: "Share Mind Map" });
+  await sharing.getByRole("button", { name: /^Can view/i }).click();
+  await sharing.getByRole("button", { name: "Create Invite Link" }).click();
+  const link = await sharing.locator("#lm-share-url").inputValue();
+  await sharing.getByRole("button", { name: "Close" }).click();
+  const memberContext = await browser.newContext(desktop);
+  try {
+    const member = await cloud.openPage(memberContext, "pilot-reviewer");
+    await member.goto(link);
+    await member.getByRole("button", { name: /Accept Invite|Accept invitation/i }).click();
+    const citation = `Pilot minutes · Lines 1–2 · ${original}\n\n- Launch window\n${first}`;
+    await expect(topic(member, "Pilot window").getByTitle(citation, { exact: true })).toHaveCount(1);
+    await expect(topic(member, "Release checklist")).toBeVisible();
+    await author.getByRole("button", { name: "Export", exact: true }).click();
+    const download = author.waitForEvent("download");
+    await author.getByRole("dialog", { name: "Import & Export" }).getByRole("button", { name: /Pitch Slides/ }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/\.pptx$/);
+    const path = testInfo.outputPath(file.suggestedFilename());
+    await file.saveAs(path);
+    const archive = unzipSync(await readFile(path));
+    const notes = Object.entries(archive).filter(([entry]) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(entry)).map(([, bytes]) => strFromU8(bytes));
+    expect(notes.some((note) => note.includes(first) && note.includes("Lines 1–2") && note.includes(original))).toBe(true);
+    expect(notes.some((note) => note.includes(second) && note.includes("Lines 4–5") && note.includes(original))).toBe(true);
+    const slideText = Object.entries(archive).filter(([entry]) => /^ppt\/slides\/slide\d+\.xml$/.test(entry)).map(([, bytes]) => strFromU8(bytes));
+    expect(slideText.some((slide) => slide.includes("Pilot window"))).toBe(true);
+    expect([sourceRequests, aiRequests]).toEqual([[], []]);
+  } finally { await memberContext.close(); }
+});
