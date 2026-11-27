@@ -9,7 +9,6 @@ import {
   generateId,
   getPalette,
   hex8ToCss,
-  isAllowedImageMimeType,
   richTextToPlainText,
   type LayoutBox,
   type MindmapLayoutResult,
@@ -28,6 +27,7 @@ import {
 } from "./clipboard.js";
 import { computePanToRevealNode, findNextTopicByArrow, type ArrowDirection } from "./navigation.js";
 import { resolveDropTarget, type DropIndicatorSide, type DropMode } from "./drop-target.js";
+import { processImageFileForTopic } from "./image-utils.js";
 import { NodeLayer } from "./NodeLayer.js";
 import { SvgLayer } from "./SvgLayer.js";
 import {
@@ -536,40 +536,37 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       const targetId = selectedTopicIds[0];
       if (!targetId || !e.clipboardData) return;
 
-      // 1. Image paste
+      // 1. Image paste (aspect-ratio preserving + WebP compression)
       const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
       if (file) {
         e.preventDefault();
-        if (!isAllowedImageMimeType(file.type)) {
-          reportRejection({
-            code: "UNSUPPORTED_IMAGE_MIME",
-            message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
-          });
-          return;
-        }
-        const mimeType = file.type;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = String(reader.result ?? "");
-          const base64 = dataUrl.split(",")[1];
-          if (!base64) return;
+        void processImageFileForTopic(file, file.type).then((res) => {
+          if (!res.ok) {
+            reportRejection({
+              code: "UNSUPPORTED_IMAGE_MIME",
+              message:
+                res.error === "IMAGE_TOO_LARGE"
+                  ? t.topic.imageTooLarge
+                  : t.topic.unsupportedImageMime,
+            });
+            return;
+          }
           const resourceId = generateId("img", deletedSet);
           dispatch({
             type: "topic/setImage",
             sheetId: sheet.id,
             topicId: targetId,
-            image: { resourceId, width: 180, height: 120, pos: "top" },
+            image: { resourceId, width: res.displayWidth, height: res.displayHeight, pos: "top" },
             asset: {
               resourceId,
-              mimeType,
-              width: 180,
-              height: 120,
-              sha256: resourceId,
-              dataBase64: base64,
+              mimeType: res.mimeType,
+              width: res.assetWidth,
+              height: res.assetHeight,
+              sha256: res.sha256,
+              dataBase64: res.dataBase64,
             },
           });
-        };
-        reader.readAsDataURL(file);
+        });
         return;
       }
 
@@ -607,7 +604,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       window.removeEventListener("cut", onCut);
       window.removeEventListener("paste", onPaste);
     };
-  }, [readOnly, editingTopicId, pitchMode, selectedTopicIds, sheet, doc.assets, deletedSet, dispatch, reportRejection, selectTopics]);
+  }, [readOnly, editingTopicId, pitchMode, selectedTopicIds, sheet, doc.assets, deletedSet, dispatch, reportRejection, selectTopics, t]);
 
   // Global keyboard matrix (with strict IME guard)
   useEffect(() => {

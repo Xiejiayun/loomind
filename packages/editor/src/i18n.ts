@@ -303,6 +303,8 @@ const zh = {
     italic: "斜体",
     strike: "删除线",
     highlight: "高亮",
+    unsupportedImageMime: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
+    imageTooLarge: "图片压缩后仍超过 512 KB，请裁剪或换用更小的图片。",
   },
   outliner: {
     title: "大纲",
@@ -656,6 +658,8 @@ const en: typeof zh = {
     italic: "Italic",
     strike: "Strikethrough",
     highlight: "Highlight",
+    unsupportedImageMime: "Only PNG, JPEG, WebP, or SVG images are supported.",
+    imageTooLarge: "Image still exceeds 512 KB after compression. Please use a smaller image.",
   },
   outliner: {
     title: "Outline",
