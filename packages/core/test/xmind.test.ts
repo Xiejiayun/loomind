@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { strToU8, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
   createDocument,
   createSheet,
@@ -12,6 +12,34 @@ import {
 } from "../src/index.js";
 
 describe("T5 XMind import/export fidelity & validation gate", () => {
+  it("reads third-party embedded images, attributed titles and source equations without Loomind extensions", () => {
+    const bytes = strToU8('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
+    const resource = "resources/drawing.svg";
+    const content = [{ id: "sheet", title: "Workbook", rootTopic: { id: "root", title: "A B",
+      attributedTitle: [{ text: "A", "fo:font-weight": "700" }, { text: " B", "fo:font-style": "italic" }],
+      image: { src: `xap:${resource}` }, extensions: [{ provider: "org.xmind.ui.mathJax", content: { content: "x^2" } }] } }];
+    const archive = { "content.json": strToU8(JSON.stringify(content)), [resource]: bytes };
+    const doc = importFromXMind(zipSync(archive));
+    const topic = doc.sheets[0].rootTopic;
+    expect(topic.title.content[0].content).toEqual([{ type: "text", text: "A", marks: [{ type: "bold" }] }, { type: "text", text: " B", marks: [{ type: "italic" }] }]);
+    expect(topic.equation?.latex).toBe("x^2");
+    const asset = doc.assets[topic.image!.resourceId];
+    expect(atob(asset.dataBase64)).toBe(strFromU8(bytes));
+    const exported = unzipSync(exportToXMind(doc));
+    const native = JSON.parse(strFromU8(exported["content.json"]));
+    const exportedPath = native[0].rootTopic.image.src.slice(4);
+    expect(exported[exportedPath]).toEqual(bytes);
+    expect(JSON.parse(strFromU8(exported["manifest.json"]))["file-entries"]).toHaveProperty([exportedPath]);
+    native[0].rootTopic.attributedTitle[0]["fo:font-weight"] = "400";
+    exported["content.json"] = strToU8(JSON.stringify(native));
+    const updated = importFromXMind(zipSync(exported)).sheets[0].rootTopic;
+    expect(updated.title.content[0].content![0].marks).toBeUndefined();
+    native[0].rootTopic.title = "Renamed in XMind";
+    exported["content.json"] = strToU8(JSON.stringify(native));
+    expect(richTextToPlainText(importFromXMind(zipSync(exported)).sheets[0].rootTopic.title)).toBe("Renamed in XMind");
+    expect(() => importFromXMind(zipSync({ "content.json": archive["content.json"] }))).toThrow(/Missing XMind image/);
+  });
+
   it("round-trips multi-sheet layouts, directions, spacings, tasks, nested branch summaries, notes, markers, floating topics, and relationships", () => {
     const nestedChild1 = createTopic("sub-1", "Sub 1", { task: { status: "done" }, markers: ["priority:1"] });
     const nestedChild2 = createTopic("sub-2", "Sub 2", { task: { status: "todo" }, note: { format: "markdown", text: "Sub note" } });

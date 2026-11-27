@@ -28,7 +28,8 @@ import {
   type MindmapTopic,
 } from "../model/document.js";
 import { validateDocumentInvariants } from "../model/invariants.js";
-import { MindmapDocumentSchema } from "../model/schema.js";
+import { MindmapDocumentSchema, MindmapThemeConfigSchema } from "../model/schema.js";
+import { imageReader, imageWriter, readTitle, titleRuns, type XMindImage } from "./xmind-content.js";
 
 const LOOMIND_EXT_PROVIDER = "loomind:v1";
 const ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
@@ -39,8 +40,11 @@ interface XMindExtension {
 }
 
 interface XMindTopicJson {
+  class?: string;
   id: string;
   title: string;
+  attributedTitle?: ReturnType<typeof titleRuns>;
+  image?: XMindImage;
   structureClass?: string;
   notes?: { plain?: { content?: string } };
   labels?: string[];
@@ -117,13 +121,15 @@ function topicToXMind(
   topic: MindmapTopic,
   summariesByParent: Map<string, MindmapSummary[]>,
   rangeBoundariesByParent: Map<string, MindmapBoundary[]>,
+  images: ReturnType<typeof imageWriter>,
   isRoot = false,
   sheet?: MindmapSheet,
 ): XMindTopicJson {
   const attached = topic.children.map((c) =>
-    topicToXMind(c, summariesByParent, rangeBoundariesByParent, false),
+    topicToXMind(c, summariesByParent, rangeBoundariesByParent, images),
   );
   const out: XMindTopicJson = {
+    class: "topic",
     id: topic.id,
     title: richTextToPlainText(topic.title),
   };
@@ -145,12 +151,23 @@ function topicToXMind(
   }
 
   const extContent: Record<string, unknown> = {};
+  const runs = titleRuns(topic.title);
+  if (runs) {
+    out.attributedTitle = runs;
+    extContent.richTitle = topic.title;
+  }
+  if (topic.image) {
+    const image = images.write(topic.image);
+    out.image = image.native;
+    extContent.image = image.meta;
+  }
   if (topic.task) extContent.task = topic.task;
   if (topic.subtitle) extContent.subtitle = topic.subtitle;
   if (topic.collapsed) extContent.collapsed = true;
   if (Object.keys(extContent).length > 0) {
     out.extensions = [{ provider: LOOMIND_EXT_PROVIDER, content: extContent }];
   }
+  if (topic.equation) (out.extensions ??= []).push({ provider: "org.xmind.ui.mathJax", content: { content: topic.equation.latex } });
 
   const childrenObj: NonNullable<XMindTopicJson["children"]> = {};
   if (attached.length > 0) childrenObj.attached = attached;
@@ -161,7 +178,7 @@ function topicToXMind(
   }
   if (isRoot && sheet && sheet.floatingTopics.length > 0) {
     childrenObj.detached = sheet.floatingTopics.map((f) =>
-      topicToXMind(f, summariesByParent, rangeBoundariesByParent, false),
+      topicToXMind(f, summariesByParent, rangeBoundariesByParent, images),
     );
   }
 
@@ -169,7 +186,7 @@ function topicToXMind(
   const ownSummaries = summariesByParent.get(topic.id) ?? [];
   if (ownSummaries.length > 0) {
     childrenObj.summary = ownSummaries.map((s) =>
-      topicToXMind(s.topic, summariesByParent, rangeBoundariesByParent, false),
+      topicToXMind(s.topic, summariesByParent, rangeBoundariesByParent, images),
     );
     out.summaries = ownSummaries.map((s) => ({
       id: s.id,
@@ -249,10 +266,11 @@ function xmindToTopic(
   ids: IdAllocator,
   collectedSummaries: MindmapSummary[],
   collectedBoundaries: MindmapBoundary[],
+  images: ReturnType<typeof imageReader>,
 ): MindmapTopic {
   const topicId = ids.allocate(raw.id, "xm");
   const children = (raw.children?.attached ?? []).map((c) =>
-    xmindToTopic(c, ids, collectedSummaries, collectedBoundaries),
+    xmindToTopic(c, ids, collectedSummaries, collectedBoundaries, images),
   );
   const calloutRaw = raw.children?.callout?.[0];
   const ext = readLoomindExt(raw.extensions);
@@ -269,8 +287,12 @@ function xmindToTopic(
     ? raw.markers.map((m) => m?.markerId).filter((id): id is string => typeof id === "string" && id.length > 0)
     : undefined;
 
-  const topic = createTopic(topicId, typeof raw.title === "string" ? raw.title : "", {
+  const latex = Array.isArray(raw.extensions) ? raw.extensions.find((entry) => entry?.provider === "org.xmind.ui.mathJax")?.content?.content : undefined;
+  const title = readTitle(typeof raw.title === "string" ? raw.title : "", raw.attributedTitle, ext?.richTitle);
+  const topic = createTopic(topicId, title, {
     children,
+    ...(typeof latex === "string" ? { equation: { latex } } : {}),
+    ...(raw.image && !(raw.image.isMathJaxImage && typeof latex === "string") ? { image: images.read(raw.image, ext?.image) } : {}),
     ...(raw.notes?.plain?.content ? { note: { format: "markdown", text: raw.notes.plain.content } } : {}),
     ...(sanitizedLabels && sanitizedLabels.length > 0 ? { labels: sanitizedLabels } : {}),
     ...(markers && markers.length > 0 ? { markers } : {}),
@@ -294,7 +316,7 @@ function xmindToTopic(
   if (Array.isArray(raw.summaries) && raw.summaries.length > 0 && children.length > 0) {
     const summaryTopicsByRawId = new Map<string, MindmapTopic>();
     for (const st of raw.children?.summary ?? []) {
-      const converted = xmindToTopic(st, ids, collectedSummaries, collectedBoundaries);
+      const converted = xmindToTopic(st, ids, collectedSummaries, collectedBoundaries, images);
       if (typeof st.id === "string" && st.id.trim()) {
         summaryTopicsByRawId.set(st.id.trim(), converted);
       }
@@ -344,6 +366,7 @@ function xmindToTopic(
 }
 
 export function exportToXMind(doc: MindmapDocument): Uint8Array {
+  const images = imageWriter(doc.assets);
   const contentJson: XMindSheetJson[] = doc.sheets.map((sheet) => {
     const summariesByParent = new Map<string, MindmapSummary[]>();
     for (const s of sheet.summaries) {
@@ -366,6 +389,7 @@ export function exportToXMind(doc: MindmapDocument): Uint8Array {
 
     const sheetExt: Record<string, unknown> = {
       structure: sheet.structure,
+      ...(sheet.id === doc.activeSheetId ? { active: true, documentTheme: doc.theme } : {}),
       direction: sheet.direction,
       spacing: sheet.spacing,
       ...(sheet.theme ? { theme: sheet.theme } : {}),
@@ -374,8 +398,9 @@ export function exportToXMind(doc: MindmapDocument): Uint8Array {
 
     return {
       id: sheet.id,
+      class: "sheet",
       title: sheet.title,
-      rootTopic: topicToXMind(sheet.rootTopic, summariesByParent, rangeBoundariesByParent, true, sheet),
+      rootTopic: topicToXMind(sheet.rootTopic, summariesByParent, rangeBoundariesByParent, images, true, sheet),
       relationships: sheet.relationships.map((r) => ({
         id: r.id,
         end1Id: r.fromId,
@@ -390,12 +415,14 @@ export function exportToXMind(doc: MindmapDocument): Uint8Array {
     "file-entries": {
       "content.json": {},
       "metadata.json": {},
+      ...Object.fromEntries(Object.keys(images.resources).map((path) => [path, {}])),
     },
   };
 
   return zipSync({
+    ...images.resources,
     "content.json": strToU8(JSON.stringify(contentJson, null, 2)),
-    "metadata.json": strToU8(JSON.stringify({ creator: { name: "Loomind", version: "2.0" } })),
+    "metadata.json": strToU8(JSON.stringify({ creator: { name: "Loomind", version: "2.0" }, dataStructureVersion: "2" })),
     "manifest.json": strToU8(JSON.stringify(manifest)),
   });
 }
@@ -435,6 +462,9 @@ export function importFromXMind(zipBytes: Uint8Array): MindmapDocument {
   }
 
   const ids = new IdAllocator();
+  const images = imageReader(entries);
+  let activeSheetId: string | undefined;
+  let documentTheme: MindmapDocument["theme"] | undefined;
   const sheets: MindmapSheet[] = (rawSheets as XMindSheetJson[]).map((rs, idx) => {
     if (!rs || typeof rs !== "object" || !rs.rootTopic || typeof rs.rootTopic !== "object") {
       throw new Error(`Invalid .xmind sheet at index ${idx}: missing rootTopic`);
@@ -444,15 +474,21 @@ export function importFromXMind(zipBytes: Uint8Array): MindmapDocument {
     const summaries: MindmapSummary[] = [];
     const boundaries: MindmapBoundary[] = [];
 
-    const rootTopic = xmindToTopic(rs.rootTopic, ids, summaries, boundaries);
+    const rootTopic = xmindToTopic(rs.rootTopic, ids, summaries, boundaries, images);
     const floatingTopics = (rs.rootTopic.children?.detached ?? []).map((f) =>
-      xmindToTopic(f, ids, summaries, boundaries),
+      xmindToTopic(f, ids, summaries, boundaries, images),
     );
 
     const sheetTopicIds = collectSheetTopicIds({ rootTopic, floatingTopics, summaries });
 
     // Restore subtree boundaries from loomind:v1 extension if valid
     const sheetExt = readLoomindExt(rs.extensions);
+    if (sheetExt?.active === true && !activeSheetId) {
+      activeSheetId = sheetId;
+      const theme = MindmapThemeConfigSchema.safeParse(sheetExt.documentTheme);
+      if (theme.success) documentTheme = theme.data;
+    }
+    const sheetTheme = MindmapThemeConfigSchema.partial().safeParse(sheetExt?.theme);
     if (Array.isArray(sheetExt?.subtreeBoundaries)) {
       for (const rawB of sheetExt.subtreeBoundaries as MindmapBoundary[]) {
         if (rawB?.target?.kind === "subtree") {
@@ -508,6 +544,7 @@ export function importFromXMind(zipBytes: Uint8Array): MindmapDocument {
       structure,
       direction,
       spacing,
+      ...(sheetTheme.success ? { theme: sheetTheme.data } : {}),
       floatingTopics,
       summaries,
       boundaries,
@@ -515,7 +552,9 @@ export function importFromXMind(zipBytes: Uint8Array): MindmapDocument {
     });
   });
 
-  const doc = createDocument(sheets);
+  const doc = createDocument(sheets, documentTheme);
+  if (activeSheetId) doc.activeSheetId = activeSheetId;
+  doc.assets = images.assets;
   const parsed = MindmapDocumentSchema.safeParse(doc);
   if (!parsed.success) {
     throw new Error(`Imported .xmind failed schema validation: ${parsed.error.message}`);

@@ -58,7 +58,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Dual-View Sync**: Switch seamlessly between the infinite canvas, docked outline sidebar (`⌘O`), and fullscreen Outliner, complete with Zen focus mode, Markdown note cards, and task filtering.
 
 ### Lossless Import & Export
-- **`.xmind`**: Round-trip support for topics, notes, tasks, layouts, summaries, floating topics, and relationships.
+- **`.xmind`**: Exchanges topics, notes, tasks, layouts, summaries, floating topics and relationships. Workbooks now include embedded PNG/JPEG/WebP/SVG resources, editable equation source and styled titles. Other clients can reinterpret formatting; this is interchange, not a full-document backup. A workbook from Xmind's generator is tested, but desktop edit-and-save fidelity is not verified.
 - **Markdown / OPML 2.0**: Bi-directional conversion preserving hierarchy, multi-root OPML documents, notes, and task states.
 - **Pure Vector SVG / Vector PDF / PNG / PPTX**: Native `<text>/<tspan>` SVG serialization with zero `foreignObject` distortion.
 
