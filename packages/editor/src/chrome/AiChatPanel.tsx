@@ -3,15 +3,10 @@ import {
   ArrowUp,
   CheckCircle2,
   Crosshair,
-  ListChecks,
-  Palette,
   Plus,
   RotateCcw,
   Sparkles,
   Square,
-  SquareDashedBottom,
-  FileText,
-  Braces,
   X,
 } from "lucide-react";
 import {
@@ -53,15 +48,6 @@ interface AiChatPanelProps {
   onClose: () => void;
 }
 
-const QUICK_ACTION_ICONS: Array<{ kind: NodeAiActionKind; icon: React.ReactNode }> = [
-  { kind: "expand", icon: <Sparkles className="h-3 w-3" /> },
-  { kind: "tasks", icon: <ListChecks className="h-3 w-3" /> },
-  { kind: "summarize", icon: <Braces className="h-3 w-3" /> },
-  { kind: "elaborateNote", icon: <FileText className="h-3 w-3" /> },
-  { kind: "cluster", icon: <SquareDashedBottom className="h-3 w-3" /> },
-  { kind: "restyle", icon: <Palette className="h-3 w-3" /> },
-];
-
 export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   open,
   isDark,
@@ -81,17 +67,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const undo = useMindmapStore((s) => s.undo);
   const canUndo = useMindmapStore((s) => s.canUndo);
   const { locale, t } = useEditorI18n();
-
-  const quickActions = useMemo(
-    () =>
-      QUICK_ACTION_ICONS.map(({ kind, icon }) => ({
-        kind,
-        icon,
-        label: t.aiChat.quickActions[kind].label,
-        prompt: t.aiChat.quickActions[kind].prompt,
-      })),
-    [t],
-  );
 
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -155,7 +130,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       ? selectedTopicIds.length > 1
         ? t.aiChat.multiContext(activeTopicTitle, selectedTopicIds.length)
         : activeTopicTitle
-      : t.aiChat.fullMapContext;
+      : undefined;
 
     const userMsgId = `u-${Date.now()}`;
     const assistantMsgId = `a-${Date.now() + 1}`;
@@ -287,7 +262,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   if (!open) return null;
 
   const borderCls = isDark ? "border-white/[0.075]" : "border-slate-900/[0.08]";
-  const subtleTextCls = isDark ? "text-[#9ca3b0]" : "text-[#525b6b]";
   const mutedTextCls = isDark ? "text-[#646b78]" : "text-[#8c95a4]";
 
   const content = (
@@ -422,7 +396,11 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       {/* Message Stream */}
       <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-3.5">
         {messages.length === 0 ? (
-          <div className="flex flex-col pt-4">
+          <div
+            className={`flex min-h-full flex-col justify-center ${
+              topicMap.size <= 1 ? "" : "items-center text-center"
+            }`}
+          >
             <div
               className={`mb-3 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border ${
                 isDark
@@ -433,12 +411,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               <Sparkles className="h-4 w-4" />
             </div>
             <p className="text-[13.5px] font-semibold">{t.aiChat.emptyTitle}</p>
-            <p className={`mt-1 text-[12px] leading-relaxed ${subtleTextCls}`}>
-              {t.aiChat.emptyDesc}
-            </p>
-            <div className="mt-4 grid grid-cols-1 gap-1.5">
-              {topicMap.size <= 1 ? (
-                t.aiChat.starterIdeas.map((idea) => (
+            {topicMap.size <= 1 && (
+              <div className="mt-4 grid grid-cols-1 gap-1.5">
+                {t.aiChat.starterIdeas.map((idea) => (
                   <button
                     key={idea}
                     type="button"
@@ -456,29 +431,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                     </span>
                     <ArrowUp className="h-3 w-3 shrink-0 rotate-45 opacity-0 transition group-hover:opacity-60" />
                   </button>
-                ))
-              ) : (
-                quickActions.slice(0, 4).map((act) => (
-                  <button
-                    key={act.kind}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void executePrompt(act.prompt, act.kind)}
-                    className={`group flex items-center justify-between gap-2 rounded-[7px] border px-2.5 py-2 text-left text-[12px] transition ${
-                      isDark
-                        ? "border-white/[0.075] bg-[#101114] text-[#d5d9e2] hover:border-white/[0.16] hover:bg-[#1c1f26]"
-                        : "border-slate-900/[0.08] bg-[#f7f8fa] text-[#2c3340] hover:border-slate-900/[0.16] hover:bg-slate-100"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="opacity-70">{act.icon}</span>
-                      <span>{act.prompt}</span>
-                    </span>
-                    <ArrowUp className="h-3 w-3 shrink-0 rotate-45 opacity-0 transition group-hover:opacity-60" />
-                  </button>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           messages.map((msg) => (
@@ -568,9 +523,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
       {/* Composer Footer */}
       <div className={`shrink-0 border-t p-2.5 ${borderCls}`}>
-        {/* Context Chip Bar */}
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
-          {activeTopicTitle ? (
+        {/* Context Chip Bar (only when a node is selected) */}
+        {activeTopicTitle && (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <span
               className={`inline-flex max-w-full items-center gap-1 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium ${
                 isDark
@@ -591,20 +546,12 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 <X className="h-3 w-3" />
               </button>
             </span>
-          ) : (
-            <span
-              className={`inline-flex items-center rounded-[5px] px-2 py-0.5 text-[11px] ${
-                isDark ? "bg-white/[0.06] text-[#9ca3b0]" : "bg-slate-100 text-[#525b6b]"
-              }`}
-            >
-              {t.aiChat.fullMapContext}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Input Box */}
         <div
-          className={`rounded-[8px] border transition ${
+          className={`flex items-end gap-1.5 rounded-[8px] border px-2.5 py-2 transition ${
             isDark
               ? "border-white/[0.1] bg-[#101114] focus-within:border-white/[0.26]"
               : "border-slate-900/[0.12] bg-[#f7f8fa] focus-within:border-slate-900/[0.3]"
@@ -626,56 +573,37 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 ? t.aiChat.inputPlaceholderTopic(activeTopicTitle)
                 : t.aiChat.inputPlaceholderFull
             }
-            className="block w-full resize-none bg-transparent px-2.5 pt-2 text-[12.5px] leading-relaxed outline-none placeholder:text-[#646b78]"
+            className="block min-w-0 flex-1 resize-none bg-transparent text-[12.5px] leading-relaxed outline-none placeholder:text-[#646b78]"
           />
-          <div className="flex items-center justify-between gap-1.5 px-2 pb-2 pt-1">
-            <div className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {quickActions.slice(0, 3).map((act) => (
-                <button
-                  key={act.kind}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void executePrompt(act.prompt, act.kind)}
-                  className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-[5px] border px-2 py-0.5 text-[10.5px] transition ${
-                    isDark
-                      ? "border-white/[0.08] bg-white/[0.03] text-[#9ca3b0] hover:border-white/[0.16] hover:bg-white/[0.07] hover:text-white"
-                      : "border-slate-900/[0.08] bg-white text-[#525b6b] hover:border-slate-900/[0.16] hover:text-[#111318]"
-                  }`}
-                >
-                  {act.label}
-                </button>
-              ))}
-            </div>
-            {busy ? (
-              <button
-                type="button"
-                onClick={() => abortRef.current?.abort()}
-                aria-label={t.aiChat.stopAria}
-                title={t.aiChat.stopAria}
-                className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition ${
-                  isDark
-                    ? "bg-red-500/25 text-red-200 hover:bg-red-500/35"
-                    : "bg-red-600 text-white hover:bg-red-700"
-                }`}
-              >
-                <Square className="h-3 w-3 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={!input.trim()}
-                onClick={() => void executePrompt(input)}
-                aria-label={t.aiChat.sendAria}
-                className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition disabled:opacity-35 ${
-                  isDark
-                    ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"
-                    : "bg-[#14161b] text-white hover:bg-[#282c35]"
-                }`}
-              >
-                <ArrowUp className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+          {busy ? (
+            <button
+              type="button"
+              onClick={() => abortRef.current?.abort()}
+              aria-label={t.aiChat.stopAria}
+              title={t.aiChat.stopAria}
+              className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition ${
+                isDark
+                  ? "bg-red-500/25 text-red-200 hover:bg-red-500/35"
+                  : "bg-red-600 text-white hover:bg-red-700"
+              }`}
+            >
+              <Square className="h-3 w-3 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!input.trim()}
+              onClick={() => void executePrompt(input)}
+              aria-label={t.aiChat.sendAria}
+              className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-[5px] transition disabled:opacity-35 ${
+                isDark
+                  ? "bg-[#ededef] text-[#0b0c0e] hover:bg-white"
+                  : "bg-[#14161b] text-white hover:bg-[#282c35]"
+              }`}
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </>

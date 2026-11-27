@@ -83,7 +83,6 @@ const zh = {
     newChat: "新对话",
     closeAria: "关闭 AI 面板",
     emptyTitle: "边聊边构建你的导图",
-    emptyDesc: "选中画布任意节点自动带入上下文；发送指令后画布实时更新，随时可一键撤销。",
     starterIdeas: [
       "帮我拆解「设计一套安静的软件」最核心的四个原则",
       "梳理一套个人知识编织系统的核心结构",
@@ -97,7 +96,6 @@ const zh = {
       cluster: { label: "聚类外框", prompt: "为当前分支添加语义聚类外框" },
       restyle: { label: "智能排版", prompt: "根据主题内容智能推荐最适合的结构与配色" },
     },
-    fullMapContext: "全图上下文",
     multiContext: (title: string, count: number) => `${title} 等 ${count} 个节点`,
     pending: "正在分析并更新导图…",
     canvasUpdated: (summary: string) => `画布已更新 · ${summary}`,
@@ -423,7 +421,6 @@ const en: typeof zh = {
     newChat: "New chat",
     closeAria: "Close AI panel",
     emptyTitle: "Build your map as you chat",
-    emptyDesc: "Select any node to attach context automatically. Updates stream live to the canvas and can be undone anytime.",
     starterIdeas: [
       "Help me unpack the four core principles of designing calm software",
       "Map out a personal knowledge-weaving architecture",
@@ -437,7 +434,6 @@ const en: typeof zh = {
       cluster: { label: "Cluster", prompt: "Add a semantic cluster boundary to this branch" },
       restyle: { label: "Restyle", prompt: "Recommend the best layout and palette for this topic" },
     },
-    fullMapContext: "Full map context",
     multiContext: (title: string, count: number) => `${title} +${count - 1} more`,
     pending: "Analyzing and updating map…",
     canvasUpdated: (summary: string) => `Canvas updated · ${summary}`,
