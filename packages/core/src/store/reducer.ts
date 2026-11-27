@@ -1,4 +1,5 @@
 import { enablePatches, produceWithPatches, type Patch } from "immer";
+import { getLocale } from "../i18n.js";
 import {
   createRichText,
   createTopic,
@@ -7,6 +8,7 @@ import {
   type MindmapDocument,
   type MindmapSheet,
   type MindmapTopic,
+  type TopicShape,
   type TopicStyleOverride,
 } from "../model/document.js";
 import type { MindmapCommand } from "./commands.js";
@@ -99,6 +101,97 @@ function normalizeStyle(style?: Partial<TopicStyleOverride>): Partial<TopicStyle
   if (out.strokeColor) out.strokeColor = normalizeHexColor(out.strokeColor);
   if (out.textColor) out.textColor = normalizeHexColor(out.textColor);
   return out;
+}
+
+interface InheritedTopicVisual {
+  shape?: TopicShape;
+  style?: TopicStyleOverride;
+}
+
+function extractCustomVisual(topic: MindmapTopic): InheritedTopicVisual | null {
+  const hasShape = topic.shape !== undefined && topic.shape !== "auto";
+  const hasStyle = topic.style !== undefined && Object.keys(topic.style).length > 0;
+  if (!hasShape && !hasStyle) return null;
+  return {
+    ...(hasShape ? { shape: topic.shape } : {}),
+    ...(hasStyle ? { style: { ...topic.style } } : {}),
+  };
+}
+
+function findTopicDepthInTree(root: MindmapTopic, targetId: string, depth = 0): number {
+  if (root.id === targetId) return depth;
+  for (const child of root.children) {
+    const found = findTopicDepthInTree(child, targetId, depth + 1);
+    if (found >= 0) return found;
+  }
+  return -1;
+}
+
+function collectTopicsAtDepth(root: MindmapTopic, targetDepth: number, depth = 0, out: MindmapTopic[] = []): MindmapTopic[] {
+  if (depth === targetDepth) {
+    out.push(root);
+    return out;
+  }
+  for (const child of root.children) {
+    collectTopicsAtDepth(child, targetDepth, depth + 1, out);
+  }
+  return out;
+}
+
+function pickMostFrequentVisual(topics: MindmapTopic[]): InheritedTopicVisual | null {
+  const counts = new Map<string, { count: number; visual: InheritedTopicVisual }>();
+  for (const topic of topics) {
+    const visual = extractCustomVisual(topic);
+    if (!visual) continue;
+    const key = JSON.stringify(visual);
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { count: 1, visual });
+  }
+  let best: { count: number; visual: InheritedTopicVisual } | null = null;
+  for (const entry of counts.values()) {
+    if (!best || entry.count > best.count) best = entry;
+  }
+  return best ? best.visual : null;
+}
+
+/**
+ * Infers custom shape/style to inherit for a newly added child so `Tab` matches
+ * sibling / same-level styling (e.g. FormatPanel "Same Level" or "All Nodes").
+ */
+function inferChildVisualStyle(sheet: MindmapSheet, parentLoc: TopicLocation): InheritedTopicVisual | null {
+  const siblings = parentLoc.topic.children;
+  if (siblings.length > 0) {
+    const styled = siblings.filter((c) => extractCustomVisual(c) !== null);
+    if (styled.length > 0 && styled.length * 2 >= siblings.length) {
+      return extractCustomVisual(styled[styled.length - 1]);
+    }
+    return null;
+  }
+
+  // First child under this parent: check same-depth peers across the sheet
+  const parentDepth = findTopicDepthInTree(sheet.rootTopic, parentLoc.topic.id);
+  if (parentDepth >= 0) {
+    const sameDepth = collectTopicsAtDepth(sheet.rootTopic, parentDepth + 1);
+    if (sameDepth.length > 0) {
+      const styled = sameDepth.filter((t) => extractCustomVisual(t) !== null);
+      if (styled.length > 0 && styled.length * 2 >= sameDepth.length) {
+        return pickMostFrequentVisual(styled);
+      }
+      return null;
+    }
+
+    // Brand-new depth level: only inherit from parent when parent & grandparent share identical custom style ("All Nodes")
+    if (parentLoc.parent) {
+      const parentVis = extractCustomVisual(parentLoc.topic);
+      const grandVis = extractCustomVisual(parentLoc.parent);
+      if (parentVis && grandVis && JSON.stringify(parentVis) === JSON.stringify(grandVis)) {
+        return parentVis;
+      }
+    }
+  }
+
+  return null;
 }
 
 function cascadeCleanup(doc: MindmapDocument, sheet: MindmapSheet, initialRemovedIds: Set<string>): void {
@@ -357,8 +450,12 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
       case "topic/addChild": {
         const loc = findTopicLocation(sheet, cmd.parentId);
         if (!loc) break;
+        const inherited = inferChildVisualStyle(sheet, loc);
+        const defaultTitle = getLocale() === "en" ? "Subtopic" : "子主题";
         loc.topic.collapsed = false;
-        loc.topic.children.push(createTopic(cmd.newId, cmd.title ?? createRichText("子主题")));
+        loc.topic.children.push(
+          createTopic(cmd.newId, cmd.title ?? createRichText(defaultTitle), inherited ?? undefined),
+        );
         dirtyTopicIds.add(cmd.parentId);
         dirtyTopicIds.add(cmd.newId);
         break;
@@ -366,8 +463,14 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
       case "topic/addSibling": {
         const loc = findTopicLocation(sheet, cmd.targetId);
         if (!loc || !loc.parent) break;
+        const inherited = extractCustomVisual(loc.topic);
+        const defaultTitle = getLocale() === "en" ? "Branch Topic" : "分支主题";
         const insertIdx = cmd.position === "before" ? loc.index : loc.index + 1;
-        loc.container.splice(insertIdx, 0, createTopic(cmd.newId, cmd.title ?? createRichText("分支主题")));
+        loc.container.splice(
+          insertIdx,
+          0,
+          createTopic(cmd.newId, cmd.title ?? createRichText(defaultTitle), inherited ?? undefined),
+        );
         for (const s of sheet.summaries) {
           if (s.parentId === loc.parent.id) {
             if (insertIdx <= s.startIndex) {
@@ -385,7 +488,10 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
       case "topic/addParent": {
         const loc = findTopicLocation(sheet, cmd.targetId);
         if (!loc || !loc.parent) break;
-        const wrapped = createTopic(cmd.newId, cmd.title ?? createRichText("父主题"), {
+        const inherited = extractCustomVisual(loc.topic);
+        const defaultTitle = getLocale() === "en" ? "Parent Topic" : "父主题";
+        const wrapped = createTopic(cmd.newId, cmd.title ?? createRichText(defaultTitle), {
+          ...inherited,
           children: [loc.topic],
         });
         loc.container.splice(loc.index, 1, wrapped);
@@ -558,8 +664,9 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
         break;
       }
       case "topic/addFloating": {
+        const defaultTitle = getLocale() === "en" ? "Floating Topic" : "自由主题";
         sheet.floatingTopics.push(
-          createTopic(cmd.newId, cmd.title ?? createRichText("自由主题"), {
+          createTopic(cmd.newId, cmd.title ?? createRichText(defaultTitle), {
             floatingPos: { x: quantizeCoord(cmd.pos.x), y: quantizeCoord(cmd.pos.y) },
           }),
         );
