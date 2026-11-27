@@ -1,13 +1,79 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  createDocument,
   createRichText,
+  createSheet,
+  createTopic,
   getTemplate,
+  LocalImmerSyncAdapter,
   richTextToPlainText,
   validateDocumentInvariants,
 } from "../src/index.js";
 import { LoroSyncAdapter } from "../src/store/loro-adapter.js";
 
 describe("LoroSyncAdapter (M4 CRDT collaborative sync)", () => {
+  it("commits a tree title to peers and history without replacing untouched branches", () => {
+    const adapter = new LoroSyncAdapter(getTemplate("blank-organic").create(), 1n);
+    const peer = LoroSyncAdapter.fromSnapshot(adapter.exportSnapshot(), 2n);
+    const before = adapter.getDocument();
+    const [target, sibling] = before.sheets[0].rootTopic.children;
+    const title = createRichText("Updated\nleaf");
+    const changed = vi.fn();
+    adapter.subscribe(changed);
+
+    adapter.applyCommand({ type: "topic/setTitle", sheetId: before.activeSheetId, topicId: target.id, title });
+    const after = adapter.getDocument();
+    const children = after.sheets[0].rootTopic.children;
+    expect(children[0]).toEqual({ ...target, title });
+    expect(children[1]).toBe(sibling);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledWith(after, new Set([target.id]));
+
+    peer.importUpdates(adapter.exportUpdates(peer.getVersion()));
+    expect(peer.getDocument()).toEqual(after);
+    adapter.undo();
+    expect(adapter.getDocument()).toEqual(before);
+    adapter.redo();
+    expect(adapter.getDocument()).toEqual(after);
+  });
+
+  it("round-trips floating and summary titles stored outside the Loro tree", () => {
+    const root = createTopic("root", "Root", {
+      children: [createTopic("first", "First"), createTopic("last", "Last")],
+    });
+    const sheet = createSheet("sheet", "Map", root, {
+      floatingTopics: [createTopic("floating", "Floating", { floatingPos: { x: 10, y: 20 } })],
+      summaries: [{
+        id: "span", parentId: root.id, startIndex: 0, endIndex: 1,
+        brace: "curly", topic: createTopic("summary", "Summary"),
+      }],
+    });
+    const adapter = new LoroSyncAdapter(createDocument([sheet]), 1n);
+    const expected = new LocalImmerSyncAdapter(adapter.getDocument());
+    const peer = LoroSyncAdapter.fromSnapshot(adapter.exportSnapshot(), 2n);
+
+    for (const topicId of ["floating", "summary", root.id]) {
+      const command = {
+        type: "topic/setTitle", sheetId: sheet.id, topicId, title: createRichText(`New ${topicId}`),
+      } as const;
+      expected.applyCommand(command);
+      adapter.applyCommand(command);
+      peer.importUpdates(adapter.exportUpdates(peer.getVersion()));
+      expect(peer.getDocument()).toEqual(expected.getDocument());
+      expect(adapter.getDocument()).toEqual(expected.getDocument());
+    }
+  });
+
+  it("does not add undo history for missing topics or identical serialized titles", () => {
+    const adapter = new LoroSyncAdapter(getTemplate("blank-organic").create(), 1n);
+    const { activeSheetId: sheetId, sheets } = adapter.getDocument();
+    const root = sheets[0].rootTopic;
+    for (const topicId of ["missing", root.id]) {
+      adapter.applyCommand({ type: "topic/setTitle", sheetId, topicId, title: structuredClone(root.title) });
+    }
+    expect(adapter.canUndo()).toBe(false);
+  });
+
   it("synchronizes concurrent tree edits & reparents across two peers without cycles", () => {
     const initial = getTemplate("blank-organic").create();
     const peerA = new LoroSyncAdapter(initial, 1n);

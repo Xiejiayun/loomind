@@ -112,6 +112,9 @@ pnpm typecheck
 # Run unit & Worker D1 tests (Vitest)
 pnpm test
 
+# Benchmark collaborative leaf renames on 1,001- and 3,001-topic maps (command time only)
+pnpm exec vitest bench --run packages/core/test/loro-rename.bench.ts
+
 # Build all packages and the web app
 pnpm build
 ```
