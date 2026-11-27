@@ -17,6 +17,15 @@ import {
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
+import {
+  buildTakenTopicIds,
+  cloneTopicWithFreshIds,
+  deserializeClipboardPayload,
+  getInternalTopicClipboard,
+  LOOMIND_CLIPBOARD_MIME,
+  serializeTopicsForClipboard,
+  setInternalTopicClipboard,
+} from "./clipboard.js";
 import { computePanToRevealNode, findNextTopicByArrow, type ArrowDirection } from "./navigation.js";
 import { NodeLayer } from "./NodeLayer.js";
 import { SvgLayer } from "./SvgLayer.js";
@@ -44,11 +53,12 @@ interface HybridCanvasProps {
   appearance?: "dark" | "light";
   viewportRef?: React.RefObject<HTMLDivElement | null>;
   layout: MindmapLayoutResult;
+  readOnly?: boolean;
   onOpenContextMenu?: (topicId: string, pos: { x: number; y: number }) => void;
   onOpenAi?: () => void;
 }
 
-export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef, appearance, onOpenContextMenu, onOpenAi }) => {
+export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef, appearance, readOnly = false, onOpenContextMenu, onOpenAi }) => {
   const localRef = useRef<HTMLDivElement>(null);
   const containerRef = viewportRef ?? localRef;
   const worldRef = useRef<HTMLDivElement>(null);
@@ -455,49 +465,123 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
     }
   };
 
-  // Clipboard image paste (Ctrl+V) onto selected topic
+  // Clipboard Copy / Cut / Paste (Topics, Markdown/Multi-line text, and Images)
   useEffect(() => {
+    const isInputFocused = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || Boolean(el?.isContentEditable);
+    };
+
+    const hasActiveTextSelection = () => {
+      const sel = window.getSelection();
+      return Boolean(sel && sel.toString().length > 0);
+    };
+
+    const onCopy = (e: ClipboardEvent) => {
+      if (editingTopicId || pitchMode || isInputFocused() || hasActiveTextSelection()) return;
+      if (selectedTopicIds.length === 0) return;
+      const bundle = serializeTopicsForClipboard(sheet, selectedTopicIds, doc.assets);
+      if (!bundle) return;
+      e.preventDefault();
+      setInternalTopicClipboard(bundle);
+      e.clipboardData?.setData(LOOMIND_CLIPBOARD_MIME, bundle.json);
+      e.clipboardData?.setData("text/plain", bundle.text);
+    };
+
+    const onCut = (e: ClipboardEvent) => {
+      if (readOnly || editingTopicId || pitchMode || isInputFocused() || hasActiveTextSelection()) return;
+      if (selectedTopicIds.length === 0) return;
+      const bundle = serializeTopicsForClipboard(sheet, selectedTopicIds, doc.assets);
+      if (!bundle) return;
+      e.preventDefault();
+      setInternalTopicClipboard(bundle);
+      e.clipboardData?.setData(LOOMIND_CLIPBOARD_MIME, bundle.json);
+      e.clipboardData?.setData("text/plain", bundle.text);
+      const deletable = selectedTopicIds.filter((id) => id !== sheet.rootTopic.id);
+      if (deletable.length > 0) {
+        const firstParent = findTopicLocation(sheet, deletable[0])?.parent?.id ?? sheet.rootTopic.id;
+        dispatch({ type: "topic/delete", sheetId: sheet.id, topicIds: deletable });
+        selectTopics([firstParent]);
+      }
+    };
+
     const onPaste = (e: ClipboardEvent) => {
-      if (editingTopicId) return;
+      if (readOnly || editingTopicId || pitchMode || isInputFocused()) return;
       const targetId = selectedTopicIds[0];
       if (!targetId || !e.clipboardData) return;
+
+      // 1. Image paste
       const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
-      if (!file) return;
-      e.preventDefault();
-      if (!isAllowedImageMimeType(file.type)) {
-        reportRejection({
-          code: "UNSUPPORTED_IMAGE_MIME",
-          message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
-        });
+      if (file) {
+        e.preventDefault();
+        if (!isAllowedImageMimeType(file.type)) {
+          reportRejection({
+            code: "UNSUPPORTED_IMAGE_MIME",
+            message: "仅支持 PNG、JPEG、WebP 或 SVG 图片格式。",
+          });
+          return;
+        }
+        const mimeType = file.type;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result ?? "");
+          const base64 = dataUrl.split(",")[1];
+          if (!base64) return;
+          const resourceId = generateId("img", deletedSet);
+          dispatch({
+            type: "topic/setImage",
+            sheetId: sheet.id,
+            topicId: targetId,
+            image: { resourceId, width: 180, height: 120, pos: "top" },
+            asset: {
+              resourceId,
+              mimeType,
+              width: 180,
+              height: 120,
+              sha256: resourceId,
+              dataBase64: base64,
+            },
+          });
+        };
+        reader.readAsDataURL(file);
         return;
       }
-      const mimeType = file.type;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = String(reader.result ?? "");
-        const base64 = dataUrl.split(",")[1];
-        if (!base64) return;
-        const resourceId = generateId("img", deletedSet);
-        dispatch({
-          type: "topic/setImage",
-          sheetId: sheet.id,
-          topicId: targetId,
-          image: { resourceId, width: 180, height: 120, pos: "top" },
-          asset: {
-            resourceId,
-            mimeType,
-            width: 180,
-            height: 120,
-            sha256: resourceId,
-            dataBase64: base64,
-          },
-        });
-      };
-      reader.readAsDataURL(file);
+
+      // 2. Structured topic subtree or multi-line / Markdown text paste
+      const customJson = e.clipboardData.getData(LOOMIND_CLIPBOARD_MIME);
+      const plainText = e.clipboardData.getData("text/plain");
+      const takenIds = buildTakenTopicIds(sheet);
+      const payload = deserializeClipboardPayload({
+        customJson,
+        plainText,
+        internalFallback: getInternalTopicClipboard(),
+        deletedIds: deletedSet,
+        takenIds,
+      });
+      if (!payload || payload.topics.length === 0) return;
+
+      e.preventDefault();
+      const rejected = dispatch({
+        type: "topic/insertSubtrees",
+        sheetId: sheet.id,
+        parentId: targetId,
+        topics: payload.topics,
+        assets: payload.assets,
+      });
+      if (!rejected) {
+        selectTopics(payload.topics.map((t) => t.id));
+      }
     };
+
+    window.addEventListener("copy", onCopy);
+    window.addEventListener("cut", onCut);
     window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [editingTopicId, selectedTopicIds, deletedSet, dispatch, reportRejection, sheet.id]);
+    return () => {
+      window.removeEventListener("copy", onCopy);
+      window.removeEventListener("cut", onCut);
+      window.removeEventListener("paste", onPaste);
+    };
+  }, [readOnly, editingTopicId, pitchMode, selectedTopicIds, sheet, doc.assets, deletedSet, dispatch, reportRejection, selectTopics]);
 
   // Global keyboard matrix (with strict IME guard)
   useEffect(() => {
@@ -536,9 +620,30 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
       }
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        if (readOnly) return;
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d" && primaryId && !readOnly) {
+        e.preventDefault();
+        if (primaryId === sheet.rootTopic.id) return;
+        const loc = findTopicLocation(sheet, primaryId);
+        if (!loc?.parent) return;
+        const takenIds = buildTakenTopicIds(sheet);
+        const cloned = cloneTopicWithFreshIds(loc.topic, deletedSet, takenIds);
+        const rejected = dispatch({
+          type: "topic/insertSubtrees",
+          sheetId: sheet.id,
+          parentId: loc.parent.id,
+          index: loc.index + 1,
+          topics: [cloned],
+        });
+        if (!rejected) {
+          selectTopics([cloned.id]);
+        }
         return;
       }
 
@@ -547,6 +652,14 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
         setDrillRootId(drillRootId === primaryId ? null : primaryId === sheet.rootTopic.id ? null : primaryId);
         return;
       }
+
+      if (e.key === " " && primaryId) {
+        e.preventDefault();
+        dispatch({ type: "topic/toggleCollapse", sheetId: sheet.id, topicId: primaryId });
+        return;
+      }
+
+      if (readOnly) return;
 
       if (e.key === "Tab" && primaryId) {
         e.preventDefault();
@@ -589,12 +702,6 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
         return;
       }
 
-      if (e.key === " " && primaryId) {
-        e.preventDefault();
-        dispatch({ type: "topic/toggleCollapse", sheetId: sheet.id, topicId: primaryId });
-        return;
-      }
-
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedRelationshipId) {
           e.preventDefault();
@@ -632,6 +739,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    readOnly,
     editingTopicId,
     pitchMode,
     selectedTopicIds,

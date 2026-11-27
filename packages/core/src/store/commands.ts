@@ -25,6 +25,14 @@ export type MindmapCommand =
       title?: RichTextDoc;
     }
   | { type: "topic/addParent"; sheetId: string; targetId: string; newId: string; title?: RichTextDoc }
+  | {
+      type: "topic/insertSubtrees";
+      sheetId: string;
+      parentId: string;
+      index?: number;
+      topics: MindmapTopic[];
+      assets?: Record<string, InlineAsset>;
+    }
   | { type: "topic/delete"; sheetId: string; topicIds: string[] }
   | { type: "topic/reparent"; sheetId: string; topicId: string; newParentId: string; index?: number }
   | { type: "topic/reorder"; sheetId: string; topicId: string; delta: -1 | 1 }

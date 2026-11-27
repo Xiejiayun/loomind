@@ -259,6 +259,7 @@ const MindmapEditorInner: React.FC<
                 viewportRef={viewportRef}
                 appearance={chromeTheme}
                 layout={layout}
+                readOnly={readOnly}
                 onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
                 onOpenAi={() => openAiWithPrompt()}
               />
@@ -290,6 +291,7 @@ const MindmapEditorInner: React.FC<
       <ContextMenu
         menu={contextMenu}
         isDark={isDark}
+        readOnly={readOnly}
         onClose={() => setContextMenu(null)}
         onOpenAiForTopic={readOnly ? undefined : () => setInlineAiOpen(true)}
       />
