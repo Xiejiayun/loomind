@@ -6,9 +6,12 @@ import {
   parsePartialJson,
   reconcileStreamingTree,
   runNodeAiAction,
+  runNodeAiActionDetailed,
   sanitizeAiMindmapPartial,
+  sanitizeAiPlan,
   serializeAiContext,
   streamGenerateMindmap,
+  type AiStreamEvent,
 } from "../src/index.js";
 
 function sseResponse(blocks: string[]): Response {
@@ -205,5 +208,52 @@ describe("@mindmap/ai streaming & actions", () => {
       status: 429,
       retryAfterSec: 3600,
     } satisfies Partial<AiClientError>);
+  });
+
+  it("streams structured plan, granular execution steps, multi-turn history, and final outcome", async () => {
+    const doc = createDocument();
+    const adapter = new LocalImmerSyncAdapter(doc);
+    const sheetId = doc.activeSheetId;
+    const targetId = doc.sheets[0].rootTopic.children[0].id;
+
+    let capturedBody: Record<string, unknown> | null = null;
+    const events: AiStreamEvent[] = [];
+    const transport = createHttpAiTransport("/api/ai/stream", async (_input, init) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      return sseResponse([
+        `event: plan\ndata: ${JSON.stringify({ goal: "Break down launch tasks", approach: "Create 2 actionable items under the selected branch", steps: ["Inspect branch", "Add 2 tasks"] })}\n\n`,
+        `event: commands\ndata: ${JSON.stringify({ ops: [{ kind: "addChildren", targetTopicId: targetId, items: [{ title: "Write launch checklist", task: "todo" }, { title: "Run smoke test", task: "todo" }] }] })}\n\n`,
+        `event: message_delta\ndata: ${JSON.stringify({ delta: "Added 2 launch tasks" })}\n\n`,
+        `event: done\ndata: ${JSON.stringify({ summary: "Added 2 launch tasks", appliedCount: 2 })}\n\n`,
+      ]);
+    });
+
+    const result = await runNodeAiActionDetailed(adapter, sheetId, targetId, "tasks", "en", {
+      transport,
+      tier: "pro",
+      prompt: "Refine branch two with launch tasks",
+      history: [
+        { role: "user", content: "Create a launch roadmap" },
+        { role: "assistant", content: "Generated roadmap", planSummary: "4 launch phases", resultSummary: "Added 12 nodes" },
+      ],
+      onEvent: (ev) => events.push(ev),
+    });
+
+    expect((capturedBody as { history?: unknown[] } | null)?.history).toHaveLength(2);
+    expect(result.plan?.goal).toBe("Break down launch tasks");
+    expect(result.plan?.steps).toEqual(["Inspect branch", "Add 2 tasks"]);
+    expect(result.steps?.some((s) => s.phase === "analyze" && s.status === "done")).toBe(true);
+    expect(result.steps?.some((s) => s.phase === "plan" && s.status === "done")).toBe(true);
+    expect(result.steps?.some((s) => s.phase === "execute" && s.count === 2)).toBe(true);
+    expect(result.steps?.some((s) => s.phase === "verify" && s.status === "done")).toBe(true);
+    expect(result.outcome?.stats.addedNodes).toBe(2);
+    expect(result.outcome?.highlights).toHaveLength(2);
+    expect(events.some((e) => e.event === "plan")).toBe(true);
+    expect(events.some((e) => e.event === "step")).toBe(true);
+
+    expect(sanitizeAiPlan({ goal: "  Valid goal  ", steps: [" Step 1 ", "", "Step 2"] })).toEqual({
+      goal: "Valid goal",
+      steps: ["Step 1", "Step 2"],
+    });
   });
 });

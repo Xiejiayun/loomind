@@ -13,6 +13,7 @@ import { useWebAiRuntime } from "./ai.js";
 import { AccountControl } from "./auth/AccountControl.js";
 import type { Session } from "./auth/shared.js";
 import { readCloud } from "./drafts/cloud.js";
+import { createMapAiChatPersistence } from "./drafts/ai-chat.js";
 import { CollabSession, randomLoroPeerId } from "./drafts/collab.js";
 import { mapTitle, type MindmapSummary } from "./drafts/shared.js";
 import { DraftWorkspace, type SyncState } from "./drafts/workspace.js";
@@ -99,6 +100,16 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
   const workspace = useRef<DraftWorkspace | null>(null);
   const collabRef = useRef<CollabSession | null>(null);
   const promptOnce = useRef(initialAiPrompt);
+  const chatPersistence = useMemo(
+    () => createMapAiChatPersistence(owner, map.id, false),
+    [owner, map.id],
+  );
+
+  useEffect(() => {
+    if (sync.status === "synced") {
+      void chatPersistence.flushPending?.();
+    }
+  }, [sync.status, chatPersistence]);
 
   useEffect(() => {
     let active = true;
@@ -209,6 +220,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
       initialFormatPanelOpen={false}
       initialAiPrompt={promptOnce.current}
       aiRuntime={proAiRuntime}
+      chatPersistence={chatPersistence}
       accountControl={<div className="lm-editor-navigation">
         <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={onToggleSidebar}>
           <PanelLeft size={15}/>
@@ -266,6 +278,10 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
   const [document, setDocument] = useState<MindmapDocument | null>(null);
   const [error, setError] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const chatPersistence = useMemo(
+    () => createMapAiChatPersistence(owner, map.id, true),
+    [owner, map.id],
+  );
   useEffect(() => {
     let active = true;
     void readCloud(owner, map.id).then((draft) => {
@@ -298,6 +314,7 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
       adapter={adapter}
       chromeTheme={theme}
       readOnly
+      chatPersistence={chatPersistence}
       initialFormatPanelOpen={false}
       accountControl={<div className="lm-editor-navigation">
         <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} onClick={onToggleSidebar}>

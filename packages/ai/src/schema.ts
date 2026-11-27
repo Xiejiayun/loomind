@@ -20,7 +20,14 @@ export const AiTopicSchema: z.ZodType<AiTopicNode> = z.lazy(() =>
   }),
 );
 
+export const AiPlanSchema = z.object({
+  goal: z.string(),
+  approach: z.string().optional(),
+  steps: z.array(z.string()),
+});
+
 export const AiMindmapStreamSchema = z.object({
+  plan: AiPlanSchema.optional(),
   title: z.string(),
   recommendedStructure: z.enum([
     "mindmap",

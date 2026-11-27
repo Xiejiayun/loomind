@@ -79,6 +79,52 @@ export interface AiContextSnapshot {
   truncated: boolean;
 }
 
+export interface AiExecutionPlan {
+  goal: string;
+  approach?: string;
+  steps: string[];
+}
+
+export type AiStepPhase = "analyze" | "plan" | "execute" | "verify";
+export type AiStepStatus = "pending" | "running" | "done" | "error";
+
+export interface AiExecutionStep {
+  id: string;
+  phase: AiStepPhase;
+  title: string;
+  detail?: string;
+  status: AiStepStatus;
+  topicId?: string;
+  count?: number;
+}
+
+export interface AiExecutionHighlight {
+  topicId: string;
+  title: string;
+}
+
+export interface AiExecutionStats {
+  addedNodes: number;
+  updatedNodes: number;
+  layoutChanged?: string;
+  paletteChanged?: string;
+  durationMs?: number;
+}
+
+export interface AiExecutionOutcome {
+  summary: string;
+  appliedCount: number;
+  stats: AiExecutionStats;
+  highlights: AiExecutionHighlight[];
+}
+
+export interface AiChatHistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+  planSummary?: string;
+  resultSummary?: string;
+}
+
 export interface AiStreamRequest {
   tier: AiTier;
   intent: AiIntent;
@@ -86,6 +132,7 @@ export interface AiStreamRequest {
   locale: Locale;
   targetTopicId?: string;
   context?: AiContextSnapshot;
+  history?: AiChatHistoryTurn[];
 }
 
 const VALID_STRUCTURES = new Set<MindmapStructure>([
@@ -195,11 +242,21 @@ export interface AiStreamMeta {
 export type AiStreamEvent =
   | { event: "meta"; data: AiStreamMeta }
   | { event: "status"; data: { stage: "connecting" | "thinking" | "streaming" } }
+  | { event: "plan"; data: AiExecutionPlan }
+  | { event: "step"; data: AiExecutionStep }
   | { event: "map_patch"; data: { partial: DeepPartial<AiMindmapStream> } }
   | { event: "commands"; data: { ops: AiSafeCommand[] } }
   | { event: "message_delta"; data: { delta: string } }
   | { event: "error"; data: { code: AiErrorCode; message: string; retryAfterSec?: number } }
-  | { event: "done"; data: { summary: string; appliedCount: number } };
+  | {
+      event: "done";
+      data: {
+        summary: string;
+        appliedCount: number;
+        stats?: AiExecutionStats;
+        highlights?: AiExecutionHighlight[];
+      };
+    };
 
 export interface AiTransport {
   stream(request: AiStreamRequest, signal?: AbortSignal): AsyncIterable<AiStreamEvent>;
@@ -321,6 +378,27 @@ export function serializeAiContext(
     selectedTopicIds: selectedTopicIds.slice(0, 10),
     outline,
     truncated,
+  };
+}
+
+export function sanitizeAiPlan(raw: unknown): AiExecutionPlan | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  const goal = typeof obj.goal === "string" ? obj.goal.trim().slice(0, 220) : "";
+  const approach = typeof obj.approach === "string" && obj.approach.trim()
+    ? obj.approach.trim().slice(0, 280)
+    : undefined;
+  const steps = Array.isArray(obj.steps)
+    ? obj.steps
+        .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        .map((s) => s.trim().slice(0, 120))
+        .slice(0, 8)
+    : [];
+  if (!goal && steps.length === 0) return null;
+  return {
+    goal: goal || steps[0] || "",
+    ...(approach ? { approach } : {}),
+    steps,
   };
 }
 

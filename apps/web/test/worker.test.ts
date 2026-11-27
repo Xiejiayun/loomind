@@ -71,6 +71,10 @@ beforeAll(async () => {
   for (const statement of collabMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const aiChatMigration = await readFile(new URL("../migrations/0008_ai_chat.sql", import.meta.url), "utf8");
+  for (const statement of aiChatMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -686,5 +690,133 @@ describe("Loro CRDT realtime collab API (updates & peer presence)", () => {
       "SELECT COUNT(*) AS count FROM mindmap_crdt_updates WHERE mindmap_id = ?",
     ).bind(mapId).first<{ count: number }>();
     expect(leftUpdates?.count).toBe(0);
+  });
+});
+
+describe("AI chat persistence & streaming plan API (D1)", () => {
+  it("persists structured plan/steps/outcome per mindmap with shared viewer read-only access, idempotent upsert, clear, and delete cleanup", async () => {
+    const ownerCookie = await login("aichat-owner");
+    const viewerCookie = await login("aichat-viewer");
+    const strangerCookie = await login("aichat-stranger");
+    const mapId = crypto.randomUUID();
+    const initial = getTemplate("blank-organic").create();
+
+    const saveMap = await request(`mindmaps/${mapId}`, "PUT", ownerCookie, initial, {
+      "If-Match": '"0"',
+      [OWNER_HEADER]: "aichat-owner",
+    });
+    expect(saveMap.status).toBe(200);
+
+    // Share with viewer
+    const shareRes = await request("shares", "POST", ownerCookie, {
+      type: "mindmap",
+      resourceId: mapId,
+      role: "viewer",
+    });
+    expect(shareRes.status).toBe(201);
+    const { token } = await shareRes.json() as { token: string };
+    const accept = await request(`invites/${token}/accept`, "POST", viewerCookie);
+    expect(accept.status).toBe(200);
+
+    // Owner saves a user + assistant turn containing plan, steps, and outcome
+    const postMessages = await request(`mindmaps/${mapId}/ai-chat`, "POST", ownerCookie, {
+      messages: [
+        { id: "u-1", role: "user", content: "规划 Q4 产品发布", createdAt: "2026-11-27T10:00:00.000Z" },
+        {
+          id: "a-1",
+          role: "assistant",
+          content: "已生成 Q4 发布导图",
+          status: "done",
+          plan: { goal: "梳理 Q4 发布节奏", approach: "按 4 个阶段拆解", steps: ["需求冻结", "灰度发布"] },
+          steps: [
+            { id: "analyze", phase: "analyze", title: "已解析上下文", status: "done" },
+            { id: "b-1", phase: "execute", title: "写入分支「灰度发布」", status: "done", topicId: "ai-0-0", count: 3 },
+          ],
+          outcome: {
+            summary: "已生成 Q4 发布导图",
+            appliedCount: 4,
+            stats: { addedNodes: 4, updatedNodes: 1, layoutChanged: "timeline", durationMs: 1200 },
+            highlights: [{ topicId: "ai-0-0", title: "灰度发布" }],
+          },
+          createdAt: "2026-11-27T10:00:02.000Z",
+        },
+      ],
+    }, { [OWNER_HEADER]: "aichat-owner" });
+    expect(postMessages.status).toBe(200);
+    expect(await postMessages.json()).toEqual({ saved: 2 });
+
+    // Re-posting the same IDs is idempotent (no duplicate rows)
+    const repost = await request(`mindmaps/${mapId}/ai-chat`, "POST", ownerCookie, {
+      messages: [{ id: "u-1", role: "user", content: "规划 Q4 产品发布" }],
+    }, { [OWNER_HEADER]: "aichat-owner" });
+    expect(repost.status).toBe(200);
+
+    // Viewer can read full structured plan/steps/outcome history
+    const viewerGet = await request(`mindmaps/${mapId}/ai-chat`, "GET", viewerCookie, undefined, {
+      [OWNER_HEADER]: "aichat-viewer",
+    });
+    expect(viewerGet.status).toBe(200);
+    const loaded = await viewerGet.json() as {
+      messages: Array<{ id: string; plan?: { goal: string }; steps?: unknown[]; outcome?: { stats: { addedNodes: number } } }>;
+    };
+    expect(loaded.messages).toHaveLength(2);
+    expect(loaded.messages[1].plan?.goal).toBe("梳理 Q4 发布节奏");
+    expect(loaded.messages[1].steps).toHaveLength(2);
+    expect(loaded.messages[1].outcome?.stats.addedNodes).toBe(4);
+
+    // Viewer cannot write or clear AI chat history
+    const viewerPost = await request(`mindmaps/${mapId}/ai-chat`, "POST", viewerCookie, {
+      messages: [{ id: "u-v", role: "user", content: "unauthorized" }],
+    }, { [OWNER_HEADER]: "aichat-viewer" });
+    expect(viewerPost.status).toBe(403);
+    const viewerDelete = await request(`mindmaps/${mapId}/ai-chat`, "DELETE", viewerCookie, undefined, {
+      [OWNER_HEADER]: "aichat-viewer",
+    });
+    expect(viewerDelete.status).toBe(403);
+
+    // Stranger cannot see or write history
+    const strangerGet = await request(`mindmaps/${mapId}/ai-chat`, "GET", strangerCookie, undefined, {
+      [OWNER_HEADER]: "aichat-stranger",
+    });
+    expect(strangerGet.status).toBe(200);
+    expect(await strangerGet.json()).toEqual({ messages: [] });
+    const strangerPost = await request(`mindmaps/${mapId}/ai-chat`, "POST", strangerCookie, {
+      messages: [{ id: "u-s", role: "user", content: "nope" }],
+    }, { [OWNER_HEADER]: "aichat-stranger" });
+    expect(strangerPost.status).toBe(404);
+
+    // Mock AI stream emits structured `plan` event and accepts multi-turn `history`
+    const streamRes = await worker.fetch(
+      new Request(`${origin}/api/ai/stream`, {
+        method: "POST",
+        headers: { Origin: origin, Cookie: ownerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier: "pro",
+          intent: "generate_map",
+          prompt: "设计一套安静的软件",
+          locale: "zh",
+          history: [
+            { role: "user", content: "先梳理核心原则" },
+            { role: "assistant", content: "已列出四项原则", planSummary: "4 维拆解", resultSummary: "新增 8 节点" },
+          ],
+        }),
+      }),
+      { ...env, AI_ALLOW_MOCK: "true" },
+    );
+    expect(streamRes.status).toBe(200);
+    const sseText = await streamRes.text();
+    expect(sseText).toContain("event: plan");
+    expect(sseText).toContain("event: map_patch");
+    expect(sseText).toContain("event: done");
+
+    // Owner DELETE /api/mindmaps/:id cleans up mindmap_ai_messages
+    const delMap = await request(`mindmaps/${mapId}`, "DELETE", ownerCookie, undefined, {
+      [OWNER_HEADER]: "aichat-owner",
+    });
+    expect(delMap.status).toBe(200);
+    const leftMsgs = await platform.env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM mindmap_ai_messages WHERE mindmap_id = ?",
+    ).bind(mapId).first<{ count: number }>();
+    expect(leftMsgs?.count).toBe(0);
   });
 });

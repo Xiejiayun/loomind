@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, errors, jwtVerify, SignJWT } from "jose";
 import { LOGIN_ACTION, type AuthUser, type LoginChallenge, type Session } from "../src/auth/shared.js";
 import { handleAi } from "./ai.js";
+import { handleAiChat } from "./ai-chat.js";
 import { handleCollab } from "./collab.js";
 import { handleDraft, handleRevisions } from "./drafts.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
@@ -103,6 +104,9 @@ async function handle(request: Request, env: Env) {
     }
     if (segments[1] === "collab" && segments.length === 2) {
       return handleCollab(request, env, session?.sub, segments[0]);
+    }
+    if (segments[1] === "ai-chat" && segments.length === 2) {
+      return handleAiChat(request, env, session?.sub, segments[0]);
     }
     return json({ error: "接口不存在。" }, 404);
   }
