@@ -17,6 +17,7 @@ import {
 } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 import { useEditorI18n } from "../i18n.js";
+import { computePanToRevealNode, findNextTopicByArrow, type ArrowDirection } from "./navigation.js";
 import { NodeLayer } from "./NodeLayer.js";
 import { SvgLayer } from "./SvgLayer.js";
 
@@ -79,6 +80,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
   const selectedBoundaryId = useMindmapStore((s) => s.selectedBoundaryId);
   const editingTopicId = useMindmapStore((s) => s.editingTopicId);
   const drillRootId = useMindmapStore((s) => s.drillRootId);
+  const pitchMode = useMindmapStore((s) => s.pitchMode);
   const dispatch = useMindmapStore((s) => s.dispatch);
   const reportRejection = useMindmapStore((s) => s.reportRejection);
   const undo = useMindmapStore((s) => s.undo);
@@ -501,11 +503,37 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (editingTopicId) return;
-      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
-      if (activeTag === "INPUT" || activeTag === "TEXTAREA") return;
+      if (editingTopicId || pitchMode) return;
+      const activeEl = document.activeElement as HTMLElement | null;
+      const activeTag = activeEl?.tagName;
+      if (activeTag === "INPUT" || activeTag === "TEXTAREA" || activeEl?.isContentEditable) return;
 
       const primaryId = selectedTopicIds[0];
+
+      if (
+        (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        const nextId = findNextTopicByArrow(sheet, layout, primaryId, e.key as ArrowDirection);
+        if (nextId) {
+          selectTopics([nextId]);
+          const nextNode = layout.nodes.get(nextId);
+          if (nextNode) {
+            const pan = computePanToRevealNode(nextNode, cameraRef.current, viewportSize);
+            if (pan) {
+              userMovedCameraRef.current = true;
+              const nextCam = { ...cameraRef.current, ...pan };
+              cameraRef.current = nextCam;
+              applyTransformDom(nextCam);
+              setCamera(nextCam);
+            }
+          }
+        }
+        return;
+      }
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -605,12 +633,14 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     editingTopicId,
+    pitchMode,
     selectedTopicIds,
     selectedRelationshipId,
     selectedBoundaryId,
     drillRootId,
-    sheet.id,
-    sheet.rootTopic.id,
+    sheet,
+    layout,
+    viewportSize,
     deletedSet,
     dispatch,
     undo,
@@ -620,6 +650,8 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({ layout, viewportRef,
     selectBoundary,
     setEditingTopicId,
     setDrillRootId,
+    applyTransformDom,
+    setCamera,
   ]);
 
   const handleSelectTopic = useCallback(

@@ -238,6 +238,7 @@ const zh = {
     buttonTitle: "快捷键指南",
     heading: "快捷键与操作指南",
     items: [
+      ["↑ ↓ ← →", "方向键切换节点"],
       ["Tab", "插入子主题"],
       ["Enter", "插入同级主题"],
       ["Ctrl + Enter", "插入父主题"],
@@ -577,6 +578,7 @@ const en: typeof zh = {
     buttonTitle: "Keyboard shortcuts",
     heading: "Keyboard Shortcuts",
     items: [
+      ["↑ ↓ ← →", "Navigate between topics"],
       ["Tab", "Insert subtopic"],
       ["Enter", "Insert sibling topic"],
       ["Ctrl + Enter", "Insert parent topic"],
