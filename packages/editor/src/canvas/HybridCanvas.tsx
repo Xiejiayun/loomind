@@ -91,6 +91,8 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
   const [cameraReady, setCameraReady] = useState(false);
   const [initialEditChar, setInitialEditChar] = useState<string | undefined>(undefined);
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [offsetPreview, setOffsetPreview] = useState<{ topicId: string; dx: number; dy: number } | null>(null);
+  const [widthPreview, setWidthPreview] = useState<{ topicId: string; width: number } | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const centeredSheetRef = useRef<string | null>(null);
   const userMovedCameraRef = useRef(false);
@@ -135,8 +137,8 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
   const topicMap = useMemo(() => collectAllTopics(sheet), [sheet]);
   const selectedSet = useMemo(() => new Set(selectedTopicIds), [selectedTopicIds]);
   const deletedSet = useMemo(() => new Set(doc.deletedIds), [doc.deletedIds]);
-  const theme = { ...doc.theme, ...sheet.theme };
-  const palette = getPalette(theme.paletteId, appearance);
+  const theme = useMemo(() => ({ ...doc.theme, ...sheet.theme }), [doc.theme, sheet.theme]);
+  const palette = useMemo(() => getPalette(theme.paletteId, appearance), [theme.paletteId, appearance]);
   const workspaceCanvas = palette.id === "workspace" && !!appearance;
 
   const computeFitCamera = useCallback(
@@ -320,6 +322,9 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
         indicatorSide: "around",
       };
 
+      let pendingAltDx = 0;
+      let pendingAltDy = 0;
+
       const onMove = (ev: PointerEvent) => {
         const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
         if (!state.active && dist < 8) return;
@@ -331,17 +336,10 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
         state.curClientY = ev.clientY;
 
         if (altKey) {
-          const dx = (ev.clientX - startX) / camera.scale;
-          const dy = (ev.clientY - startY) / camera.scale;
-          dispatch(
-            {
-              type: "topic/setManualOffset",
-              sheetId: sheet.id,
-              topicId,
-              offset: { dx: initOffset.dx + dx, dy: initOffset.dy + dy },
-            },
-            { coalesceKey: `drag-offset:${topicId}` },
-          );
+          // Zero-layout-recompute live preview; commit single command on pointerup
+          pendingAltDx = (ev.clientX - startX) / cameraRef.current.scale;
+          pendingAltDy = (ev.clientY - startY) / cameraRef.current.scale;
+          setOffsetPreview({ topicId, dx: pendingAltDx, dy: pendingAltDy });
           return;
         }
 
@@ -358,7 +356,15 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
         window.removeEventListener("pointerup", onUp);
         if (state.active) {
           setInteractingDom(false);
-          if (!altKey) {
+          if (altKey) {
+            setOffsetPreview(null);
+            dispatch({
+              type: "topic/setManualOffset",
+              sheetId: sheet.id,
+              topicId,
+              offset: { dx: initOffset.dx + pendingAltDx, dy: initOffset.dy + pendingAltDy },
+            });
+          } else {
             if (state.dropTargetId) {
               if (state.dropMode === "child") {
                 dispatch({
@@ -400,7 +406,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
     [readOnly, sheet, topicMap, camera.scale, dispatch, layout, screenToWorld, setInteractingDom],
   );
 
-  // Right-edge custom width drag
+  // Right-edge custom width drag (live preview without per-frame layout recompute)
   const handleStartResizeWidth = useCallback(
     (topicId: string, e: React.PointerEvent) => {
       if (readOnly) return;
@@ -408,24 +414,26 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
       if (!node) return;
       const startX = e.clientX;
       const startW = node.contentBox.width;
+      let latestW = startW;
       setInteractingDom(true);
 
       const onMove = (ev: PointerEvent) => {
-        const nextW = Math.max(80, Math.min(640, startW + (ev.clientX - startX) / camera.scale));
-        dispatch(
-          { type: "topic/setCustomWidth", sheetId: sheet.id, topicId, width: nextW },
-          { coalesceKey: `resize:${topicId}` },
-        );
+        latestW = Math.max(80, Math.min(640, startW + (ev.clientX - startX) / cameraRef.current.scale));
+        setWidthPreview({ topicId, width: latestW });
       };
       const onUp = () => {
         setInteractingDom(false);
+        setWidthPreview(null);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        if (Math.abs(latestW - startW) >= 1) {
+          dispatch({ type: "topic/setCustomWidth", sheetId: sheet.id, topicId, width: latestW });
+        }
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [layout.nodes, camera.scale, dispatch, sheet.id],
+    [readOnly, layout.nodes, dispatch, sheet.id, setInteractingDom],
   );
 
   // Relationship control handle drag
@@ -1039,6 +1047,8 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
           remotePeers={remotePeers}
           searchMatchedIds={searchMatchedIds}
           activeSearchMatchId={activeSearchMatchId}
+          offsetPreview={offsetPreview}
+          widthPreview={widthPreview}
           editingTopicId={editingTopicId}
           initialEditChar={initialEditChar}
           onSelectTopic={handleSelectTopic}

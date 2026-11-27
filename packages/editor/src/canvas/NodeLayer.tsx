@@ -19,6 +19,8 @@ interface NodeLayerProps {
   remotePeers?: PeerPresence[];
   searchMatchedIds?: ReadonlySet<string>;
   activeSearchMatchId?: string | null;
+  offsetPreview?: { topicId: string; dx: number; dy: number } | null;
+  widthPreview?: { topicId: string; width: number } | null;
   editingTopicId: string | null;
   initialEditChar?: string;
   onSelectTopic: (topicId: string, e: React.MouseEvent) => void;
@@ -44,6 +46,8 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
     remotePeers,
     searchMatchedIds,
     activeSearchMatchId,
+    offsetPreview,
+    widthPreview,
     editingTopicId,
     initialEditChar,
     onSelectTopic,
@@ -95,19 +99,23 @@ export const NodeLayer: React.FC<NodeLayerProps> = React.memo(
 
           const isEditing = editingTopicId === id;
           const isSelected = selectedIds.has(id);
+          const extraDx = offsetPreview?.topicId === id ? offsetPreview.dx : 0;
+          const extraDy = offsetPreview?.topicId === id ? offsetPreview.dy : 0;
+          const previewW = widthPreview?.topicId === id ? widthPreview.width : undefined;
 
           return (
             <div
               key={id}
               className="mindmap-node-motion pointer-events-auto absolute"
               style={{
-                transform: `translate(${layoutNode.box.x}px, ${layoutNode.box.y}px)`,
-                zIndex: isEditing ? 40 : isSelected ? 20 : 10,
+                transform: `translate(${layoutNode.box.x + extraDx}px, ${layoutNode.box.y + extraDy}px)`,
+                zIndex: isEditing ? 40 : extraDx || extraDy || previewW ? 35 : isSelected ? 20 : 10,
               }}
             >
               <TopicCard
                 topic={topic}
                 layoutNode={layoutNode}
+                previewWidth={previewW}
                 selected={isSelected}
                 remotePeer={peerByTopicId?.get(id)}
                 searchHighlight={

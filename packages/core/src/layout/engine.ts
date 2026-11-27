@@ -185,6 +185,15 @@ export class LayoutEngine {
       for (const s of sheet.summaries) measureTree(s.topic);
     }
 
+    // Evict stale cache entries from deleted topics or switched sheets to bound memory
+    if (this.measureCache.size > measurements.size * 2 + 256) {
+      for (const cachedId of this.measureCache.keys()) {
+        if (!measurements.has(cachedId)) {
+          this.measureCache.delete(cachedId);
+        }
+      }
+    }
+
     // Stage 3: Recursive structure placement
     const nodes = new Map<string, LayoutNode>();
     const edges: LayoutEdge[] = [];

@@ -83,6 +83,7 @@ function renderRichText(doc: RichTextDoc, nowrap: boolean): React.ReactNode {
 export interface TopicCardProps {
   topic: MindmapTopic;
   layoutNode: LayoutNode;
+  previewWidth?: number;
   selected: boolean;
   remotePeer?: PeerPresence;
   searchHighlight?: "match" | "active";
@@ -106,6 +107,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
   ({
     topic,
     layoutNode,
+    previewWidth,
     selected,
     remotePeer,
     searchHighlight,
@@ -143,7 +145,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
       layoutNode.shape === "hexagon" ||
       layoutNode.shape === "cloud";
 
-    const cardW = layoutNode.contentBox.width;
+    const cardW = previewWidth ?? layoutNode.contentBox.width;
     const cardH = layoutNode.contentBox.height;
 
     const cardStyle: React.CSSProperties = {
