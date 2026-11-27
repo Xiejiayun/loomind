@@ -9,6 +9,7 @@ import { managePublicLink, readPublicMap } from "./public-links.js";
 import { handleNodeReviews } from "./reviews.js";
 import { handleShare, handleInvite } from "./sharing.js";
 import { handleWorkspace } from "./workspaces.js";
+import { handleWebpage } from "./webpage.js";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const challengeCookie = "__Host-loomind-login";
@@ -90,6 +91,10 @@ async function handle(request: Request, env: Env) {
   const url = new URL(request.url);
   const path = url.pathname;
   if (path.startsWith("/api/public-maps/")) return readPublicMap(request, env, path.slice("/api/public-maps/".length));
+  if (path === "/api/sources/webpage") {
+    const session = await readCookie(request, env, sessionCookie);
+    return handleWebpage(request, env, session?.sub);
+  }
   if (path === "/api/mindmaps" || path.startsWith("/api/mindmaps/")) {
     const session = await readCookie(request, env, sessionCookie);
     if (path === "/api/mindmaps") return handleDraft(request, env, session?.sub);

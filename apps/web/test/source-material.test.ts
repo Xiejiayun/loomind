@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { MindmapDocumentSchema, richTextToPlainText, validateDocumentInvariants } from "@mindmap/core/model";
-import { documentFromPassages, documentFromSource, passageLocation, SOURCE_PASSAGE_LIMIT, SOURCE_TEXT_LIMIT, sourceAddress, sourcePassages } from "../src/source-material.js";
+import { documentFromPassages, documentFromSource, passageLocation, SOURCE_PASSAGE_LIMIT, SOURCE_TEXT_LIMIT, sourceAddress, sourcePassages, webpagePassages } from "../src/source-material.js";
 
 describe("source-linked map creation", () => {
+  it("keeps publisher title, paragraph numbering, and full quotes independently of editable labels", () => {
+    const quote = "审议通过。".repeat(24);
+    const passages = webpagePassages(["第一条结论。", quote]);
+    const url = "https://example.test/article";
+    const document = documentFromPassages("团队汇报", passages, url, "zh", "正式公报");
+    const topic = document.sheets[0].rootTopic.children[1];
+    expect(richTextToPlainText(topic.title)).toHaveLength(72);
+    expect(topic.note?.text).toBe(`正式公报 · 正文第 2 段 · ${url}\n\n${quote}`);
+    expect(topic.href?.target).toBe(url);
+    expect(passageLocation(passages[1], "en")).toBe("Paragraph 2");
+  });
   it("keeps the physical PDF page and original filename even when the map name changes", () => {
     const passage = { title: "结论", quote: "结论：保持既定日期。", page: 5, firstLine: 1, lastLine: 1 };
     const doc = documentFromPassages("团队评审", [passage], "https://example.test/a.pdf", "zh", "会议原件.pdf");

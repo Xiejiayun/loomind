@@ -19,6 +19,7 @@
     "@mindmap/core": "workspace:*",
     "@mindmap/editor": "workspace:*",
     "@react-oauth/google": "^0.13.5",
+    "entities": "4.5.0",
     "jose": "^6.2.17",
     "lucide-react": "^0.475.0",
     "pdfjs-dist": "6.5.438",
