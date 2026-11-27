@@ -17,7 +17,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { getIntlLocale, type MindmapDocument } from "@mindmap/core";
+import { getIntlLocale, getTemplateInfo, TEMPLATES, type MindmapDocument } from "@mindmap/core";
 import { authRequest } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
 import { createWorkspace, listWorkspaces, moveMindmap, type WorkspaceSummary } from "./api.js";
@@ -45,8 +45,6 @@ interface Props {
   theme: UiTheme;
   toggleTheme: () => void;
 }
-
-const TEMPLATE_IDS = ["blank-organic", "quarterly-okr", "annual-roadmap", "root-cause-fishbone"] as const;
 
 function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -598,7 +596,7 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
               <label className="lm-chip-select" title={t.home.templateTitle}>
                 <GitBranch size={12}/>
                 <select aria-label={t.home.templateAria} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                  {TEMPLATE_IDS.map((id) => <option key={id} value={id}>{t.workspace.templates[id] ?? id}</option>)}
+                  {TEMPLATES.map((template) => <option key={template.id} value={template.id}>{getTemplateInfo(template.id, locale, template).name}</option>)}
                 </select>
               </label>
               {writable.length > 0 && (

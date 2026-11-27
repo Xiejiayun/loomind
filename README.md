@@ -30,6 +30,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Timeline** · **Fishbone Diagram** · **Matrix**
 - **Tree Table** · **Indented List**
 - **14 curated starter templates** spanning all 9 structures (OKRs, SWOT Matrix, Annual Roadmap, System Architecture, Reading Notes, Fishbone RCA, Org Chart, Product Launch Tree Table, Meeting Minutes, Project WBS, Decision Evaluation, Sprint Retro, and Course Study Guide).
+- The workspace composer and **Create** page both offer the full catalog. Enter your own topic or outline to apply the selected layout and palette without copying sample branches. On **Create**, leave the inputs empty to preview and create a separate map with the original Chinese example content, notes and annotations; this does not call AI or replace an existing map.
 
 ### Keyboard-First Canvas, Trackpad Gestures & Accessibility
 - **Structure-aware arrow-key navigation** (`↑ ↓ ← →`) across all 9 layouts with automatic viewport pan-to-reveal.
