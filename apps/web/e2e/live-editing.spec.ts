@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { MindmapDocumentSchema, type MindmapDocument } from "@mindmap/core/model";
 import { chromium, expect, webkit, type Page, type Response } from "@playwright/test";
 import { cloudBrowser, test as cloudTest } from "./cloud-worker.js";
 
@@ -119,21 +122,74 @@ test("offline edits survive reconnect after the server's saved delta log is prun
   await expect(topic(fresh, "Online evidence")).toBeVisible();
 });
 
-async function imageFixture(page: Page, large: boolean) {
-  return page.evaluate((large) => {
+async function imageFixture(page: Page, large: boolean, seed = 0x7ced3761) {
+  return page.evaluate(({ large, seed }) => {
     const canvas = document.createElement("canvas");
     canvas.width = large ? 768 : 288; canvas.height = large ? 576 : 216;
     const context = canvas.getContext("2d")!;
     const pixels = context.createImageData(canvas.width, canvas.height);
-    let seed = 0x7ced3761;
     for (let offset = 0; offset < pixels.data.length; offset += 4) {
       seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
       pixels.data.set([seed & 255, (seed >>> 8) & 255, (seed >>> 16) & 255, 255], offset);
     }
     context.putImageData(pixels, 0, 0);
     return canvas.toDataURL("image/png").split(",")[1];
-  }, large);
+  }, { large, seed });
 }
+
+test("two editors converge on a multi-photo cloud map above 1 MiB and cold readers recover its full history", async ({ team: { author, reviewer, mapApi, reopen } }) => {
+  test.setTimeout(120_000);
+  await reviewer.close();
+  const titles = ["Planning", "Research", "Delivery"];
+  let baseline: MindmapDocument | undefined;
+  let revision = 0;
+  for (const [index, title] of titles.entries()) {
+    await author.getByTitle(/^Fit to view/i).click();
+    await topic(author, title).click();
+    const png = await imageFixture(author, true, index + 1);
+    const [saved] = await Promise.all([
+      author.waitForResponse((response) => response.url() === mapApi && response.request().method() === "PUT" && Object.keys(response.request().postDataJSON().assets ?? {}).length === index + 1),
+      author.locator('input[type="file"][accept*="image/png"]').setInputFiles({ name: `photo-${index}.png`, mimeType: "image/png", buffer: Buffer.from(png, "base64") }),
+    ]);
+    expect(saved.status()).toBe(200);
+    baseline = MindmapDocumentSchema.parse(saved.request().postDataJSON());
+    revision = (await saved.json()).revision;
+  }
+  expect(Buffer.byteLength(JSON.stringify(baseline))).toBeGreaterThan(1024 * 1024);
+  const digests = Object.values(baseline!.assets).map((asset) => asset.sha256).sort();
+  expect(new Set(digests).size).toBe(3);
+  async function checkPhotos(page: Page, names: string[]) {
+    await page.getByTitle(/^Fit to view/i).click();
+    const actual: string[] = [];
+    for (const title of names) {
+      const image = topic(page, title).locator('img[src^="data:image/"]');
+      await expect(image).toHaveJSProperty("naturalWidth", 768);
+      actual.push(createHash("sha256").update(Buffer.from((await image.getAttribute("src"))!.split(",")[1], "base64")).digest("hex"));
+    }
+    expect(actual.sort()).toEqual(digests);
+  }
+  const late = await reopen();
+  await checkPhotos(late, titles);
+  const resume = await holdSaves(author, mapApi);
+  await holdSaves(late, mapApi);
+  await author.getByTitle(/^Fit to view/i).click();
+  await Promise.all([rename(author, "Research", "Field evidence"), rename(late, "Delivery", "Approved decision")]);
+  for (const peer of [author, late]) {
+    await expect(topic(peer, "Field evidence")).toHaveCount(1, { timeout: 15_000 });
+    await expect(topic(peer, "Approved decision")).toHaveCount(1, { timeout: 15_000 });
+  }
+  resume();
+  const [saved] = await Promise.all([savedMap(author, mapApi, "Approved decision"), author.evaluate(() => window.dispatchEvent(new Event("online")))]);
+  expect((await saved.json()).revision).toBeGreaterThan(revision);
+  const cold = await reopen();
+  await checkPhotos(cold, ["Planning", "Field evidence", "Approved decision"]);
+  await cold.getByRole("button", { name: "History", exact: true }).click();
+  const history = cold.getByRole("dialog", { name: /Version History/i });
+  await history.getByRole("option").filter({ has: cold.getByText(`v${revision}`, { exact: true }) }).click();
+  await expect(history.locator(".lm-history-meta strong")).toContainText(`v${revision} ·`);
+  const [download] = await Promise.all([cold.waitForEvent("download"), history.getByRole("button", { name: /Download JSON/i }).click()]);
+  expect(JSON.parse(await readFile((await download.path())!, "utf8"))).toEqual(baseline);
+});
 
 test("an unsynced editor can save a new cloud map without changing the original", async ({ team: { author, reviewer, mapApi } }) => {
   await author.route(mapApi, (route) => route.request().method() === "PUT" && route.request().headers()["x-loomind-checkpoint"] !== "seed"

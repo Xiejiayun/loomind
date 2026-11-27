@@ -126,12 +126,13 @@ pnpm test:mobile
 ```
 
 Mobile layout tests use loopback and explicit API fixtures. The live editing tests run the built app against a real local Worker and D1, with isolated signed test accounts in Chromium and WebKit. They check unsaved changes in both canvases, late joining, retry, offline recovery, images and cold reopen; they do not call production, Google login or AI models. Set `LOOMIND_E2E_LARGE_FRAME=1` to require a successful frame larger than 192 KiB reaching the peer canvas without a full document reload. The transport test separately verifies byte-for-byte delivery.
+The cloud-storage tests upload photos in the editor, reopen them in the other browser engine, download the earlier version, and check that over-limit edits stay on the originating device.
 
 ### Login and storage
 
 - **Google:** use a Web application OAuth client with authorized JavaScript origin `https://loomind.jeremyxie.com` (no path). The Google button returns an ID token to a JavaScript popup callback, so no authorized redirect URI or Google client secret is needed. `/api/auth/google` is a same-origin JSON endpoint, not a redirect target.
 - **Turnstile:** use the Managed widget for `loomind.jeremyxie.com`. The Worker checks Siteverify success, hostname and `google_login` action before signing a session. `TURNSTILE_SITE_KEY` is public; `TURNSTILE_SECRET` is server-only. Store `GOOGLE_CLIENT_ID`, `TURNSTILE_SECRET` and an independent, randomly generated production `SESSION_SECRET` (at least 32 random bytes, encoded as hex or base64url) in the Worker's protected configuration. Never put secrets in `VITE_*`, the repository or the browser bundle.
-- **Mindmaps & Sync:** each verified Google account can create and switch between independent mindmaps in the workspace library. D1 stores each map by its own ID, up to 20 historical revision snapshots, and incremental CRDT deltas for live collaboration, paired with per-tab isolated IndexedDB draft caching. Maps larger than 1 MiB remain local.
+- **Mindmaps & Sync:** cloud saves accept up to 4 MiB of UTF-8 document JSON, including embedded images. Oversized edits stay in this browser without replacing the last cloud version; reduce the map size to resume syncing. D1 keeps the latest 20 snapshots. Documents over 1 MiB share content-addressed blocks across revisions of the same map. Current state, blocks, and history commit together. Live CRDT updates have a separate limit.
 - **Cost:** the app runs entirely on Cloudflare Workers, Workers AI, and D1 Free resources and does not require Durable Objects, R2, KV, or a paid plan.
 
 ### Release to Cloudflare Workers

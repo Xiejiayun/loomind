@@ -119,8 +119,7 @@ function base64ToBytes(base64: string): Uint8Array {
 
 /**
  * Validates, preserves aspect ratio, downscales, and compresses an uploaded or pasted
- * image to WebP (with lossless/original fallback when smaller) so images fit cleanly
- * inside the 1 MiB cloud sync budget.
+ * image to WebP (with lossless/original fallback when smaller) to limit draft and transfer size.
  */
 export async function processImageFileForTopic(file: Blob, rawMimeType?: string): Promise<ProcessedImageResult> {
   const mimeType = rawMimeType || file.type;

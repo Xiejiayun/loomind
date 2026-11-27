@@ -77,6 +77,10 @@ beforeAll(async () => {
   for (const statement of aiChatMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const blocksMigration = await readFile(new URL("../migrations/0009_mindmap_document_blocks.sql", import.meta.url), "utf8");
+  for (const statement of blocksMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
   const checkpoints = await readFile(new URL("../migrations/0012_live_checkpoints.sql", import.meta.url), "utf8");
   for (const statement of checkpoints.split(";").map((part) => part.trim()).filter(Boolean)) await platform.env.DB.prepare(statement).run();
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
@@ -291,7 +295,10 @@ describe("mindmaps API (local workerd D1)", () => {
     const maps = await (await request("mindmaps", "GET", legacy, undefined, owner)).json() as { id: string }[];
     expect(maps).toHaveLength(1);
     expect(maps[0]).toMatchObject({ workspaceId: null, access: "owner" });
-    expect(await (await request(`mindmaps/${maps[0].id}`, "GET", legacy, undefined, owner)).json()).toMatchObject({ revision: 3 });
+    const path = `mindmaps/${maps[0].id}`;
+    const current = await (await request(path, "GET", legacy, undefined, owner)).json() as { revision: number; document: unknown };
+    expect(current).toMatchObject({ revision: 3, document: { format: "mindmap-document" } });
+    expect(await (await request(`${path}/revisions/3`, "GET", legacy, undefined, owner)).json()).toMatchObject(current);
   });
   it("keeps multiple maps per account and preserves the winning revision on concurrent saves", async () => {
     const alice = await login("alice");
@@ -528,6 +535,94 @@ describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
 
 
 describe("Version history API (D1 snapshots & pruning)", () => {
+  it("accepts the exact UTF-8 size limit and preserves the saved map when the next edit exceeds it", async () => {
+    const owner = "map-limit-owner";
+    const session = await login(owner);
+    const path = `mindmaps/${crypto.randomUUID()}`;
+    const headers = { [OWNER_HEADER]: owner };
+    const doc = getTemplate("blank-organic").create();
+    doc.sheets[0].title = "资料".repeat(400);
+    const note = doc.sheets[0].rootTopic.note = { format: "markdown", text: "" };
+    note.text = "x".repeat(DRAFT_LIMIT - Buffer.byteLength(JSON.stringify(doc)));
+    expect((await request(path, "PUT", session, doc, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    note.text += "图";
+    expect((await request(path, "PUT", session, doc, { ...headers, "If-Match": '"1"' })).status).toBe(413);
+    note.text = note.text.slice(0, -1);
+    const snapshot = await (await request(`${path}/revisions/1`, "GET", session, undefined, headers)).json();
+    expect(snapshot).toMatchObject({ revision: 1, title: doc.sheets[0].title, document: doc });
+    expect(await (await request(path, "GET", session, undefined, headers)).json()).toEqual({ revision: 1, document: doc });
+  });
+
+  it("round-trips an image map larger than one D1 row without mixing concurrent revisions", async () => {
+    const owner = "large-map-owner";
+    const session = await login(owner);
+    const mapId = crypto.randomUUID();
+    const path = `mindmaps/${mapId}`;
+    const headers = { [OWNER_HEADER]: owner };
+    const original = getTemplate("blank-organic").create();
+    const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><desc>${"资料🧵".repeat(165000)}</desc><circle r="4"/></svg>`);
+    const sha256 = Buffer.from(await crypto.subtle.digest("SHA-256", svg)).toString("hex");
+    original.assets.chart = { resourceId: "chart", width: 10, height: 10, mimeType: "image/svg+xml", sha256, dataBase64: svg.toString("base64") };
+    original.sheets[0].rootTopic.image = { resourceId: "chart", width: 10, height: 10, pos: "top" };
+    expect(Buffer.byteLength(JSON.stringify(original))).toBeGreaterThan(2_000_000);
+    const write = (revision: number, doc: typeof original) => request(path, "PUT", session, doc, { ...headers, "If-Match": `"${revision}"` });
+    expect((await write(0, original)).status).toBe(200);
+    const contenders = ["Review A", "Review B"].map((title) => ({ ...original, sheets: [{ ...original.sheets[0], title }] }));
+    const responses = await Promise.all(contenders.map((doc) => write(1, doc)));
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const winner = contenders[responses.findIndex((response) => response.ok)];
+    for (const [endpoint, expected, revision] of [[path, winner, 2], [`${path}/revisions/2`, winner, 2], [`${path}/revisions/1`, original, 1]] as const) {
+      const read = await request(endpoint, "GET", session, undefined, headers);
+      expect(read.status).toBe(200);
+      const saved = await read.json() as { revision: number; document: typeof original };
+      expect(saved.revision).toBe(revision);
+      expect(saved.document).toEqual(expected);
+    }
+    const viewer = "large-map-viewer";
+    const viewerSession = await login(viewer);
+    await env.DB.prepare("INSERT INTO mindmap_members (mindmap_id, subject, role) VALUES (?, ?, 'viewer')").bind(mapId, viewer).run();
+    const visible = await request(`${path}/revisions/1`, "GET", viewerSession, undefined, { [OWNER_HEADER]: viewer });
+    expect((await visible.json() as { document: typeof original }).document).toEqual(original);
+    expect((await request(path, "PUT", viewerSession, original, { [OWNER_HEADER]: viewer, "If-Match": '"2"' })).status).toBe(403);
+
+    const manifests = await env.DB.prepare("SELECT document FROM mindmap_revisions WHERE mindmap_id = ? ORDER BY revision").bind(mapId).all<{ document: string }>();
+    const [first, second] = manifests.results.map((row) => JSON.parse(row.document) as string[]);
+    expect(first.some((digest) => second.includes(digest))).toBe(true);
+    const blockCount = () => env.DB.prepare("SELECT count(*) AS total FROM mindmap_document_blocks WHERE mindmap_id = ?").bind(mapId).first<number>("total");
+    expect(await blockCount()).toBe(new Set([...first, ...second]).size);
+    const small = getTemplate("blank-organic").create();
+    for (let revision = 2; revision < 22; revision++) expect((await write(revision, small)).status).toBe(200);
+    expect(await blockCount()).toBe(0);
+    expect((await request(`${path}/revisions/2`, "GET", session, undefined, headers)).status).toBe(404);
+    expect((await write(22, original)).status).toBe(200);
+    expect(await blockCount()).toBeGreaterThan(0);
+    await env.DB.prepare("DELETE FROM mindmap_document_blocks WHERE mindmap_id = ? AND digest = ?").bind(mapId, first[0]).run();
+    expect((await request(path, "GET", session, undefined, headers)).status).toBe(503);
+    expect((await request(`${path}/revisions/23`, "GET", session, undefined, headers)).status).toBe(503);
+    expect((await request(path, "DELETE", session, undefined, headers)).status).toBe(200);
+    expect(await blockCount()).toBe(0);
+  });
+
+  it("keeps the previous draft and all of its history when a block insert fails", async () => {
+    const owner = "atomic-map-owner";
+    const session = await login(owner);
+    const mapId = crypto.randomUUID();
+    const path = `mindmaps/${mapId}`;
+    const headers = { [OWNER_HEADER]: owner };
+    const original = getTemplate("blank-organic").create();
+    expect((await request(path, "PUT", session, original, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    const large = structuredClone(original);
+    large.sheets[0].rootTopic.note = { format: "markdown", text: "🧵资料".repeat(125000) };
+    await env.DB.prepare(`CREATE TRIGGER fail_test_blocks BEFORE INSERT ON mindmap_document_blocks BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END`).run();
+    try {
+      expect((await request(path, "PUT", session, large, { ...headers, "If-Match": '"1"' })).status).toBe(503);
+    } finally { await env.DB.prepare("DROP TRIGGER fail_test_blocks").run(); }
+    expect(await (await request(path, "GET", session, undefined, headers)).json()).toEqual({ revision: 1, document: original });
+    expect((await request(`${path}/revisions/2`, "GET", session, undefined, headers)).status).toBe(404);
+    expect((await request(path, "PUT", session, large, { ...headers, "If-Match": '"1"' })).status).toBe(200);
+    expect(await (await request(path, "GET", session, undefined, headers)).json()).toEqual({ revision: 2, document: large });
+  });
+
   it("records revision snapshots on PUT, caps at 20 revisions, enforces permissions, and cleans up on DELETE", async () => {
     const ownerCookie = await login("hist-owner");
     const strangerCookie = await login("hist-stranger");

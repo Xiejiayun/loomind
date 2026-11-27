@@ -1,7 +1,7 @@
 import type { MindmapDocument } from "@mindmap/core/model";
 
-export const DRAFT_LIMIT = 1024 * 1024;
-export const DRAFT_SIZE_ERROR = "导图超过 1 MiB，无法同步到云端。可继续在本机编辑或导出 .xmind。";
+export const DRAFT_LIMIT = 4 * 1024 * 1024;
+export const DRAFT_SIZE_ERROR = "导图超过 4 MiB，无法同步到云端。可继续在本机编辑，或缩减导图内容后重新同步。";
 export const OWNER_HEADER = "X-Loomind-Owner";
 export const LIVE_HEADER = "X-Loomind-Checkpoint";
 export const ROOM_HEADER = "X-Loomind-Room";

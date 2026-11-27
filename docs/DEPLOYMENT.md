@@ -42,4 +42,6 @@ PR 本身不发布。引入实时协作快照时，必须在部署新 Worker 前
 
 当前 `0002_mindmaps.sql` 会把旧 `account_drafts` 数据复制到 `mindmaps`，`0003_remove_account_drafts.sql` 会删除旧表。若这两项在某次发布中仍待应用，审批前应特别核对旧 Worker 是否能继续使用迁移后的表结构。
 
+`0009_mindmap_document_blocks.sql` 是增量迁移，不重写既有快照。以实际工作流为准：当前 `deploy-production.yml` 也监听 `main` push，应在合并前确认发布批准、D1 bookmark 和回退版本。发布后验证旧图、超过 1 MiB 的带图导图及其历史版都能跨会话打开。一旦已有分块快照，不要回滚到只认识内联 JSON 的 Worker；优先向前修复，或发布保留分块读取能力的修复版。不要删除分块表或为代码回滚而直接恢复整库。
+
 参考：[D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)、[D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)、[Worker 回滚](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)、[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。
