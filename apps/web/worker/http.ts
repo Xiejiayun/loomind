@@ -2,6 +2,12 @@ export class HttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
+export function signingKey(env: Env) {
+  const key = new TextEncoder().encode(env.SESSION_SECRET);
+  if (key.length < 32) throw new HttpError(503, "账号登录尚未配置。游客编辑不受影响。");
+  return key;
+}
+
 export function json(data: unknown, status = 200, cookies: string[] = [], extraHeaders?: HeadersInit) {
   const headers = new Headers(extraHeaders);
   headers.set("Cache-Control", "no-store");

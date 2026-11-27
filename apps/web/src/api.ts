@@ -39,5 +39,7 @@ export const createShare = (type: "workspace" | "mindmap", resourceId: string, r
 export const listShares = (type: "workspace" | "mindmap", resourceId: string) =>
   request<ShareSummary[]>(`/api/shares?type=${type}&resourceId=${encodeURIComponent(resourceId)}`);
 export const revokeShare = (id: string) => request<{ revoked: boolean }>(`/api/shares/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const publicLink = (id: string, method: "GET" | "PUT" | "DELETE") =>
+  request<{ token: string | null }>(`/api/mindmaps/${encodeURIComponent(id)}/public-link`, { method });
 export const previewInvite = (token: string) => request<InvitePreview>(`/api/invites/${encodeURIComponent(token)}`);
 export const acceptInvite = (token: string) => send<{ type: "workspace" | "mindmap"; id: string }>(`/api/invites/${encodeURIComponent(token)}/accept`, {});

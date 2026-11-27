@@ -8,11 +8,13 @@ export function navigate(path: string, replace = false) {
 }
 
 export function useRoute() {
-  const [route, setRoute] = useState(() => ({ pathname: location.pathname, search: location.search }));
+  const current = () => ({ pathname: location.pathname, search: location.search, hash: location.hash });
+  const [route, setRoute] = useState(current);
   useEffect(() => {
-    const update = () => setRoute({ pathname: location.pathname, search: location.search });
+    const update = () => setRoute(current());
     window.addEventListener("popstate", update);
-    return () => window.removeEventListener("popstate", update);
+    window.addEventListener("hashchange", update);
+    return () => { window.removeEventListener("popstate", update); window.removeEventListener("hashchange", update); };
   }, []);
   return route;
 }

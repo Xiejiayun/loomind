@@ -44,4 +44,6 @@ PR 本身不发布。引入实时协作快照时，必须在部署新 Worker 前
 
 `0009_mindmap_document_blocks.sql` 是增量迁移，不重写既有快照。以实际工作流为准：当前 `deploy-production.yml` 也监听 `main` push，应在合并前确认发布批准、D1 bookmark 和回退版本。发布后验证旧图、超过 1 MiB 的带图导图及其历史版都能跨会话打开。一旦已有分块快照，不要回滚到只认识内联 JSON 的 Worker；优先向前修复，或发布保留分块读取能力的修复版。不要删除分块表或为代码回滚而直接恢复整库。
 
+`0010_public_view_links.sql` 仅增加可为空的授权列，旧图默认不公开。发布后用无敏感内容的测试图验证匿名只读、查看新版和撤销链接（已打开的页面也应停止读取），并确认正式成员仍可查看。回退 Worker 不会清除已保存的授权；如需永久停用某链接，请由所有者显式撤销。
+
 参考：[D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)、[D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)、[Worker 回滚](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)、[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。

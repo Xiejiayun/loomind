@@ -4,6 +4,7 @@ import { assembleCheckpoint, checkpointQuery, parseCheckpoint, replaceCheckpoint
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import { packDocument, pruneBlocks, unpackDocument, writeBlocks } from "./document-storage.js";
 import { database, mapAccessSql, mindmapPermission, visibleMindmap, visibleMindmapQuery, workspaceRole, type Access } from "./permissions.js";
+import { knownRevision, snapshotResponse } from "./snapshot-response.js";
 
 const workspaceHeader = "X-Loomind-Workspace";
 const MAX_REVISIONS_PER_MAP = 20;
@@ -53,9 +54,10 @@ export async function handleDraft(request: Request, env: Env, subject: string | 
       const row = head.results[0] as { revision: number; document: string } | undefined;
       return json(row ? { revision: row.revision, document: await unpackDocument(db, id, row.document), checkpoint: assembleCheckpoint(parts.results as { room: string; cursor: number; payload: string }[]) } : { revision: 0, document: null });
     }
-    const row = await visibleMindmap(db, subject, id);
+    const known = knownRevision(request);
+    const row = await visibleMindmap(db, subject, id, known);
     // Unknown and inaccessible IDs are indistinguishable to the existing create-on-first-save client.
-    return json(row ? { revision: row.revision, document: await unpackDocument(db, id, row.document) } : { revision: 0, document: null } satisfies CloudDraft);
+    return row ? snapshotResponse(db, id, row, known) : json({ revision: 0, document: null } satisfies CloudDraft);
   }
 
   if (request.method === "DELETE") {

@@ -44,11 +44,12 @@ export function mapAccessSql(write = false) {
   ))`;
 }
 
-export function visibleMindmapQuery(db: D1Database, subject: string, id: string) {
-  return db.prepare(`SELECT m.revision, m.document FROM mindmaps m WHERE m.id = ? AND ${mapAccessSql()}`)
-    .bind(id, subject, subject, subject, subject);
+export function visibleMindmapQuery(db: D1Database, subject: string, id: string, knownRevision = 0) {
+  return db.prepare(`SELECT m.revision, CASE WHEN m.revision = ? THEN '' ELSE m.document END AS document
+    FROM mindmaps m WHERE m.id = ? AND ${mapAccessSql()}`)
+    .bind(knownRevision, id, subject, subject, subject, subject);
 }
 
-export function visibleMindmap(db: D1Database, subject: string, id: string) {
-  return visibleMindmapQuery(db, subject, id).first<{ revision: number; document: string }>();
+export function visibleMindmap(db: D1Database, subject: string, id: string, knownRevision = 0) {
+  return visibleMindmapQuery(db, subject, id, knownRevision).first<{ revision: number; document: string }>();
 }

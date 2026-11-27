@@ -1411,6 +1411,9 @@
 }
 .lm-modal::backdrop, .lm-account-dialog::backdrop { background: rgba(0, 0, 0, .58); backdrop-filter: blur(2px); }
 .lm-modal-inner { padding: 20px; }
+.lm-public-link { padding: 14px 0; border-bottom: 1px solid var(--lm-border-subtle); }
+.lm-public-link h3 { margin: 0; font-size: 14px; }
+.lm-public-map { height: 100dvh; }
 .lm-modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .lm-modal-heading h2 { margin: 4px 0 0; font-family: var(--lm-font-display); font-size: 24px; font-weight: 500; letter-spacing: -.01em; line-height: 1.2; }
 .lm-modal-description { margin: 12px 0 16px; color: var(--lm-text-secondary); font-size: 12.5px; line-height: 1.6; }

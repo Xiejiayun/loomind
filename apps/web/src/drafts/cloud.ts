@@ -36,7 +36,10 @@ export async function listCloud(owner: string): Promise<MindmapSummary[]> {
 }
 
 export async function readCloud(owner: string, id: string, live = false): Promise<CloudDraft> {
-  const data = await request(owner, id, live ? { headers: { [LIVE_HEADER]: "1" } } : undefined);
+  return parseCloudDraft(await request(owner, id, live ? { headers: { [LIVE_HEADER]: "1" } } : undefined));
+}
+
+function parseCloudDraft(data: unknown): CloudDraft {
   const record = asRecord(data);
   if (record?.revision === 0 && record.document === null) return data as CloudDraft;
   if (!record || typeof record.revision !== "number" || !Number.isSafeInteger(record.revision) || record.revision < 1 || !MindmapDocumentSchema.safeParse(record.document).success) {
@@ -49,6 +52,24 @@ export async function seedCloud(owner: string, id: string, revision: number, che
   const data = await request(owner, id, { method: "PUT", headers: { "Content-Type": "application/json", "If-Match": `"${revision}"`, [LIVE_HEADER]: "seed" }, body: JSON.stringify({ checkpoint }) });
   const record = asRecord(data);
   if (record?.revision !== revision || record.room !== checkpoint.room) throw new CloudError(502, getWebMessages().errors.cloudNoAck);
+}
+
+export type ViewAccess = { owner: string } | { token: string };
+
+export async function readViewSnapshot(id: string, access: ViewAccess, revision: number, signal: AbortSignal) {
+  const member = "owner" in access;
+  if (!MAP_ID.test(id) || (!member && !access.token)) throw new CloudError(404, getWebMessages().editorWorkspace.mapUnavailable);
+  const headers = new Headers(member ? { [OWNER_HEADER]: access.owner } : { Authorization: `Bearer ${access.token}` });
+  if (revision) headers.set("If-None-Match", `"${revision}"`);
+  const response = await fetch(`/api/${member ? "mindmaps" : "public-maps"}/${id}`, {
+    headers, credentials: member ? "same-origin" : "omit", cache: "no-store", referrerPolicy: "no-referrer",
+    signal: AbortSignal.any([signal, AbortSignal.timeout(DOCUMENT_TIMEOUT_MS)]),
+  });
+  if (response.status === 304 && revision) return null;
+  if (!response.ok) throw new CloudError(response.status, getWebMessages().editorWorkspace.readSharedError);
+  const snapshot = parseCloudDraft(await response.json());
+  if (!snapshot.document) throw new CloudError(404, getWebMessages().editorWorkspace.mapUnavailable);
+  return { revision: snapshot.revision, document: snapshot.document };
 }
 
 export async function writeCloud(owner: string, id: string, revision: number, document: MindmapDocument, workspaceId?: string | null, checkpoint?: LiveCheckpoint): Promise<number> {
