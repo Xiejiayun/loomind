@@ -192,7 +192,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
   return (
     <aside
-      className={`fixed right-0 top-11 bottom-7.5 z-40 flex w-[300px] shrink-0 flex-col border-l text-xs shadow-xl transition-colors md:static md:h-full md:shadow-none ${
+      className={`absolute inset-y-0 right-0 z-40 flex w-[300px] max-w-full shrink-0 flex-col border-l text-xs shadow-xl transition-colors md:static md:h-full md:shadow-none ${
         isDark
           ? "dark-panel border-white/[0.075] bg-[#15171c] text-[#f4f5f8]"
           : "border-slate-900/[0.08] bg-white text-[#111318]"

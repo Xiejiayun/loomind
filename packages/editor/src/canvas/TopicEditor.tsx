@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextStyle from "@tiptap/extension-text-style";
@@ -60,12 +60,6 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
       setHasSelection(!ed.state.selection.empty);
     },
   });
-
-  useEffect(() => {
-    if (editor) {
-      editor.commands.focus("end");
-    }
-  }, [editor]);
 
   const finishCommit = () => {
     if (committedRef.current || !editor) return;

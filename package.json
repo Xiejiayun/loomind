@@ -7,9 +7,11 @@
     "dev": "pnpm --filter @mindmap/web dev",
     "build": "pnpm -r build",
     "test": "vitest run",
+    "test:mobile": "playwright test",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
   }

@@ -66,6 +66,8 @@
 .mindmap-tiptap .ProseMirror {
   outline: none;
   min-width: 24px;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .mindmap-tiptap .ProseMirror p {
