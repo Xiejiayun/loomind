@@ -28,7 +28,7 @@ flowchart LR
     subgraph Browser["浏览器客户端 (@mindmap/web + @mindmap/editor + @mindmap/ai)"]
         Try["/try 免费体验页\n(免登录, 本地临时画布)"]
         App["/app 付费工作区\n(Google 登录, 云端同步)"]
-        UI["AiChatPanel / InlineAiBar / CreateView"]
+        UI["AiChatPanel / CreateView"]
         Adapt["LocalImmerSyncAdapter + Reconciler"]
         Try --> UI
         App --> UI
@@ -136,6 +136,6 @@ SSE 响应事件：
 |---|---|---|---|
 | **T1** | `@mindmap/ai` 协议层、SSE 客户端与护栏 | `packages/ai/src/protocol.ts`、`sse-transport.ts`、`stream-patcher.ts`、`actions.ts` 与单元测试 | **零外部资源依赖**，可直接完整开发与单测 |
 | **T2** | Worker 双引擎后端、D1 限流与 Mock 兜底 | `apps/web/migrations/0005_ai_usage.sql`、`apps/web/worker/ai-providers.ts`、`ai.ts`、`auth.ts`、`wrangler.jsonc`、`env.d.ts` 与 Worker 单测 | 真实 Workers AI 远端调用与付费代理站 Key 尚未提供 → **内置真实协议解析代码 + 受控 Mock Provider 兜底**，清单记入 `docs/LLM_RESOURCES_TODO.md` |
-| **T3** | `@mindmap/editor` 真实 AI 运行时接入 | `MindmapEditor.tsx`、`AiChatPanel.tsx`、`InlineAiBar.tsx`、`i18n.ts`（引擎徽章、剩余次数、Mock 标记、停止生成、升级引导、错误分级） | **零外部资源依赖**，通过 `EditorAiRuntime` 接口解耦 |
+| **T3** | `@mindmap/editor` 真实 AI 运行时接入 | `MindmapEditor.tsx`、`AiChatPanel.tsx`、`i18n.ts`（对话内节点操作、引擎徽章、剩余次数、Mock 标记、停止生成、升级引导、错误分级） | **零外部资源依赖**，通过 `EditorAiRuntime` 接口解耦 |
 | **T4** | `@mindmap/web` 免费体验页 `/try` 与 Pro 工作区接入 | `apps/web/src/ai.ts`、`TryPlaygroundPage.tsx`、`App.tsx`（新增 `/try` 与首页入口）、`EditorWorkspace.tsx`、`CreateView.tsx`、`i18n.ts`、`app-shell.css` | **零外部资源依赖**，接入 `/api/ai/*` 即可在本地和线上端到端运行 |
 | **T5** | 真实资源补全与生产切换（待人工提供资源） | 填入真实 `PRO_LLM_BASE_URL` / `PRO_LLM_API_KEY` / `PRO_LLM_MODEL`、验证 Cloudflare Workers AI 线上绑定、应用 D1 `0005` 迁移、关闭 `AI_ALLOW_MOCK` | 详见 [LLM_RESOURCES_TODO.md](./LLM_RESOURCES_TODO.md) |

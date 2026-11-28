@@ -194,7 +194,6 @@ function Landing({ theme, toggle }: { theme: UiTheme; toggle: () => void }) {
               <span>{t.landing.previewDock.subtopic}</span>
               <span>{t.landing.previewDock.sibling}</span>
               <span>{t.landing.previewDock.insert}</span>
-              <span className="is-pill">{t.landing.previewDock.aiExpand}</span>
             </div>
           </div>
         </div>

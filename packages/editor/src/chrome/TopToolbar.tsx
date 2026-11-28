@@ -104,7 +104,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               }`}
             >
               <Sparkles className="h-3 w-3 opacity-80" />
-              <span>{t.toolbar.chat}</span>
+              <span>{t.aiChat.title}</span>
             </button>
           )}
           {onToggleOutlineSidebar && viewMode === "canvas" && (

@@ -92,7 +92,6 @@ const zh = {
       subtopic: "+ 子主题",
       sibling: "+ 同级",
       insert: "添加元素 ▾",
-      aiExpand: "对话扩展",
     },
     showcase: {
       ariaLabel: "Loomind 核心工作流动态演示",
@@ -650,7 +649,6 @@ const en: typeof zh = {
       subtopic: "+ Child",
       sibling: "+ Sibling",
       insert: "Insert ▾",
-      aiExpand: "Expand",
     },
     showcase: {
       ariaLabel: "Loomind interactive workflow showcase",
