@@ -825,7 +825,6 @@
 
 .lm-composer {
   position: relative;
-  overflow: hidden;
   border: 1px solid var(--lm-border-strong);
   border-radius: 12px;
   background: var(--lm-bg-surface);
@@ -855,7 +854,7 @@
 .lm-theme[data-theme="light"] .lm-composer:focus-within {
   box-shadow: 0 0 0 3px var(--lm-accent-soft), 0 16px 42px rgba(15, 23, 42, .09);
 }
-.lm-composer textarea {
+.lm-composer > textarea {
   display: block;
   width: 100%;
   min-height: 108px;
@@ -870,7 +869,7 @@
   line-height: 1.65;
 }
 .lm-composer textarea::placeholder { color: var(--lm-text-muted); }
-.lm-composer textarea:focus-visible,
+.lm-composer > textarea:focus-visible,
 .lm-library-search input:focus-visible,
 .lm-cmdk-input-row input:focus-visible,
 .lm-chip-select select:focus-visible { outline: none; }
@@ -907,8 +906,45 @@
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--lm-border-subtle);
+  border-radius: 0 0 12px 12px;
   background: color-mix(in srgb, var(--lm-bg-app) 45%, var(--lm-bg-surface));
 }
+.lm-attach-control { position: relative; flex: none; }
+.lm-attachment-icon { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border: 0; border-radius: 7px; color: var(--lm-text-secondary); background: transparent; }
+.lm-attach-trigger { width: 34px; height: 34px; border: 1px solid var(--lm-border-subtle); border-radius: 50%; }
+.lm-attachment-icon:hover, .lm-attach-trigger[aria-expanded="true"] { color: var(--lm-text-primary); background: var(--lm-bg-elevated); }
+.lm-attach-options { position: absolute; z-index: 4; bottom: calc(100% + 6px); left: 0; width: min(244px, calc(100vw - 64px)); padding: 5px; border: 1px solid var(--lm-border-strong); border-radius: 10px; background: var(--lm-bg-surface); box-shadow: 0 8px 24px rgba(0,0,0,.24); }
+.lm-attach-options button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--lm-text-primary); text-align: start; font-size: 13px; }
+.lm-attach-options button:hover, .lm-attach-options button:focus-visible { background: var(--lm-bg-elevated); }
+.lm-attach-options svg, .lm-attachment-chip svg { flex: none; color: var(--lm-text-secondary); }
+.lm-attach-options small { display: block; margin-top: 2px; color: var(--lm-text-muted); font-size: 10px; }
+.lm-attachment-drop { position: absolute; inset: 3px; z-index: 5; display: grid; place-items: center; border: 2px dashed var(--lm-accent-border); border-radius: 10px; background: var(--lm-bg-surface); color: var(--lm-accent-text); pointer-events: none; }
+.lm-attachment-tray, .lm-attachment-notice, .lm-source-draft { margin: 0 14px 10px; }
+.lm-attachment-list { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.lm-attachment-chip { max-width: 100%; padding: 2px 3px; border: 1px solid var(--lm-border-subtle); border-radius: 8px; background: var(--lm-bg-canvas); }
+.lm-attachment-chip-head { display: flex; align-items: center; }
+.lm-attachment-chip-head > button:first-child { display: inline-flex; align-items: center; gap: 7px; min-width: 0; min-height: 28px; padding: 0 5px; border: 0; background: transparent; color: var(--lm-text-primary); text-align: start; font-size: 12px; }
+.lm-attachment-chip-head > button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lm-attachment-chip img { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; }
+.lm-attachment-chip > small { display: block; padding: 0 5px 3px; font-size: 11px; color: var(--lm-text-secondary); overflow-wrap: anywhere; }
+.lm-attachment-chip.has-error { border-color: var(--lm-status-danger); }
+.lm-attachment-chip.has-error small { color: var(--lm-status-danger); }
+.lm-attachment-hint { margin: 6px 0 0; color: var(--lm-text-secondary); font-size: 11px; }
+.lm-attachment-panel { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--lm-border-subtle); border-radius: 8px; background: var(--lm-bg-canvas); color: var(--lm-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.lm-attachment-tray .lm-attachment-panel { margin-top: 8px; }
+.lm-attachment-panel small, .lm-attachment-panel p { margin: 0; }
+.lm-attachment-heading, .lm-attachment-heading strong { display: flex; align-items: center; gap: 6px; }
+.lm-attachment-heading { justify-content: space-between; color: var(--lm-text-primary); }
+.lm-attachment-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; }
+.lm-attachment-panel label { display: grid; gap: 4px; }
+.lm-attachment-panel input, .lm-attachment-panel textarea { min-width: 0; width: 100%; padding: 7px 9px; border: 1px solid var(--lm-border-subtle); border-radius: 6px; background: var(--lm-bg-surface); color: var(--lm-text-primary); }
+.lm-attachment-panel textarea { min-height: 65px; resize: vertical; }
+.lm-attachment-panel > button { justify-self: start; }
+.lm-attachment-quotes { max-height: 140px; overflow: auto; }
+.lm-attachment-quotes details { padding-block: 4px; }
+.lm-attachment-quotes summary { color: var(--lm-text-primary); cursor: pointer; }
+.lm-attachment-quotes p { margin: 4px 0; white-space: pre-wrap; }
+.lm-attachment-image { max-width: 100%; max-height: 160px; object-fit: contain; }
 .lm-composer-controls {
   display: flex;
   align-items: center;
@@ -1352,10 +1388,6 @@
   outline: none;
 }
 .lm-topic-textarea { min-height: 112px; }
-.lm-source-view .lm-create-input-panel > input { width: 100%; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--lm-border-subtle); border-radius: var(--lm-radius-md); background: var(--lm-bg-canvas); color: var(--lm-text-primary); }
-.lm-source-view details { padding-block: 6px; overflow-wrap: anywhere; }
-.lm-source-view summary { cursor: pointer; }
-.lm-source-view details p { white-space: pre-wrap; }
 .lm-field-foot {
   display: flex;
   align-items: center;
@@ -1727,6 +1759,11 @@
   .lm-closing { flex-direction: column; align-items: flex-start; }
   .lm-page-heading, .lm-section-line, .lm-create-actions { flex-direction: column; align-items: flex-start; }
   .lm-composer-shortcut { display: none; }
+  .lm-attach-trigger, .lm-attachment-icon { min-width: 44px; min-height: 44px; }
+  .lm-attach-options button, .lm-attachment-chip-head > button:first-child, .lm-composer-submit { min-height: 44px; }
+  .lm-composer-controls, .lm-chip-select, .lm-chip-select select { min-width: 0; max-width: 100%; }
+  .lm-composer-submit-group { margin-left: auto; }
+  .lm-attachment-panel input { font-size: 16px; }
   .lm-recent-grid { grid-template-columns: 1fr; }
   .lm-content, .lm-content-wide { padding: 64px 16px 48px; }
   .lm-library-right-controls { width: 100%; }

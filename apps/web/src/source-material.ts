@@ -7,6 +7,7 @@ const marker = /^\s*(?:#{1,6}\s+|[-*+•]\s+|\d+[.)]\s+|\d+、\s*)/u;
 
 export interface SourcePassage { title: string; quote: string; firstLine: number; lastLine: number }
 export type CitedPassage = SourcePassage & { page?: number; paragraph?: number };
+export interface PassageSource { origin: "text" | "pdf" | "web"; name: string; address: string; passages: CitedPassage[] }
 
 export function passageLocation(passage: CitedPassage, locale: Locale) {
   const messages = getWebMessages(locale).source;
@@ -57,20 +58,24 @@ export function sourceAddress(value: string, locale: Locale) {
 }
 
 export function documentFromSource(name: string, text: string, address: string, locale: Locale) {
-  return documentFromPassages(name, sourcePassages(text, locale), address, locale);
-}
-
-export function documentFromPassages(name: string, passages: CitedPassage[], address: string, locale: Locale, sourceTitle?: string) {
   const messages = getWebMessages(locale).source;
   const title = name.trim();
   if (!title || title.length > 120) throw new Error(messages.invalidName);
+  const content = contentFromSource({ origin: "text", name: title, address, passages: sourcePassages(text, locale) }, locale);
+  const root = createTopic(generateId("topic"), title, content);
+  return createDocument([createSheet(generateId("sheet"), title, root)]);
+}
+
+export function contentFromSource({ origin, name, address, passages }: PassageSource, locale: Locale) {
+  const messages = getWebMessages(locale).source;
   if (!passages.length) throw new Error(messages.empty);
-  const url = sourceAddress(address, locale);
+  const url = origin === "web" ? undefined : sourceAddress(address, locale);
   const href = url ? { kind: "url" as const, target: url } : undefined;
   const children = passages.map((passage) => {
-    const citation = [sourceTitle ?? title, passageLocation(passage, locale), url].filter(Boolean).join(" · ");
-    return createTopic(generateId("topic"), passage.title, { note: { format: "markdown", text: `${citation}\n\n${passage.quote}` }, ...(href ? { href } : {}) });
+    const lines = origin === "text" ? messages.lines(passage.firstLine, passage.lastLine) : undefined;
+    const citation = origin === "web" ? "" : [name, lines, url].filter(Boolean).join(" · ");
+    const text = citation ? `${citation}\n\n${passage.quote}` : passage.quote;
+    return createTopic(generateId("topic"), passage.title, { note: { format: "markdown", text }, ...(href ? { href } : {}) });
   });
-  const root = createTopic(generateId("topic"), title, { children, ...(href ? { href } : {}) });
-  return createDocument([createSheet(generateId("sheet"), title, root)]);
+  return { children, ...(href ? { href } : {}) };
 }

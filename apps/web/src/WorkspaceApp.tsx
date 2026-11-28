@@ -21,7 +21,9 @@ import { authRequest } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
 import { createWorkspace, getWorkspaceOrder, listWorkspaces, moveMindmap, saveWorkspaceOrder, type WorkspaceSummary } from "./api.js";
 import { CreateView } from "./CreateView.js";
-import { SourceView } from "./SourceView.js";
+import { AttachmentButton, AttachmentTray, useComposerAttachments } from "./ComposerAttachments.js";
+import { SourceAttachmentEditor, type SourceMode } from "./SourceAttachmentEditor.js";
+import { withAttachments } from "./composer-attachments.js";
 import { clearLocalAiChatCache, seedLocalAiChatCache } from "./drafts/ai-chat.js";
 import { deleteCloud, listCloud } from "./drafts/cloud.js";
 import { mapTitle, MAP_ID, type MindmapSummary } from "./drafts/shared.js";
@@ -374,8 +376,6 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           {pageGroup ? (
             <WorkspaceMapsView key={pageGroup.id} group={pageGroup} workspaces={workspaces}
               onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
-          ) : route.pathname === "/app/create/source" ? (
-            <SourceView workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onCreate={createMap}/>
           ) : isCreate ? (
             <CreateView
               mode={createMode}
@@ -437,6 +437,11 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
     writable.some((space) => space.id === activeWorkspaceId) ? activeWorkspaceId : null,
   );
   const [showPreview, setShowPreview] = useState(false);
+  const attachments = useComposerAttachments(locale);
+  const [sourceMode, setSourceMode] = useState<SourceMode>();
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
+  const prompt = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [localDocs, setLocalDocs] = useState<Record<string, MindmapDocument>>({});
@@ -480,20 +485,23 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
     }
   }, [text, isMultiLine]);
 
-  async function handleSubmit(event?: FormEvent) {
-    event?.preventDefault();
-    const clean = text.trim();
-    if (!clean || busy) return;
+  const hasAttachments = attachments.rows.length > 0;
+  const canSubmit = !busy && !sourceMode && !attachments.blocked && (hasAttachments || Boolean(text.trim()));
+  function addFiles(files: File[]) {
+    if (!busy && files.length) { setError(""); void attachments.addFiles(files); }
+  }
+  function closeSource() { setSourceMode(undefined); prompt.current?.focus(); }
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!canSubmit) return;
     setBusy(true);
     setError("");
     try {
-      if (parsedOutline) {
-        const doc = documentFromOutline(parsedOutline, templateId);
-        await onCreate(doc, workspaceId);
-      } else {
-        const doc = documentFromTopic(clean, templateId);
-        await onCreate(doc, workspaceId, clean);
-      }
+      const ready = attachments.rows.flatMap((row) => row.value ? [row.value] : []);
+      const title = text.trim() || ready[0]?.title || "";
+      const doc = parsedOutline ? documentFromOutline(parsedOutline, templateId) : documentFromTopic(title, templateId);
+      if (hasAttachments) await onCreate(withAttachments(doc, ready, locale), workspaceId);
+      else await onCreate(doc, workspaceId, parsedOutline ? undefined : title);
     } catch (reason) {
       setError(errorText(reason, t.home.createError));
     } finally {
@@ -515,20 +523,34 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
           </h1>
         </div>
 
-        <form className="lm-composer" onSubmit={(e) => void handleSubmit(e)}>
+        <form className={`lm-composer${dragging ? " is-dragging" : ""}`} onSubmit={(e) => void handleSubmit(e)}
+          onDragEnter={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); dragDepth.current++; setDragging(true); } }}
+          onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}
+          onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}
+          onDrop={(event) => {
+            if (!event.dataTransfer.types.includes("Files")) return;
+            event.preventDefault(); dragDepth.current = 0; setDragging(false); addFiles(Array.from(event.dataTransfer.files));
+          }}>
+          {dragging && <div className="lm-attachment-drop">{t.attachments.drop}</div>}
           <label className="lm-sr-only" htmlFor="lm-home-prompt">{t.home.promptLabel}</label>
           <textarea
             id="lm-home-prompt"
+            ref={prompt}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onPaste={(event) => { if (event.clipboardData.files.length) { event.preventDefault(); addFiles(Array.from(event.clipboardData.files)); } }}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                 e.preventDefault();
-                void handleSubmit();
+                e.currentTarget.form?.requestSubmit();
               }
             }}
-            placeholder={t.home.promptPlaceholder}
+            placeholder={hasAttachments ? t.attachments.prompt : t.home.promptPlaceholder}
           />
+          <AttachmentTray draft={attachments} disabled={busy}/>
+          {sourceMode && <SourceAttachmentEditor mode={sourceMode} onCancel={closeSource} onAttach={(source) => {
+            if (attachments.addSource(source)) closeSource();
+          }}/>}
 
           {parsedOutline && (
             <>
@@ -548,6 +570,7 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
 
           <div className="lm-composer-bar">
             <div className="lm-composer-controls">
+              <AttachmentButton disabled={busy || Boolean(sourceMode)} onFiles={addFiles} onSource={setSourceMode}/>
               <label className="lm-chip-select" title={t.home.templateTitle}>
                 <GitBranch size={12}/>
                 <select aria-label={t.home.templateAria} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
@@ -567,9 +590,9 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
 
             <div className="lm-composer-submit-group">
               <span className="lm-composer-shortcut" aria-hidden="true">{t.home.shortcutHint}</span>
-              <button type="submit" className="lm-primary-button lm-composer-submit" disabled={busy || !text.trim()}>
-                <Sparkles size={13}/>
-                {busy ? t.home.creating : parsedOutline ? t.home.createFromOutline : t.home.createWithAi}
+              <button type="submit" className="lm-primary-button lm-composer-submit" disabled={!canSubmit}>
+                {hasAttachments || sourceMode ? <ArrowRight size={14}/> : <Sparkles size={13}/>}
+                {busy ? t.home.creating : hasAttachments || sourceMode ? t.attachments.create : parsedOutline ? t.home.createFromOutline : t.home.createWithAi}
               </button>
             </div>
           </div>
@@ -578,7 +601,6 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
         {error && <p className="lm-form-error" role="alert">{error}</p>}
 
         <div className="lm-suggestion-row">
-          <AppLink href="/app/create/source" className="lm-secondary-button">{t.source.heading}</AppLink>
           {t.home.suggestions.map((idea) => (
             <button key={idea} type="button" onClick={() => setText(idea)}>
               {idea}
