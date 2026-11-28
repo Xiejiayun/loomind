@@ -52,6 +52,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Real-time CRDT Collaboration**: Powered by `LoroSyncAdapter` (Movable Tree CRDT) with instant same-browser `BroadcastChannel` sync, Cloudflare D1 incremental delta sync (`/api/mindmaps/:id/collab`), and live collaborator selection presence badges.
 - **Cloud Version History**: Automatically snapshots up to 20 cloud revisions per mindmap (`mindmap_revisions`) with live SVG thumbnail previews, JSON download, and non-destructive one-click restore.
 - **Workspace & Mindmap Sharing**: Invite another Google account to an entire workspace or a single mindmap with editor or viewer access (7-day expiry, instant revocation, signed-session access control).
+- **Workspace sidebar**: Open a workspace by its name or expand its arrow to see maps. **Personal** holds your unfiled maps; **Shared**, directly below it by default, holds incoming maps and the workspaces you’ve joined. Use **Reorder workspaces** beside the Workspaces heading to save your own sidebar order across devices. Global search still finds maps across workspaces.
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
 - **Pitch Mode**: Automatically compiles your mind map into polished presentation slides with speaker notes and exports directly to **`.pptx`**.
@@ -72,7 +73,7 @@ Loomind is organized as a **pnpm Monorepo**:
 loomind/
 ├── apps/
 │   └── web/              # Vite + React 19 + Tailwind CSS v4 web app & Cloudflare Workers config
-│       ├── migrations/   # D1 SQL migrations (0001..0007: maps, sharing, AI usage, revisions, CRDT collab)
+│       ├── migrations/   # D1 migrations for maps, sharing, AI, revisions, collaboration & sidebar preferences
 │       └── worker/       # Google / Turnstile auth, D1 drafts/revisions/collab, sharing & dual-tier AI proxy
 └── packages/
     ├── core/             # Document schema, 9 layout engines, 14 templates, 11 palettes, Loro CRDT & I/O codecs
@@ -134,12 +135,12 @@ See the [collaboration polling benchmark report](docs/COLLAB_POLL_PERFORMANCE.md
 
 - **Google:** use a Web application OAuth client with authorized JavaScript origin `https://loomind.jeremyxie.com` (no path). The Google button returns an ID token to a JavaScript popup callback, so no authorized redirect URI or Google client secret is needed. `/api/auth/google` is a same-origin JSON endpoint, not a redirect target.
 - **Turnstile:** use the Managed widget for `loomind.jeremyxie.com`. The Worker checks Siteverify success, hostname and `google_login` action before signing a session. `TURNSTILE_SITE_KEY` is public; `TURNSTILE_SECRET` is server-only. Store `GOOGLE_CLIENT_ID`, `TURNSTILE_SECRET` and an independent, randomly generated production `SESSION_SECRET` (at least 32 random bytes, encoded as hex or base64url) in the Worker's protected configuration. Never put secrets in `VITE_*`, the repository or the browser bundle.
-- **Mindmaps & Sync:** each verified Google account can create and switch between independent mindmaps in the workspace library. D1 stores each map by its own ID, up to 20 historical revision snapshots, and incremental CRDT deltas for live collaboration, paired with per-tab isolated IndexedDB draft caching. Maps larger than 1 MiB remain local.
+- **Mindmaps & Sync:** each verified Google account can create and switch between independent mindmaps from the workspace sidebar. D1 stores each map by its own ID, up to 20 historical revision snapshots, and incremental CRDT deltas for live collaboration, paired with per-tab isolated IndexedDB draft caching. Maps larger than 1 MiB remain local.
 - **Cost:** the app runs entirely on Cloudflare Workers, Workers AI, and D1 Free resources and does not require Durable Objects, R2, KV, or a paid plan.
 
 ### Release to Cloudflare Workers
 
-The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. PRs run GitHub Actions CI (`Verify`), and pushes to `main` automatically verify, record a D1 Time Travel recovery point, apply pending D1 migrations (`0001..0007`), deploy the Worker + static assets, and run live production smoke checks. See [production deployment and recovery](docs/DEPLOYMENT.md) for recovery and rollback steps.
+The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. PRs run GitHub Actions CI (`Verify`), and pushes to `main` automatically verify, record a D1 Time Travel recovery point, apply pending D1 migrations, deploy the Worker + static assets, and run live production smoke checks. See [production deployment and recovery](docs/DEPLOYMENT.md) for recovery and rollback steps.
 
 ---
 

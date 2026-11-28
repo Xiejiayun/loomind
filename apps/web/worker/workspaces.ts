@@ -1,24 +1,44 @@
-import { MAP_ID } from "../src/drafts/shared.js";
+import { MAP_ID, OWNER_HEADER } from "../src/drafts/shared.js";
+import { PERSONAL, SHARED, type WorkspaceSummary } from "../src/workspace-groups.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
-import { database, workspaceRole, type Access } from "./permissions.js";
+import { database, workspaceRole } from "./permissions.js";
 
-type Workspace = { id: string; name: string; role: Access; createdAt: string };
+async function visibleWorkspaces(db: D1Database, subject: string) {
+  const rows = await db.prepare(`
+    SELECT w.id, w.name, w.created_at AS createdAt,
+      CASE WHEN w.owner = ? THEN 'owner' ELSE wm.role END AS role
+    FROM workspaces w
+    LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.subject = ?
+    WHERE w.owner = ? OR w.id IN (SELECT workspace_id FROM workspace_members WHERE subject = ?)
+    ORDER BY w.created_at DESC, w.id
+  `).bind(subject, subject, subject, subject).all<WorkspaceSummary>();
+  return rows.results;
+}
 
 export async function handleWorkspace(request: Request, env: Env, subject: string | undefined, path: string): Promise<Response> {
   if (!subject) throw new HttpError(401, "请先登录后访问工作空间。");
   const db = database(env);
-  if (path === "/api/workspaces") {
+  if (path === "/api/workspaces/order") {
+    if (request.headers.get(OWNER_HEADER) !== subject) throw new HttpError(403, "账号已切换，请刷新页面后重试。");
     if (request.method === "GET") {
-      const rows = await db.prepare(`
-        SELECT w.id, w.name, w.created_at AS createdAt,
-          CASE WHEN w.owner = ? THEN 'owner' ELSE wm.role END AS role
-        FROM workspaces w
-        LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.subject = ?
-        WHERE w.owner = ? OR w.id IN (SELECT workspace_id FROM workspace_members WHERE subject = ?)
-        ORDER BY w.created_at DESC, w.id
-      `).bind(subject, subject, subject, subject).all<Workspace>();
-      return json(rows.results);
+      const saved = await db.prepare("SELECT space_order FROM workspace_sidebar_orders WHERE subject = ?").bind(subject).first<string>("space_order");
+      return json(saved ? JSON.parse(saved) : []);
     }
+    if (request.method !== "PUT") return json({ error: "请求方法不支持。" }, 405, [], { Allow: "GET, PUT" });
+    requireOrigin(request, env);
+    const order = await readJson(request, 64 * 1024, "工作区排序过长。");
+    if (!Array.isArray(order) || !order.includes(PERSONAL) || !order.includes(SHARED) || new Set(order).size !== order.length ||
+        !order.every((id) => typeof id === "string" && (id === PERSONAL || id === SHARED || MAP_ID.test(id)))) {
+      throw new HttpError(400, "工作区排序无效。");
+    }
+    const allowed = new Set([PERSONAL, SHARED, ...(await visibleWorkspaces(db, subject)).map((space) => space.id)]);
+    if (order.some((id) => !allowed.has(id))) throw new HttpError(409, "工作区列表已更改，请刷新后重试。");
+    await db.prepare(`INSERT INTO workspace_sidebar_orders (subject, space_order) VALUES (?, ?)
+      ON CONFLICT(subject) DO UPDATE SET space_order = excluded.space_order`).bind(subject, JSON.stringify(order)).run();
+    return json(order);
+  }
+  if (path === "/api/workspaces") {
+    if (request.method === "GET") return json(await visibleWorkspaces(db, subject));
     if (request.method !== "POST") return json({ error: "请求方法不支持。" }, 405, [], { Allow: "GET, POST" });
     requireOrigin(request, env);
     const input = await readJson(request, 1024, "工作空间名称过长。");
@@ -31,7 +51,7 @@ export async function handleWorkspace(request: Request, env: Env, subject: strin
     const createdAt = new Date().toISOString();
     await db.prepare("INSERT INTO workspaces (id, owner, name, created_at) VALUES (?, ?, ?, ?)")
       .bind(id, subject, name, createdAt).run();
-    return json({ id, name, role: "owner", createdAt } satisfies Workspace, 201);
+    return json({ id, name, role: "owner", createdAt } satisfies WorkspaceSummary, 201);
   }
 
   const match = /^\/api\/workspaces\/([^/]+)\/mindmaps$/.exec(path);

@@ -75,6 +75,8 @@ beforeAll(async () => {
   for (const statement of aiChatMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  const sidebarMigration = await readFile(new URL("../migrations/0009_workspace_sidebar_orders.sql", import.meta.url), "utf8");
+  await platform.env.DB.prepare(sidebarMigration).run();
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -223,6 +225,36 @@ describe("collaboration API (signed sessions and local D1)", () => {
     expect((await (await request("mindmaps", "GET", outsider, undefined, { [OWNER_HEADER]: "space-outsider" })).json())).toEqual([]);
     expect(await (await request("mindmaps/" + first, "GET", outsider, undefined, { [OWNER_HEADER]: "space-outsider" })).json())
       .toEqual({ revision: 0, document: null });
+  });
+
+  it("persists sidebar order per account, including viewer memberships, without changing workspace permissions", async () => {
+    const owner = await login("order-owner");
+    const viewer = await login("order-viewer");
+    const ownerHeader = { [OWNER_HEADER]: "order-owner" };
+    const viewerHeader = { [OWNER_HEADER]: "order-viewer" };
+    const { id } = await (await request("workspaces", "POST", owner, { name: "Team" })).json() as { id: string };
+    const path = "workspaces/order";
+    const ownerOrder = [id, "personal", "shared"];
+    const viewerOrder = ["shared", "personal", id];
+    expect(await (await request(path, "GET", owner, undefined, ownerHeader)).json()).toEqual([]);
+    expect((await request(path, "PUT", "", ownerOrder, ownerHeader)).status).toBe(401);
+    expect((await request(path, "PUT", owner, ownerOrder, { ...ownerHeader, Origin: "https://other.test" })).status).toBe(403);
+    expect((await request(path, "PUT", viewer, ownerOrder, ownerHeader)).status).toBe(403);
+    expect((await request(path, "PUT", viewer, viewerOrder, viewerHeader)).status).toBe(409);
+    const invite = await share(owner, "workspace", id, "viewer");
+    expect((await request("invites/" + invite.token + "/accept", "POST", viewer)).status).toBe(200);
+    expect((await request(path, "PUT", owner, ownerOrder, ownerHeader)).status).toBe(200);
+    expect(await (await request(path, "GET", viewer, undefined, viewerHeader)).json()).toEqual([]);
+    expect((await request(path, "PUT", viewer, viewerOrder, viewerHeader)).status).toBe(200);
+    for (const invalid of [["shared"], ["personal", "shared", "shared"], ["personal", "shared", 1]]) {
+      expect((await request(path, "PUT", viewer, invalid, viewerHeader)).status).toBe(400);
+    }
+    expect(await (await request(path, "GET", viewer, undefined, viewerHeader)).json()).toEqual(viewerOrder);
+    expect(await (await request(path, "GET", owner, undefined, ownerHeader)).json()).toEqual(ownerOrder);
+    expect(await (await request("workspaces", "GET", viewer)).json()).toMatchObject([{ id, role: "viewer" }]);
+    const revised = ["personal", id, "shared"];
+    expect((await request(path, "PUT", owner, revised, ownerHeader)).status).toBe(200);
+    expect(await (await request(path, "GET", owner, undefined, ownerHeader)).json()).toEqual(revised);
   });
 
   it("rechecks workspace access to collaboration and chat reads without changing their distinct denial responses", async () => {
