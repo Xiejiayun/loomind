@@ -7,7 +7,7 @@ import {
   createTopic,
   findTopicLocation,
   generateId,
-  getPalette,
+  getThemePalette,
   hex8ToCss,
   richTextToPlainText,
   type LayoutBox,
@@ -144,8 +144,8 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
   const selectedSet = useMemo(() => new Set(selectedTopicIds), [selectedTopicIds]);
   const deletedSet = useMemo(() => new Set(doc.deletedIds), [doc.deletedIds]);
   const theme = useMemo(() => ({ ...doc.theme, ...sheet.theme }), [doc.theme, sheet.theme]);
-  const palette = useMemo(() => getPalette(theme.paletteId, appearance), [theme.paletteId, appearance]);
-  const workspaceCanvas = palette.id === "workspace" && !!appearance;
+  const palette = useMemo(() => getThemePalette(theme, appearance), [theme, appearance]);
+  const workspaceCanvas = palette.id === "workspace" && !!appearance && !theme.canvasColor;
 
   const computeFitCamera = useCallback(
     (vw: number, vh: number) =>
@@ -1116,7 +1116,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
         contain: "layout paint",
         isolation: "isolate",
         backgroundColor: hex8ToCss(palette.canvasBg),
-        backgroundImage: palette.isDark
+        backgroundImage: theme.canvasColor ? "none" : palette.isDark
           ? "radial-gradient(ellipse 65% 55% at 50% 45%, rgba(122,162,247,0.06), transparent 72%), radial-gradient(rgba(148,163,184,0.13) 1px, transparent 1px)"
           : "radial-gradient(rgba(15,23,42,0.08) 1px, transparent 1px)",
         backgroundSize: palette.isDark ? "100% 100%, 24px 24px" : "24px 24px",

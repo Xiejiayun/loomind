@@ -6,9 +6,11 @@ import type {
   MindmapThemeConfig,
   MindmapTopic,
   TopicShape,
+  TopicThemeRole,
+  TopicStyleOverride,
 } from "../model/document.js";
 import { findTopicLocation } from "../store/reducer.js";
-import { getPalette } from "../theme/palettes.js";
+import { getThemePalette } from "../theme/palettes.js";
 import { getSkeleton } from "../theme/skeletons.js";
 import { compositeHexOverBg, isDarkFill, mixHexWithAlpha, type DepthStyleToken } from "../theme/tokens.js";
 import { CALLOUT_GAP, measureTopicBox } from "./box-anatomy.js";
@@ -83,6 +85,8 @@ function topicMeasureHash(topic: MindmapTopic, token: DepthStyleToken, hasTaskSu
     topic.image,
     topic.style?.fontSize ?? token.fontSize,
     topic.style?.fontWeight ?? token.fontWeight,
+    topic.style?.fontFamily,
+    topic.style?.strokeWidth ?? token.strokeWidth,
     token.paddingX,
     token.paddingY,
   ]);
@@ -110,7 +114,7 @@ export class LayoutEngine {
       doc.sheets.find((s) => s.id === (sheetId ?? doc.activeSheetId)) ?? doc.sheets[0];
     const theme: MindmapThemeConfig = { ...doc.theme, ...sheet.theme };
     const skeleton = getSkeleton(theme.skeletonId);
-    const palette = getPalette(theme.paletteId, opts?.appearance);
+    const palette = getThemePalette(theme, opts?.appearance);
     const spacingScale = spacingMultiplier(sheet.spacing);
 
     const activeRoot =
@@ -162,7 +166,19 @@ export class LayoutEngine {
     const tokenForDepth = (depth: number): DepthStyleToken =>
       depth === 0 ? skeleton.depth0 : depth === 1 ? skeleton.depth1 : skeleton.depth2Plus;
 
-    const measureTree = (topic: MindmapTopic) => {
+    const styledTopics = new Map<string, MindmapTopic>();
+    const measureTree = (source: MindmapTopic, role: TopicThemeRole, parentStyle?: TopicStyleOverride) => {
+      let topic = source;
+      const preset = theme.topicStyles?.[role];
+      if (preset || parentStyle?.lineWidth !== undefined || parentStyle?.lineKind || parentStyle?.lineColor) {
+        const { shape, ...defaults } = preset ?? {};
+        const style = { lineWidth: parentStyle?.lineWidth, lineKind: parentStyle?.lineKind === "tapered" ? "bezier" as const : parentStyle?.lineKind,
+          lineColor: role === "mainTopic" && theme.rainbowBranches ? undefined : parentStyle?.lineColor,
+          ...defaults, ...source.style };
+        if (source.style?.fillColor && !source.style.fillPattern && style.fillPattern === "none") style.fillPattern = "solid";
+        topic = { ...source, shape: source.shape ?? shape, style };
+        styledTopics.set(topic.id, topic);
+      }
       const st = stats.get(topic.id)!;
       const token = tokenForDepth(st.depth);
       const hash = topicMeasureHash(topic, token, Boolean(st.taskSummary));
@@ -175,14 +191,14 @@ export class LayoutEngine {
         measurements.set(topic.id, m);
       }
       if (!topic.collapsed) {
-        for (const c of topic.children) measureTree(c);
+        for (const child of topic.children) measureTree(child, st.depth === 0 ? "mainTopic" : "subTopic", topic.style);
       }
     };
 
-    measureTree(activeRoot);
+    measureTree(activeRoot, "centralTopic");
     if (!opts?.drillRootId) {
-      for (const f of sheet.floatingTopics) measureTree(f);
-      for (const s of sheet.summaries) measureTree(s.topic);
+      for (const f of sheet.floatingTopics) measureTree(f, "floatingTopic");
+      for (const s of sheet.summaries) measureTree(s.topic, "summaryTopic");
     }
 
     // Evict stale cache entries from deleted topics or switched sheets to bound memory
@@ -199,17 +215,18 @@ export class LayoutEngine {
     const edges: LayoutEdge[] = [];
 
     const makeLayoutNode = (
-      topic: MindmapTopic,
+      source: MindmapTopic,
       x: number,
       y: number,
       side: LayoutNode["side"],
     ): LayoutNode => {
+      const topic = styledTopics.get(source.id) ?? source;
       const st = stats.get(topic.id)!;
       const m = measurements.get(topic.id)!;
       const token = tokenForDepth(st.depth);
-      const branchColor = theme.rainbowBranches
+      const branchColor = topic.style?.lineColor ?? (theme.rainbowBranches
         ? palette.branches[st.branchIndex % palette.branches.length]
-        : palette.branches[0];
+        : palette.branches[0]);
       const accentColor = st.depth === 0 ? palette.rootStroke : branchColor;
 
       const shape: Exclude<TopicShape, "auto"> =
@@ -259,7 +276,8 @@ export class LayoutEngine {
                 : 0
           : token.cornerRadius;
 
-      const effectiveFill = topic.style?.fillColor ?? defaultFill;
+      const pattern = topic.style?.fillPattern;
+      const effectiveFill = pattern === "none" ? "#00000000" : topic.style?.fillColor ?? (pattern ? branchColor : defaultFill);
       const effectiveBg = underlineMode
         ? palette.canvasBg
         : compositeHexOverBg(effectiveFill, palette.canvasBg);
@@ -295,12 +313,17 @@ export class LayoutEngine {
         box: { x, y, width: m.width, height: m.height },
         contentBox,
         accentColor,
-        fillColor: topic.style?.fillColor ?? defaultFill,
+        fillColor: effectiveFill,
         strokeColor: topic.style?.strokeColor ?? defaultStroke,
         strokeWidth: topic.style?.strokeWidth ?? (palette.neonGlow && st.depth === 0 ? 2 : defaultStrokeWidth),
         textColor: topic.style?.textColor ?? defaultText,
         fontSize: topic.style?.fontSize ?? token.fontSize,
         fontWeight: topic.style?.fontWeight ?? token.fontWeight,
+        fontFamily: topic.style?.fontFamily,
+        fillPattern: pattern,
+        lineKind: topic.style?.lineKind,
+        lineWidth: topic.style?.lineWidth,
+        flatStyle: Boolean(theme.topicStyles || pattern),
         paddingX: token.paddingX,
         paddingY: token.paddingY,
         cornerRadius: topic.style?.cornerRadius ?? shapeCornerRadius,

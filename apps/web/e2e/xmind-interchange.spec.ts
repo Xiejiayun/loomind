@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { chromium, expect, webkit, type Page } from "@playwright/test";
+import { strToU8, zipSync } from "fflate";
 import { createDocument, createSheet, createTopic, type MindmapDocument } from "@mindmap/core/model";
+import { nativeSheet } from "../../../packages/core/test/fixtures/xmind-appearance.js";
 import { cloudBrowser, test } from "./cloud-worker.js";
 
 const desktop = { ...cloudBrowser, isMobile: false, hasTouch: false, viewport: { width: 1280, height: 800 } };
@@ -32,6 +34,46 @@ test("opens the topics and embedded picture from a workbook produced by Xmind's 
   const canvas = page.getByRole("application");
   for (const title of ["Partner workbook", "Imported from Xmind"]) await expect(canvas.getByText(title, { exact: true }).first()).toBeVisible();
   await expect(canvas.locator("[data-topic-id] img").first()).toHaveJSProperty("naturalWidth", 32);
+});
+
+test("renders native sheet styles and clockwise branches after import, save and reload", async ({ context, cloud }) => {
+  const page = await cloud.openPage(context, "designer");
+  const { api } = await openSavedMap(page, cloud.origin, "designer", createDocument());
+  const dialog = await fileDialog(page);
+  const sheets = [nativeSheet("typeset", false), nativeSheet("handwriting", true)];
+  const saved = page.waitForResponse((response) => response.url() === api && response.request().method() === "PUT" && response.request().postDataJSON().sheets?.[0]?.id === "typeset");
+  page.once("dialog", (confirmation) => confirmation.accept());
+  await dialog.locator("input[type=file]").setInputFiles({ name: "styles.xmind", mimeType: "application/zip",
+    buffer: Buffer.from(zipSync({ "content.json": strToU8(JSON.stringify(sheets)) })) });
+  await expect(dialog).toBeHidden();
+  expect((await saved).status()).toBe(200);
+  await page.reload();
+  const canvas = page.getByRole("application");
+  for (const [index, sheet] of sheets.entries()) {
+    if (index) await page.getByText(sheet.title, { exact: true }).click();
+    await expect(canvas).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(canvas).toHaveCSS("background-image", "none");
+    const root = canvas.getByRole("treeitem", { level: 1 });
+    const title = root.getByText("Project Overview", { exact: true });
+    await expect(title).toHaveCSS("font-family", index ? /NeverMind Hand.*cursive/ : /Arvo.*serif/);
+    const titleBox = (await title.boundingBox())!, rootBox = (await root.boundingBox())!;
+    expect(titleBox.x).toBeGreaterThanOrEqual(rootBox.x);
+    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(rootBox.x + rootBox.width + 1);
+    const main = canvas.locator(`[role="treeitem"][data-topic-id="${sheet.id}-0"] > div`).first();
+    await expect(main).toHaveCSS("background-color", index ? "rgb(249, 66, 58)" : "rgba(0, 0, 0, 0)");
+    await expect(main).toHaveCSS("background-image", index ? /repeating-linear-gradient/ : "none");
+    const edges = canvas.locator(index ? 'svg path[fill="rgb(249, 66, 58)"]' : 'svg path[stroke="rgb(249, 66, 58)"][d*=" L "]');
+    await expect(edges.first()).toBeVisible();
+    const labels = sheet.rootTopic.children.attached.map((topic) => topic.id);
+    const split = index ? 4 : 3;
+    await expect.poll(async () => {
+      const center = (await root.boundingBox())!.x;
+      const positions = await canvas.getByRole("treeitem", { level: 2 }).evaluateAll((nodes) => nodes.map((node) => {
+        const { x, y } = node.getBoundingClientRect(); return { id: node.getAttribute("data-topic-id"), x, y };
+      }).sort((a, b) => a.y - b.y));
+      return [positions.filter((node) => node.x > center), positions.filter((node) => node.x < center)].map((side) => side.map((node) => node.id));
+    }).toEqual([labels.slice(0, split), labels.slice(split).reverse()]);
+  }
 });
 
 test("transfers both sheets, editable rich titles, equation source and identical image bytes to another browser", async ({ browserName, context, cloud }, testInfo) => {

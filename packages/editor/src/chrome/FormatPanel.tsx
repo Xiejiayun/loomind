@@ -9,6 +9,7 @@ import {
   PALETTE_LIST,
   SKELETON_LIST,
   type MindmapStructure,
+  type MindmapThemeConfig,
   type MindmapTopic,
   type TopicShape,
 } from "@mindmap/core";
@@ -177,6 +178,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
   const theme = { ...doc.theme, ...sheet.theme };
+  const setTheme = (patch: Partial<MindmapThemeConfig>) => dispatch({ type: "theme/set", sheetId: sheet.theme ? sheet.id : undefined, patch });
   const topicMap = collectAllTopics(sheet);
   const primaryId = selectedTopicIds[0] ?? sheet.rootTopic.id;
   const primaryTopic = topicMap.get(primaryId);
@@ -497,9 +499,9 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                   <button
                     key={sk.id}
                     type="button"
-                    onClick={() => dispatch({ type: "theme/set", patch: { skeletonId: sk.id } })}
+                    onClick={() => setTheme({ skeletonId: sk.id })}
                     className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
-                      theme.skeletonId === sk.id
+                      theme.skeletonId === sk.id && !theme.topicStyles
                         ? "border-blue-500 bg-blue-50"
                         : "border-slate-200 hover:bg-slate-50"
                     }`}
@@ -518,9 +520,9 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                 <button
                   key={pal.id}
                   type="button"
-                  onClick={() => dispatch({ type: "theme/set", patch: { paletteId: pal.id } })}
+                  onClick={() => setTheme({ paletteId: pal.id })}
                   className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left ${
-                    theme.paletteId === pal.id
+                    theme.paletteId === pal.id && !theme.canvasColor && !theme.branchColors
                       ? "border-blue-500 bg-blue-50"
                       : "border-slate-200 hover:bg-slate-50"
                   }`}
@@ -555,7 +557,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                   role="switch"
                   aria-checked={theme.rainbowBranches}
                   onClick={() =>
-                    dispatch({ type: "theme/set", patch: { rainbowBranches: !theme.rainbowBranches } })
+                    setTheme({ rainbowBranches: !theme.rainbowBranches })
                   }
                   className={`relative h-5 w-9 rounded-full transition-colors ${
                     theme.rainbowBranches ? "bg-blue-600" : "bg-slate-300"
@@ -577,7 +579,7 @@ export const FormatPanel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                   role="switch"
                   aria-checked={theme.handdrawn}
                   onClick={() =>
-                    dispatch({ type: "theme/set", patch: { handdrawn: !theme.handdrawn } })
+                    setTheme({ handdrawn: !theme.handdrawn })
                   }
                   className={`relative h-5 w-9 rounded-full transition-colors ${
                     theme.handdrawn ? "bg-blue-600" : "bg-slate-300"

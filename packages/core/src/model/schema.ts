@@ -87,6 +87,11 @@ export const TopicStyleOverrideSchema = z.object({
   textColor: HexColorSchema.optional(),
   fontSize: z.number().min(10).max(48).optional(),
   fontWeight: z.union([z.literal(400), z.literal(500), z.literal(600), z.literal(700)]).optional(),
+  fontFamily: z.string().min(1).max(256).regex(/^[\p{L}\p{M}\p{N} ,"'_-]+$/u).optional(),
+  fillPattern: z.enum(["none", "solid", "hachure"]).optional(),
+  lineKind: z.enum(["bezier", "elbow", "fold", "tapered"]).optional(),
+  lineWidth: z.number().min(0).max(16).optional(),
+  lineColor: HexColorSchema.optional(),
   cornerRadius: z.number().min(0).max(9999).optional(),
 });
 
@@ -182,11 +187,17 @@ export const MindmapRelationshipSchema = z.object({
     .optional(),
 });
 
+const topicThemeStyle = TopicStyleOverrideSchema.extend({ shape: TopicShapeSchema.optional() }).optional();
+
 export const MindmapThemeConfigSchema = z.object({
   skeletonId: SkeletonIdSchema,
   paletteId: PaletteIdSchema,
   handdrawn: z.boolean(),
   rainbowBranches: z.boolean(),
+  canvasColor: HexColorSchema.optional(),
+  branchColors: z.array(HexColorSchema).min(1).max(64).optional(),
+  topicStyles: z.object({ centralTopic: topicThemeStyle, mainTopic: topicThemeStyle, subTopic: topicThemeStyle,
+    floatingTopic: topicThemeStyle, summaryTopic: topicThemeStyle }).optional(),
 });
 
 export const MindmapSheetSchema = z.object({
@@ -195,6 +206,7 @@ export const MindmapSheetSchema = z.object({
   structure: MindmapStructureSchema,
   direction: z.enum(["bilateral", "leftRight", "rightLeft", "topDown", "bottomUp"]),
   spacing: z.enum(["compact", "balanced", "spacious"]),
+  branchOrder: z.literal("clockwise").optional(),
   theme: MindmapThemeConfigSchema.partial().optional(),
   rootTopic: MindmapTopicSchema,
   floatingTopics: z.array(MindmapTopicSchema),

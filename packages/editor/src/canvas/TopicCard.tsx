@@ -4,6 +4,7 @@ import {
   buildCloudBoundaryPath,
   hex8ToCss,
   isDarkFill,
+  isSingleLineTitle,
   mixHexWithAlpha,
   richTextToPlainText,
   type InlineAsset,
@@ -158,6 +159,8 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
       width: cardW,
       minHeight: cardH,
       backgroundColor: isSvgShape ? "transparent" : fillCss,
+      backgroundImage: layoutNode.fillPattern === "hachure" && !isSvgShape && !layoutNode.underlineMode
+        ? "repeating-linear-gradient(130deg, transparent 0 8px, rgba(255,255,255,0.38) 8px 9.5px, transparent 9.5px 13px)" : undefined,
       color: textCss,
       borderRadius: layoutNode.underlineMode || isSvgShape ? 0 : layoutNode.cornerRadius,
       borderBottom:
@@ -183,7 +186,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
           ? `${layoutNode.strokeWidth}px solid ${strokeCss}`
           : "none",
       boxShadow:
-        isSvgShape
+        isSvgShape || layoutNode.flatStyle
           ? undefined
           : layoutNode.neonGlow && !layoutNode.underlineMode && !isTransparentFill
             ? layoutNode.depth === 0
@@ -209,7 +212,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
     const padExtraY =
       layoutNode.shape === "diamond" ? 8 : layoutNode.shape === "cloud" ? 6 : 0;
 
-    const centerAlign = !layoutNode.underlineMode && !isTransparentFill;
+    const centerAlign = !layoutNode.underlineMode && (!isTransparentFill || (layoutNode.flatStyle && layoutNode.depth === 0));
     const ariaLabel = buildTopicAriaLabel(topic, layoutNode, t.a11y);
     const selectionOverlay = computeSelectionOverlay({
       layoutNode,
@@ -485,6 +488,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
               className={`min-w-0 flex-1 ${topic.task?.status === "done" ? "line-through opacity-65" : ""}`}
               style={{
                 fontSize: layoutNode.fontSize,
+                fontFamily: layoutNode.fontFamily,
                 fontWeight: layoutNode.fontWeight,
                 lineHeight: 1.42,
               }}
@@ -500,10 +504,7 @@ export const TopicCard: React.FC<TopicCardProps> = React.memo(
                   onCancel={onCancelEdit}
                 />
               ) : (
-                renderRichText(
-                  topic.title,
-                  !topic.customWidth && !richTextToPlainText(topic.title).includes("\n") && richTextToPlainText(topic.title).length <= 24,
-                )
+                renderRichText(topic.title, isSingleLineTitle(topic))
               )}
             </div>
 

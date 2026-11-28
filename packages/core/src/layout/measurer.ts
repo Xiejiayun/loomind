@@ -6,14 +6,21 @@ export interface MeasuredText {
   lines: string[];
 }
 
+export interface TextMeasureOptions {
+  fontSize: number;
+  fontWeight: number;
+  maxWidth: number;
+  fontFamily?: string;
+}
+
 export interface TextMeasurer {
   measureRichText(
     doc: RichTextDoc,
-    opts: { fontSize: number; fontWeight: number; maxWidth: number },
+    opts: TextMeasureOptions,
   ): MeasuredText;
   measurePlainText(
     text: string,
-    opts: { fontSize: number; fontWeight: number; maxWidth: number },
+    opts: TextMeasureOptions,
   ): MeasuredText;
 }
 

@@ -73,8 +73,16 @@ export interface TopicStyleOverride {
   textColor?: string;
   fontSize?: number; // 10..48
   fontWeight?: 400 | 500 | 600 | 700;
+  fontFamily?: string;
+  fillPattern?: "none" | "solid" | "hachure";
+  lineKind?: "bezier" | "elbow" | "fold" | "tapered";
+  lineWidth?: number;
+  lineColor?: string;
   cornerRadius?: number;
 }
+
+export type TopicThemeRole = "centralTopic" | "mainTopic" | "subTopic" | "floatingTopic" | "summaryTopic";
+export type TopicThemeStyle = TopicStyleOverride & { shape?: TopicShape };
 
 export interface MindmapCallout {
   id: string;
@@ -145,6 +153,9 @@ export interface MindmapThemeConfig {
   paletteId: PaletteId;
   handdrawn: boolean;
   rainbowBranches: boolean;
+  canvasColor?: string;
+  branchColors?: string[];
+  topicStyles?: Partial<Record<TopicThemeRole, TopicThemeStyle>>;
 }
 
 export interface MindmapSheet {
@@ -153,6 +164,7 @@ export interface MindmapSheet {
   structure: MindmapStructure;
   direction: "bilateral" | "leftRight" | "rightLeft" | "topDown" | "bottomUp";
   spacing: "compact" | "balanced" | "spacious";
+  branchOrder?: "clockwise";
   theme?: Partial<MindmapThemeConfig>;
   rootTopic: MindmapTopic;
   floatingTopics: MindmapTopic[];

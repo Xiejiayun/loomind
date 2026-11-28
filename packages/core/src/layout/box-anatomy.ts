@@ -1,9 +1,14 @@
-import type { MindmapTopic } from "../model/document.js";
+import { richTextToPlainText, type MindmapTopic } from "../model/document.js";
 import type { DepthStyleToken } from "../theme/tokens.js";
 import type { TextMeasurer } from "./measurer.js";
 import type { NodeMeasurement } from "./types.js";
 
 export const CALLOUT_GAP = 10;
+
+export function isSingleLineTitle(topic: MindmapTopic): boolean {
+  const text = richTextToPlainText(topic.title);
+  return !topic.customWidth && text.length <= 24 && !text.includes("\n");
+}
 
 export function measureTopicBox(
   topic: MindmapTopic,
@@ -21,9 +26,10 @@ export function measureTopicBox(
     : 280;
 
   const measuredTitle = measurer.measureRichText(topic.title, {
+    fontFamily: topic.style?.fontFamily,
     fontSize,
     fontWeight,
-    maxWidth: maxTextWidth,
+    maxWidth: isSingleLineTitle(topic) ? Infinity : maxTextWidth,
   });
 
   // Main row horizontal extras
@@ -82,7 +88,7 @@ export function measureTopicBox(
   }
 
   const strokeW = topic.style?.strokeWidth ?? token.strokeWidth;
-  const borderExtra = Math.ceil(strokeW * 2);
+  const borderExtra = Math.ceil(strokeW * (topic.shape === "underline" ? 1 : 2));
   const effShape = topic.shape && topic.shape !== "auto" ? topic.shape : token.shape;
   const shapeExtraX =
     effShape === "diamond" ? 32 : effShape === "hexagon" ? 22 : effShape === "cloud" ? 20 : effShape === "pill" ? 12 : 0;

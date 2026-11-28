@@ -1,5 +1,5 @@
 import React from "react";
-import { getPalette, hex8ToCss, type MindmapLayoutResult } from "@mindmap/core";
+import { getThemePalette, hex8ToCss, type MindmapLayoutResult } from "@mindmap/core";
 import { useMindmapStore } from "../context.js";
 
 interface MinimapProps {
@@ -17,7 +17,7 @@ export const Minimap: React.FC<MinimapProps> = ({ layout, appearance }) => {
   if (!open) return null;
 
   const sheet = doc.sheets.find((s) => s.id === doc.activeSheetId) ?? doc.sheets[0];
-  const palette = getPalette({ ...doc.theme, ...sheet.theme }.paletteId, appearance);
+  const palette = getThemePalette({ ...doc.theme, ...sheet.theme }, appearance);
 
   const w = 188;
   const h = 124;

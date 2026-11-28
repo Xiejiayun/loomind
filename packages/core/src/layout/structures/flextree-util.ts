@@ -45,11 +45,20 @@ export function createStandardEdge(
 ): LayoutEdge {
   const defaultKind = ctx.skeleton.defaultEdgeKind;
   const kind: LayoutEdge["kind"] =
-    opts?.forceKind ??
+    opts?.forceKind ?? parentNode.lineKind ??
     (defaultKind === "tapered" && parentNode.depth === 0 ? "tapered" : defaultKind === "tapered" ? "bezier" : defaultKind);
 
   const seed = fnv1aSeed(`${parentNode.id}->${childNode.id}`);
   const handdrawn = ctx.theme.handdrawn;
+  const foldX = (p0.x + p3.x) / 2;
+  if (parentNode.depth === 0 && ctx.sheet.branchOrder === "clockwise" && parentNode.lineKind && !opts?.forceKind &&
+      (childNode.side === "left" || childNode.side === "right")) {
+    const box = parentNode.contentBox;
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const dx = (kind === "fold" ? foldX : p3.x) - center.x, dy = p3.y - center.y;
+    const scale = 1 / Math.max(1, Math.abs(dx) / (box.width / 2), Math.abs(dy) / (box.height / 2));
+    p0 = { x: center.x + dx * scale, y: center.y + dy * scale };
+  }
   let svgPath: string;
   let fillPath: string | undefined;
 
@@ -58,22 +67,13 @@ export function createStandardEdge(
     const dir = p3.x >= p0.x ? 1 : -1;
     const adjP0 = { x: p0.x - dir * 1.5, y: p0.y };
     const adjP3 = { x: p3.x + dir * 1.5, y: p3.y };
-    const res = buildTaperedRibbonPath(adjP0, adjP3, 7.0, 1.8);
+    const width = parentNode.lineWidth;
+    const res = buildTaperedRibbonPath(adjP0, adjP3, width === undefined ? 7 : width * 2.5, width === undefined ? 1.8 : width * 0.6);
     svgPath = handdrawn ? buildRoughSvgPath(res.svgPath, seed) : res.svgPath;
-    fillPath = handdrawn ? undefined : res.fillPath;
-  } else if (kind === "elbow") {
-    let raw = buildElbowPath(p0, p3, opts?.verticalFirst);
-    if (childNode.underlineMode && !opts?.verticalFirst) {
-      const farX =
-        childNode.side === "left"
-          ? childNode.contentBox.x
-          : childNode.contentBox.x + childNode.contentBox.width;
-      raw = `${raw} H ${Math.round(farX * 10) / 10}`;
-      childNode.underlineDrawnByEdge = true;
-    }
-    svgPath = handdrawn ? buildRoughSvgPath(raw, seed) : raw;
+    fillPath = !handdrawn ? res.fillPath : parentNode.lineKind === "tapered" ? buildRoughSvgPath(res.fillPath, seed, true) : undefined;
   } else {
-    let { svgPath: raw } = buildBezierPath(p0, p3, !opts?.verticalFirst);
+    let raw = kind === "fold" ? `M ${p0.x} ${p0.y} L ${foldX} ${p3.y} H ${p3.x}`
+      : kind === "elbow" ? buildElbowPath(p0, p3, opts?.verticalFirst) : buildBezierPath(p0, p3, !opts?.verticalFirst).svgPath;
     if (childNode.underlineMode && !opts?.verticalFirst) {
       const farX =
         childNode.side === "left"
@@ -93,12 +93,12 @@ export function createStandardEdge(
     svgPath,
     fillPath,
     color: childNode.accentColor,
-    strokeWidth:
+    strokeWidth: parentNode.lineWidth ?? (
       childNode.underlineDrawnByEdge
         ? Math.max(1.2, childNode.strokeWidth)
         : parentNode.depth === 0
           ? 2.6
-          : 1.6,
+          : 1.6),
     handdrawn,
     seed,
   };
@@ -153,9 +153,15 @@ export function layoutHorizontalFlextree(
   };
 
   const rootDatum = buildDatum(parent, true);
+  const branchClearance = ctx.sheet.branchOrder === "clockwise" && parentNode.depth === 0
+    ? new Map(children.map((child) => [ctx.stats.get(child.id)!.branchIndex, ctx.measurements.get(child.id)!.height])) : undefined;
   const layout = flextree<FlexDatum>({
     nodeSize: (n) => n.data.size,
-    spacing: () => 0,
+    spacing: (first, second) => {
+      if (!branchClearance) return 0;
+      const left = ctx.stats.get(first.data.topic.id)!.branchIndex, right = ctx.stats.get(second.data.topic.id)!.branchIndex;
+      return left === right ? 0 : ((branchClearance.get(left) ?? 0) + (branchClearance.get(right) ?? 0)) / 2;
+    },
   });
 
   const treeRoot = layout.hierarchy(rootDatum);
@@ -168,7 +174,7 @@ export function layoutHorizontalFlextree(
   let bounds = parentNode.box;
   const placedNodes = new Map<string, LayoutNode>();
   placedNodes.set(parent.id, parentNode);
-  const useSharedElbowBus = !opts?.skipEdges && ctx.skeleton.defaultEdgeKind === "elbow";
+  const useSharedElbowBus = !opts?.skipEdges && ctx.skeleton.defaultEdgeKind === "elbow" && !ctx.theme.topicStyles && !parentNode.lineKind;
   const elbowGroups = new Map<string, { pNode: LayoutNode; children: LayoutNode[] }>();
 
   const recordElbow = (pNode: LayoutNode, cNode: LayoutNode) => {

@@ -1,5 +1,5 @@
-import type { PaletteId } from "../model/document.js";
-import type { PaletteSpec } from "./tokens.js";
+import type { MindmapThemeConfig, PaletteId } from "../model/document.js";
+import { isDarkFill, type PaletteSpec } from "./tokens.js";
 
 export const PALETTES: Record<PaletteId, PaletteSpec> = {
   workspace: {
@@ -178,4 +178,12 @@ const darkWorkspace: PaletteSpec = {
 export function getPalette(id: PaletteId, appearance?: "dark" | "light"): PaletteSpec {
   if (id === "workspace" && appearance === "dark") return darkWorkspace;
   return PALETTES[id] ?? PALETTES["xmind-rainbow"];
+}
+
+export function getThemePalette(theme: MindmapThemeConfig, appearance?: "dark" | "light"): PaletteSpec {
+  const dark = theme.canvasColor ? isDarkFill(theme.canvasColor) : undefined;
+  const base = getPalette(theme.paletteId, dark === undefined ? appearance : dark ? "dark" : "light");
+  if (!theme.canvasColor && !theme.branchColors) return base;
+  return { ...base, canvasBg: theme.canvasColor ?? base.canvasBg, isDark: dark ?? base.isDark,
+    branches: theme.branchColors ?? base.branches };
 }

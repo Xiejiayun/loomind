@@ -1,4 +1,4 @@
-import { richTextToPlainText, type MeasuredText, type RichTextDoc, type TextMeasurer } from "@mindmap/core";
+import { richTextToPlainText, type MeasuredText, type RichTextDoc, type TextMeasureOptions, type TextMeasurer } from "@mindmap/core";
 
 export class DomTextMeasurer implements TextMeasurer {
   private ctx: CanvasRenderingContext2D | null = null;
@@ -21,21 +21,21 @@ export class DomTextMeasurer implements TextMeasurer {
 
   measureRichText(
     doc: RichTextDoc,
-    opts: { fontSize: number; fontWeight: number; maxWidth: number },
+    opts: TextMeasureOptions,
   ): MeasuredText {
     return this.measurePlainText(richTextToPlainText(doc), opts);
   }
 
   measurePlainText(
     text: string,
-    opts: { fontSize: number; fontWeight: number; maxWidth: number },
+    opts: TextMeasureOptions,
   ): MeasuredText {
     const rawLines = (text || " ").split("\n");
     const lines: string[] = [];
     const maxW = Math.max(40, opts.maxWidth);
 
     if (this.ctx) {
-      this.ctx.font = `${opts.fontWeight} ${opts.fontSize}px ${this.fontFamily}`;
+      this.ctx.font = `${opts.fontWeight} ${opts.fontSize}px ${opts.fontFamily ?? this.fontFamily}`;
     }
 
     const measureStr = (s: string) => {
