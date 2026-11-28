@@ -1,5 +1,5 @@
 import type RBush from "rbush";
-import type { MindmapSheet, MindmapStructure, MindmapThemeConfig, MindmapTopic, TopicShape } from "../model/document.js";
+import type { MindmapSheet, MindmapStructure, MindmapThemeConfig, MindmapTopic, TopicShape, TopicStyleOverride } from "../model/document.js";
 import type { PaletteSpec, SkeletonSpec } from "../theme/tokens.js";
 import type { TextMeasurer } from "./measurer.js";
 
@@ -37,6 +37,11 @@ export interface LayoutNode {
   textColor: string;
   fontSize: number;
   fontWeight: 400 | 500 | 600 | 700;
+  fontFamily?: string;
+  fillPattern?: TopicStyleOverride["fillPattern"];
+  lineKind?: TopicStyleOverride["lineKind"];
+  lineWidth?: number;
+  flatStyle?: boolean;
   paddingX: number;
   paddingY: number;
   cornerRadius: number;
@@ -55,7 +60,7 @@ export interface LayoutEdge {
   id: string;
   fromId: string;
   toId: string;
-  kind: "tapered" | "bezier" | "elbow" | "brace" | "fishbone-rib" | "timeline-spine" | "table-cell";
+  kind: "tapered" | "bezier" | "elbow" | "fold" | "brace" | "fishbone-rib" | "timeline-spine" | "table-cell";
   svgPath: string;
   fillPath?: string;
   color: string;

@@ -6,7 +6,7 @@ import {
   type MindmapTopic,
 } from "../model/document.js";
 import { collectAllTopics } from "../model/invariants.js";
-import { getPalette } from "../theme/palettes.js";
+import { getThemePalette } from "../theme/palettes.js";
 import { hex8ToCss } from "../theme/tokens.js";
 
 function escapeXml(s: string): string {
@@ -31,7 +31,7 @@ export function serializeToSvg(
     doc.sheets.find((s) => s.id === (opts?.sheetId ?? doc.activeSheetId)) ?? doc.sheets[0];
   const layout = opts?.layout ?? computeSheetLayout(doc, sheet.id);
   const theme = { ...doc.theme, ...sheet.theme };
-  const palette = getPalette(theme.paletteId);
+  const palette = getThemePalette(theme);
   const topicMap = collectAllTopics(sheet);
 
   const pad = opts?.padding ?? 48;
@@ -47,6 +47,9 @@ export function serializeToSvg(
 
   if (!opts?.transparentBg) {
     lines.push(`<rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="${hex8ToCss(palette.canvasBg)}" />`);
+  }
+  if (Array.from(layout.nodes.values()).some((node) => node.fillPattern === "hachure")) {
+    lines.push('<defs><pattern id="topic-hachure" width="13" height="13" patternUnits="userSpaceOnUse" patternTransform="rotate(40)"><path d="M 0 0 V 13" stroke="white" stroke-opacity="0.38" stroke-width="2"/></pattern></defs>');
   }
 
   // Boundaries
@@ -126,6 +129,7 @@ export function serializeToSvg(
       lines.push(
         `<rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" rx="${rx}" fill="${fillCss}"${sw} />`,
       );
+      if (node.fillPattern === "hachure") lines.push(`<rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" rx="${rx}" fill="url(#topic-hachure)" />`);
     }
 
     const textLines = richTextToPlainText(topic.title).split("\n");
@@ -135,7 +139,7 @@ export function serializeToSvg(
     const anchor = node.depth === 0 ? "middle" : "start";
 
     lines.push(
-      `<text x="${textX}" y="${startY}" text-anchor="${anchor}" font-family="sans-serif" font-size="${node.fontSize}" font-weight="${node.fontWeight}" fill="${textCss}">` +
+      `<text x="${textX}" y="${startY}" text-anchor="${anchor}" font-family="${escapeXml(node.fontFamily ?? "sans-serif")}" font-size="${node.fontSize}" font-weight="${node.fontWeight}" fill="${textCss}">` +
         textLines
           .map((line, i) => `<tspan x="${textX}" dy="${i === 0 ? 0 : lineH}">${escapeXml(line)}</tspan>`)
           .join("") +

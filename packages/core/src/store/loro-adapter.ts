@@ -22,6 +22,7 @@ interface SheetMeta {
   structure: MindmapSheet["structure"];
   direction: MindmapSheet["direction"];
   spacing: MindmapSheet["spacing"];
+  branchOrder?: MindmapSheet["branchOrder"];
   theme?: Partial<MindmapThemeConfig>;
   rootTopicId: string;
   floatingTopics: MindmapTopic[];
@@ -233,6 +234,7 @@ export class LoroSyncAdapter implements SyncAdapter {
       structure: s.structure,
       direction: s.direction,
       spacing: s.spacing,
+      branchOrder: s.branchOrder,
       theme: s.theme,
       rootTopicId: s.rootTopic.id,
       floatingTopics: s.floatingTopics,
@@ -393,6 +395,7 @@ export class LoroSyncAdapter implements SyncAdapter {
         structure: sm.structure,
         direction: sm.direction,
         spacing: sm.spacing,
+        branchOrder: sm.branchOrder,
         theme: sm.theme,
         rootTopic,
         floatingTopics: sm.floatingTopics,

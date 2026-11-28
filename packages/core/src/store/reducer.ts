@@ -7,6 +7,7 @@ import {
   quantizeCoord,
   type MindmapDocument,
   type MindmapSheet,
+  type MindmapThemeConfig,
   type MindmapTopic,
   type TopicShape,
   type TopicStyleOverride,
@@ -99,8 +100,19 @@ function normalizeStyle(style?: Partial<TopicStyleOverride>): Partial<TopicStyle
   const out: Partial<TopicStyleOverride> = { ...style };
   if (out.fillColor) out.fillColor = normalizeHexColor(out.fillColor);
   if (out.strokeColor) out.strokeColor = normalizeHexColor(out.strokeColor);
+  if (out.lineColor) out.lineColor = normalizeHexColor(out.lineColor);
   if (out.textColor) out.textColor = normalizeHexColor(out.textColor);
   return out;
+}
+
+function updateTheme<T extends Partial<MindmapThemeConfig>>(previous: T, patch: Partial<MindmapThemeConfig>): T {
+  const next = { ...previous, ...patch };
+  if (patch.paletteId) {
+    if (!("canvasColor" in patch)) delete next.canvasColor;
+    if (!("branchColors" in patch)) delete next.branchColors;
+  }
+  if (patch.skeletonId && !("topicStyles" in patch)) delete next.topicStyles;
+  return next;
 }
 
 interface InheritedTopicVisual {
@@ -414,9 +426,9 @@ export function applyMindmapCommand(doc: MindmapDocument, cmd: MindmapCommand): 
     if (cmd.type === "theme/set") {
       if (cmd.sheetId) {
         const s = draft.sheets.find((x) => x.id === cmd.sheetId);
-        if (s) s.theme = { ...s.theme, ...cmd.patch };
+        if (s) s.theme = updateTheme(s.theme ?? {}, cmd.patch);
       } else {
-        draft.theme = { ...draft.theme, ...cmd.patch };
+        draft.theme = updateTheme(draft.theme, cmd.patch);
       }
       return;
     }

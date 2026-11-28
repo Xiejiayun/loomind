@@ -301,7 +301,7 @@ export const CommandK: React.FC<CommandKProps> = ({
                 <Command.Item
                   key={p.id}
                   onSelect={() => {
-                    dispatch({ type: "theme/set", patch: { paletteId: p.id } });
+                    dispatch({ type: "theme/set", sheetId: sheet.theme ? sheet.id : undefined, patch: { paletteId: p.id } });
                     onOpenChange(false);
                   }}
                   className={itemCls}

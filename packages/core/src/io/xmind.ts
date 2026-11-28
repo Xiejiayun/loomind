@@ -30,13 +30,14 @@ import {
 import { validateDocumentInvariants } from "../model/invariants.js";
 import { MindmapDocumentSchema, MindmapThemeConfigSchema } from "../model/schema.js";
 import { imageReader, imageWriter, readTitle, titleRuns, type XMindImage } from "./xmind-content.js";
+import { readSheetAppearance, readTopicAppearance, writeSheetAppearance, writeTopicAppearance, type XMindStyle, type XMindTheme } from "./xmind-appearance.js";
 
 const LOOMIND_EXT_PROVIDER = "loomind:v1";
 const ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 
 interface XMindExtension {
   provider: string;
-  content: Record<string, unknown>;
+  content: Record<string, unknown> | Array<{ name: string; content: string }>;
 }
 
 interface XMindTopicJson {
@@ -46,6 +47,7 @@ interface XMindTopicJson {
   attributedTitle?: ReturnType<typeof titleRuns>;
   image?: XMindImage;
   structureClass?: string;
+  style?: XMindStyle;
   notes?: { plain?: { content?: string } };
   labels?: string[];
   markers?: Array<{ markerId: string }>;
@@ -65,6 +67,8 @@ interface XMindSheetJson {
   id: string;
   title: string;
   rootTopic: XMindTopicJson;
+  theme?: XMindTheme;
+  style?: XMindStyle;
   relationships?: Array<{ id: string; end1Id: string; end2Id: string; title?: string }>;
   extensions?: XMindExtension[];
 }
@@ -111,10 +115,22 @@ function fromStructureClass(
   return {};
 }
 
-function readLoomindExt(extensions?: XMindExtension[]): Record<string, unknown> | null {
+function readObjectExt(extensions?: XMindExtension[], provider = LOOMIND_EXT_PROVIDER): Record<string, unknown> | null {
   if (!Array.isArray(extensions)) return null;
-  const found = extensions.find((e) => e && e.provider === LOOMIND_EXT_PROVIDER && typeof e.content === "object" && e.content !== null);
-  return found ? found.content : null;
+  const content = extensions.find((entry) => entry?.provider === provider)?.content;
+  return content && typeof content === "object" && !Array.isArray(content) ? content : null;
+}
+
+const UNBALANCED = "org.xmind.ui.map.unbalanced";
+const CLOCKWISE = "org.xmind.ui.map.clockwise";
+
+function nativeRightCount(root: XMindTopicJson, length: number): number | undefined {
+  if ((root.structureClass !== UNBALANCED && root.structureClass !== CLOCKWISE) || !Array.isArray(root.extensions)) return;
+  const content = root.extensions.find((entry) => entry?.provider === UNBALANCED)?.content;
+  const count = Array.isArray(content) ? content.find((field) => field?.name === "right-number")?.content : undefined;
+  if ((typeof count !== "string" && typeof count !== "number") || !/^\d+$/.test(String(count))) return;
+  const right = Number(count);
+  return Number.isSafeInteger(right) && right <= length ? right : undefined;
 }
 
 function topicToXMind(
@@ -136,7 +152,15 @@ function topicToXMind(
 
   if (isRoot && sheet) {
     out.structureClass = toStructureClass(sheet.structure, sheet.direction);
+    if (sheet.structure === "mindmap" && sheet.direction === "bilateral" && sheet.branchOrder === "clockwise") {
+      const count = topic.children.findIndex((child) => child.direction !== "right");
+      const right = count === -1 ? topic.children.length : count;
+      if (topic.children.length && topic.children.slice(right).every((child) => child.direction === "left")) {
+        out.extensions = [{ provider: UNBALANCED, content: [{ name: "right-number", content: String(right) }] }];
+      } else out.structureClass = CLOCKWISE;
+    }
   }
+  if (topic.style || topic.shape) out.style = writeTopicAppearance({ ...topic.style, shape: topic.shape });
   if (topic.note?.text) {
     out.notes = { plain: { content: topic.note.text } };
   }
@@ -164,8 +188,9 @@ function topicToXMind(
   if (topic.task) extContent.task = topic.task;
   if (topic.subtitle) extContent.subtitle = topic.subtitle;
   if (topic.collapsed) extContent.collapsed = true;
+  if (topic.direction) extContent.direction = topic.direction;
   if (Object.keys(extContent).length > 0) {
-    out.extensions = [{ provider: LOOMIND_EXT_PROVIDER, content: extContent }];
+    (out.extensions ??= []).push({ provider: LOOMIND_EXT_PROVIDER, content: extContent });
   }
   if (topic.equation) (out.extensions ??= []).push({ provider: "org.xmind.ui.mathJax", content: { content: topic.equation.latex } });
 
@@ -246,7 +271,7 @@ class IdAllocator {
 }
 
 function parseTaskFromRaw(raw: XMindTopicJson): { status: "todo" | "done" } | undefined {
-  const ext = readLoomindExt(raw.extensions);
+  const ext = readObjectExt(raw.extensions);
   if (ext?.task && typeof ext.task === "object") {
     const status = (ext.task as Record<string, unknown>).status;
     if (status === "todo" || status === "done") return { status };
@@ -273,7 +298,7 @@ function xmindToTopic(
     xmindToTopic(c, ids, collectedSummaries, collectedBoundaries, images),
   );
   const calloutRaw = raw.children?.callout?.[0];
-  const ext = readLoomindExt(raw.extensions);
+  const ext = readObjectExt(raw.extensions);
   const task = parseTaskFromRaw(raw);
 
   const sanitizedLabels = Array.isArray(raw.labels)
@@ -287,10 +312,15 @@ function xmindToTopic(
     ? raw.markers.map((m) => m?.markerId).filter((id): id is string => typeof id === "string" && id.length > 0)
     : undefined;
 
-  const latex = Array.isArray(raw.extensions) ? raw.extensions.find((entry) => entry?.provider === "org.xmind.ui.mathJax")?.content?.content : undefined;
+  const latex = readObjectExt(raw.extensions, "org.xmind.ui.mathJax")?.content;
+  const { shape, ...style } = readTopicAppearance(raw.style) ?? {};
+  const direction = ext?.direction;
   const title = readTitle(typeof raw.title === "string" ? raw.title : "", raw.attributedTitle, ext?.richTitle);
   const topic = createTopic(topicId, title, {
     children,
+    ...(shape && { shape }),
+    ...(Object.keys(style).length && { style }),
+    ...(direction === "left" || direction === "right" || direction === "auto" || direction === "up" || direction === "down" ? { direction } : {}),
     ...(typeof latex === "string" ? { equation: { latex } } : {}),
     ...(raw.image && !(raw.image.isMathJaxImage && typeof latex === "string") ? { image: images.read(raw.image, ext?.image) } : {}),
     ...(raw.notes?.plain?.content ? { note: { format: "markdown", text: raw.notes.plain.content } } : {}),
@@ -400,6 +430,7 @@ export function exportToXMind(doc: MindmapDocument): Uint8Array {
       id: sheet.id,
       class: "sheet",
       title: sheet.title,
+      theme: writeSheetAppearance(sheet.theme),
       rootTopic: topicToXMind(sheet.rootTopic, summariesByParent, rangeBoundariesByParent, images, true, sheet),
       relationships: sheet.relationships.map((r) => ({
         id: r.id,
@@ -482,13 +513,16 @@ export function importFromXMind(zipBytes: Uint8Array): MindmapDocument {
     const sheetTopicIds = collectSheetTopicIds({ rootTopic, floatingTopics, summaries });
 
     // Restore subtree boundaries from loomind:v1 extension if valid
-    const sheetExt = readLoomindExt(rs.extensions);
+    const sheetExt = readObjectExt(rs.extensions);
     if (sheetExt?.active === true && !activeSheetId) {
       activeSheetId = sheetId;
       const theme = MindmapThemeConfigSchema.safeParse(sheetExt.documentTheme);
       if (theme.success) documentTheme = theme.data;
     }
     const sheetTheme = MindmapThemeConfigSchema.partial().safeParse(sheetExt?.theme);
+    const nativeTheme = readSheetAppearance(rs.theme, rs.style);
+    const rightCount = nativeRightCount(rs.rootTopic, rootTopic.children.length);
+    if (rightCount !== undefined) rootTopic.children.forEach((topic, index) => { topic.direction = index < rightCount ? "right" : "left"; });
     if (Array.isArray(sheetExt?.subtreeBoundaries)) {
       for (const rawB of sheetExt.subtreeBoundaries as MindmapBoundary[]) {
         if (rawB?.target?.kind === "subtree") {
@@ -544,7 +578,8 @@ export function importFromXMind(zipBytes: Uint8Array): MindmapDocument {
       structure,
       direction,
       spacing,
-      ...(sheetTheme.success ? { theme: sheetTheme.data } : {}),
+      ...((rs.rootTopic.structureClass === CLOCKWISE || rightCount !== undefined) && { branchOrder: "clockwise" }),
+      ...((nativeTheme || sheetTheme.success) && { theme: { ...(sheetTheme.success ? sheetTheme.data : {}), ...nativeTheme } }),
       floatingTopics,
       summaries,
       boundaries,
