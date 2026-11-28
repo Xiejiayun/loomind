@@ -54,7 +54,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Content and language**: The AI follows explicit language and count requests. Otherwise it writes in the language of the question and lets the material determine the branches and depth. Node shortcuts without a written question keep the topic's language; changing the interface language does not change generated content. Canvas size and request limits still apply.
 - **No automatic demo content**: Without a configured provider, generation reports unavailable. To exercise a fixed, labeled fixture, explicitly set `AI_ALLOW_MOCK=true` in a local Worker environment or pass `demo: true` to the standalone AI helpers.
 - **Free `/try` Playground**: Powered by Cloudflare Workers AI (Gemma 4) with a per-device 3-trial signed cookie quota — try AI mind map generation and node actions without signing in.
-- **Logged-in Pro Co-Creation**: Streaming AI Chat panel (`⌘J`), inline node AI command bar (`⇧⌘J`), and 6 structured undoable node actions (Expand, Break into Tasks, Summarize, Cluster Boundary, Elaborate Note, Smart Restyle).
+- **Editing with AI Chat**: Open the sidebar with `⌘J` / `Ctrl+J`, or right-click a topic to ask about it in chat. With a topic selected, choose **Topic actions** to expand it, break it into tasks, summarize, add a note, cluster, or restyle. You can type an instruction before choosing an action; the change is undoable.
 
 ### Loro CRDT Live Sync, Cloud Version History & Workspace Sharing
 - **Collaboration**: The editor uses a Loro movable-tree CRDT, `BroadcastChannel`, and an HTTP delta log in D1 (`/api/mindmaps/:id/collab`). It shows other editors’ selections.

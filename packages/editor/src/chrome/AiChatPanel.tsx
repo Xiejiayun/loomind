@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import {
   AlertCircle,
   ArrowUp,
@@ -33,23 +34,18 @@ import { useEditorI18n } from "../i18n.js";
 
 export type { AiChatMessage };
 
-export interface QueuedAiRequest {
-  prompt?: string;
-  action?: NodeAiActionKind;
-  forceFullMap?: boolean;
-}
+export type QueuedAiRequest = { type: "prompt"; prompt: string } | { type: "focus"; topicId?: string };
 
 interface AiChatPanelProps {
   open: boolean;
   isDark: boolean;
   layout: MindmapLayoutResult;
-  queuedPrompt?: string;
   queuedRequest?: QueuedAiRequest;
   aiRuntime?: EditorAiRuntime;
   chatPersistence?: AiChatPersistence;
   readOnly?: boolean;
   embedded?: boolean;
-  onConsumeQueuedPrompt?: () => void;
+  onConsumeQueuedRequest?: () => void;
   onMessagesChange?: (messages: AiChatMessage[]) => void;
   onClose: () => void;
 }
@@ -79,13 +75,12 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   open,
   isDark,
   layout,
-  queuedPrompt,
   queuedRequest,
   aiRuntime,
   chatPersistence,
   readOnly = false,
   embedded = false,
-  onConsumeQueuedPrompt,
+  onConsumeQueuedRequest,
   onMessagesChange,
   onClose,
 }) => {
@@ -151,7 +146,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
   const activeTopicId = !ignoreSelection && selectedTopicIds.length > 0 ? selectedTopicIds[0] : null;
   const activeTopic = activeTopicId ? topicMap.get(activeTopicId) : undefined;
-  const activeTopicTitle = activeTopic ? richTextToPlainText(activeTopic.title) : null;
+  const activeTopicTitle = activeTopic ? richTextToPlainText(activeTopic.title) || t.a11y.untitledTopic : null;
 
   useEffect(() => {
     setIgnoreSelection(false);
@@ -386,24 +381,18 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   };
 
   useEffect(() => {
-    if (!open || busy || readOnly) return;
-    if (queuedRequest?.prompt || queuedRequest?.action) {
-      const req = queuedRequest;
-      onConsumeQueuedPrompt?.();
-      void executePrompt(
-        req.prompt,
-        req.action,
-        req.forceFullMap ?? (!req.action && sheet.rootTopic.children.length === 0),
-      );
-      return;
+    if (!open || readOnly || !queuedRequest) return;
+    if (queuedRequest.type === "focus") {
+      if (queuedRequest.topicId) selectTopics([queuedRequest.topicId]);
+      setIgnoreSelection(false);
+      inputRef.current?.focus();
+    } else {
+      if (busy) return;
+      void executePrompt(queuedRequest.prompt, undefined, sheet.rootTopic.children.length === 0);
     }
-    if (queuedPrompt) {
-      const promptToRun = queuedPrompt;
-      onConsumeQueuedPrompt?.();
-      void executePrompt(promptToRun, undefined, sheet.rootTopic.children.length === 0);
-    }
+    onConsumeQueuedRequest?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, queuedPrompt, queuedRequest]);
+  }, [open, readOnly, busy, queuedRequest]);
 
   if (!open) return null;
 
@@ -858,6 +847,39 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                       <X className="h-3 w-3" />
                     </button>
                   </span>
+                  <Popover.Root>
+                    <Popover.Trigger asChild>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] hover:underline disabled:opacity-50 max-md:min-h-11 ${mutedTextCls}`}
+                      >
+                        {t.aiChat.topicActions} <ChevronDown className="h-3 w-3" />
+                      </button>
+                    </Popover.Trigger>
+                    <Popover.Portal>
+                      <Popover.Content
+                        side="top"
+                        align="end"
+                        sideOffset={4}
+                        collisionPadding={8}
+                        aria-label={t.aiChat.topicActions}
+                        className={`z-50 grid max-h-[var(--radix-popover-content-available-height)] min-w-32 overflow-y-auto rounded-lg border p-1 text-xs shadow-lg ${borderCls} ${isDark ? "bg-[#15171c] text-[#f4f5f8]" : "bg-white text-[#111318]"}`}
+                      >
+                        {(Object.keys(t.aiChat.quickActions) as NodeAiActionKind[]).map((action) => (
+                          <Popover.Close asChild key={action}>
+                            <button
+                              type="button"
+                              onClick={() => void executePrompt(input, action)}
+                              className={`rounded px-2 py-1.5 text-left max-md:min-h-11 ${isDark ? "hover:bg-white/[0.08]" : "hover:bg-slate-100"}`}
+                            >
+                              {t.aiChat.quickActions[action].label}
+                            </button>
+                          </Popover.Close>
+                        ))}
+                      </Popover.Content>
+                    </Popover.Portal>
+                  </Popover.Root>
                 </div>
               )}
 

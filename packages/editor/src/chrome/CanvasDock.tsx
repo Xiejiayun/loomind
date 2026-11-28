@@ -11,7 +11,6 @@ import {
   Plus,
   Share2,
   Sigma,
-  Sparkles,
   SquareDashedBottom,
 } from "lucide-react";
 import {
@@ -26,10 +25,9 @@ import { useEditorI18n } from "../i18n.js";
 
 interface CanvasDockProps {
   isDark: boolean;
-  onOpenInlineAi?: () => void;
 }
 
-export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }) => {
+export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark }) => {
   const doc = useMindmapStore((s) => s.doc);
   const zenMode = useMindmapStore((s) => s.zenMode);
   const selectedTopicIds = useMindmapStore((s) => s.selectedTopicIds);
@@ -268,25 +266,6 @@ export const CanvasDock: React.FC<CanvasDockProps> = ({ isDark, onOpenInlineAi }
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-
-      {onOpenInlineAi && (
-        <>
-          <div className={sepCls} />
-          <button
-            type="button"
-            onClick={onOpenInlineAi}
-            title={t.dock.inlineAiTitle}
-            className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-[6px] px-2.5 py-1 font-medium transition ${
-              isDark
-                ? "bg-white/[0.08] text-[#f4f5f8] hover:bg-white/[0.14]"
-                : "bg-slate-900/[0.07] text-[#111318] hover:bg-slate-900/[0.12]"
-            }`}
-          >
-            <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-80" />
-            <span>{t.dock.aiExpand}</span>
-          </button>
-        </>
-      )}
     </div>
   );
 };

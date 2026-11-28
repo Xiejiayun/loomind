@@ -81,14 +81,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         <>
           <MenuItem
             icon={<Sparkles className="h-3.5 w-3.5 opacity-80" />}
-            label={t.contextMenu.aiQuick}
+            label={t.contextMenu.askInChat}
             isDark={isDark}
-            onClick={() =>
-              run(() => {
-                selectTopics([menu.topicId]);
-                onOpenAiForTopic(menu.topicId);
-              })
-            }
+            onClick={() => run(() => onOpenAiForTopic(menu.topicId))}
           />
           <div className={sepCls} />
         </>
