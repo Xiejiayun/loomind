@@ -4,10 +4,10 @@ import { useLocalFixtures } from "./fixtures.js";
 
 async function expectTouchTarget(button: Locator) {
   await expect(button).toBeInViewport({ ratio: 1 });
+  await button.tap({ trial: true });
   const bounds = await button.boundingBox();
   expect(bounds!.width).toBeGreaterThanOrEqual(44);
   expect(bounds!.height).toBeGreaterThanOrEqual(44);
-  await button.tap({ trial: true });
 }
 
 test("landing to playground: edit a topic without losing the dock or save action", async ({ page }) => {
