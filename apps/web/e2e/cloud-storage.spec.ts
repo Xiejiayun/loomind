@@ -41,14 +41,17 @@ async function imageDigest(page: Page, title: string) {
 test("large source-linked maps keep photos, private reviews and revocable public snapshots separate", async ({ browserName, context, cloud }) => {
   test.setTimeout(150_000);
   const author = await cloud.openPage(context, "field-editor");
-  await author.goto(`${cloud.origin}/app/create/source`);
+  await author.goto(`${cloud.origin}/app`);
+  await author.getByRole("button", { name: "Add attachments" }).click();
+  await author.getByRole("button", { name: "Paste text" }).click();
   const titles = ["North elevation", "South elevation", "Entrance detail", "Roof detail", "Window detail", "Floor detail"];
   const quote = "Surveyors measured the elevation twice on site.";
   const original = "https://example.test/field-report";
   await author.getByLabel("Source title", { exact: true }).fill("Field minutes");
   await author.getByLabel("Original link (optional)").fill(original);
   await author.getByLabel("Source text", { exact: true }).fill(titles.map((title) => `- ${title}\n${quote}`).join("\n\n"));
-  await author.getByRole("button", { name: "Create source-linked map" }).click();
+  await author.getByRole("button", { name: "Add to composer" }).click();
+  await author.getByRole("button", { name: "Create map", exact: true }).click();
   await expect(topic(author, titles[0])).toBeVisible();
   const mapId = new URL(author.url()).pathname.split("/").at(-1);
   const api = `${cloud.origin}/api/mindmaps/${mapId}`;

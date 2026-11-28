@@ -1,23 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { MindmapDocumentSchema, richTextToPlainText, validateDocumentInvariants } from "@mindmap/core/model";
-import { documentFromPassages, documentFromSource, passageLocation, SOURCE_PASSAGE_LIMIT, SOURCE_TEXT_LIMIT, sourceAddress, sourcePassages, webpagePassages } from "../src/source-material.js";
+import { contentFromSource, documentFromSource, passageLocation, SOURCE_PASSAGE_LIMIT, SOURCE_TEXT_LIMIT, sourceAddress, sourcePassages, webpagePassages } from "../src/source-material.js";
 
 describe("source-linked map creation", () => {
-  it("keeps publisher title, paragraph numbering, and full quotes independently of editable labels", () => {
-    const quote = "审议通过。".repeat(24);
+  it("previews paragraph numbers but keeps only the webpage's unmodified prose", () => {
+    const quote = "审议通过。".repeat(24) + "原文链接 https://author.example/。";
     const passages = webpagePassages(["第一条结论。", quote]);
     const url = "https://example.test/article";
-    const document = documentFromPassages("团队汇报", passages, url, "zh", "正式公报");
-    const topic = document.sheets[0].rootTopic.children[1];
+    const content = contentFromSource({ origin: "web", name: "正式公报", address: url, passages }, "zh");
+    const topic = content.children[1];
     expect(richTextToPlainText(topic.title)).toHaveLength(72);
-    expect(topic.note?.text).toBe(`正式公报 · 正文第 2 段 · ${url}\n\n${quote}`);
-    expect(topic.href?.target).toBe(url);
+    expect(topic.note?.text).toBe(quote);
+    expect(content.href).toBeUndefined(); expect(topic.href).toBeUndefined();
+    expect(JSON.stringify(content)).not.toMatch(/正式公报|example\.test|正文第 2 段/);
     expect(passageLocation(passages[1], "en")).toBe("Paragraph 2");
   });
-  it("keeps the physical PDF page and original filename even when the map name changes", () => {
+  it("previews the PDF page without writing it into notes or stripping a user-supplied link", () => {
     const passage = { title: "结论", quote: "结论：保持既定日期。", page: 5, firstLine: 1, lastLine: 1 };
-    const doc = documentFromPassages("团队评审", [passage], "https://example.test/a.pdf", "zh", "会议原件.pdf");
-    expect(doc.sheets[0].rootTopic.children[0].note?.text).toBe("会议原件.pdf · 第 5 页 · https://example.test/a.pdf\n\n结论：保持既定日期。");
+    const content = contentFromSource({ origin: "pdf", name: "会议原件.pdf", address: "https://example.test/a.pdf", passages: [passage] }, "zh");
+    expect(content.children[0].note?.text).toBe("会议原件.pdf · https://example.test/a.pdf\n\n结论：保持既定日期。");
+    expect(JSON.stringify(content)).not.toMatch(/第 5 页|"page"/);
     expect(passageLocation(passage, "en")).toBe("Page 5");
     expect(passageLocation({ ...passage, page: undefined }, "en")).toBe("Line 1");
   });

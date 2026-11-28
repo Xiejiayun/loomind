@@ -7,7 +7,7 @@ const desktop = { ...cloudBrowser, isMobile: false, hasTouch: false, viewport: {
 test.use(desktop);
 const topic = (page: Page, title: string) => page.getByRole("application").getByRole("treeitem").filter({ has: page.getByText(title, { exact: true }) });
 
-test("reads a real PDF locally and preserves physical pages in a reopened map and downloaded PowerPoint", async ({ browser, browserName, context, cloud }, testInfo) => {
+test("previews real PDF page numbers without saving or exporting them", async ({ browser, browserName, context, cloud }, testInfo) => {
   test.setTimeout(90_000);
   const first = "The field team confirmed the opening date.";
   const last = "Finance approved the reserve on Thursday.";
@@ -24,30 +24,35 @@ test("reads a real PDF locally and preserves physical pages in a reopened map an
   } finally { await printContext.close(); if (printer !== browser) await printer.close(); }
   const author = await cloud.openPage(context, "pdf-reader");
   await author.goto(`${cloud.origin}/app/create/source`);
-  await author.getByLabel("Source text", { exact: true }).fill("An unsent note");
-  await author.getByRole("button", { name: "Import PDF" }).click();
-  const file = author.getByLabel("Choose PDF file");
-  const imported = author.getByRole("button", { name: "Create source-linked map" });
-  await file.setInputFiles({ name: "drawing.pdf", mimeType: "application/pdf", buffer: noText });
+  await expect(author).toHaveURL(`${cloud.origin}/app`);
+  const prompt = author.locator("#lm-home-prompt");
+  await prompt.fill("An unsent note");
+  await author.getByRole("button", { name: "Add attachments" }).click();
+  const chooser = author.waitForEvent("filechooser");
+  await author.getByRole("button", { name: /Choose files or images/ }).click();
+  const file = author.getByLabel("Choose files or images", { exact: true });
+  const imported = author.getByRole("button", { name: "Create map", exact: true });
+  await (await chooser).setFiles({ name: "drawing.pdf", mimeType: "application/pdf", buffer: noText });
   await expect(author.getByRole("alert")).toContainText("No extractable text", { timeout: 15_000 });
   await expect(imported).toBeDisabled();
+  await author.getByRole("button", { name: "Remove drawing.pdf" }).click();
   await file.setInputFiles({ name: "broken.pdf", mimeType: "application/pdf", buffer: Buffer.from("This is not a PDF") });
   await expect(author.getByRole("alert")).toContainText("could not be read as a PDF");
   await expect(imported).toBeDisabled();
-  await author.getByRole("button", { name: "Paste text" }).click();
-  await expect(author.getByLabel("Source text", { exact: true })).toHaveValue("An unsent note");
-  await author.getByRole("button", { name: "Import PDF" }).click();
+  await author.getByRole("button", { name: "Remove broken.pdf" }).click();
+  await expect(prompt).toHaveValue("An unsent note");
   const mutations: string[] = [];
   const observe = (request: import("@playwright/test").Request) => { if (!["GET", "HEAD"].includes(request.method())) mutations.push(request.url()); };
   author.on("request", observe);
   await file.setInputFiles({ name: "field-evidence.pdf", mimeType: "application/pdf", buffer: packet });
   await expect(author.getByRole("status").filter({ hasText: "3 pages; no extractable text on pages: 2" })).toBeVisible();
-  await expect(author.getByLabel("Source title", { exact: true })).toHaveValue("field-evidence");
+  await author.getByRole("button", { name: "Preview field-evidence.pdf" }).click();
   const details = author.locator("details");
   await expect(details).toHaveCount(2);
   await details.filter({ hasText: "Page 3" }).locator("summary").click();
   await expect(author.locator("details[open] p")).toContainText(last);
-  await author.getByLabel("Source title", { exact: true }).fill("Field review");
+  const quotes = await details.locator("p").allTextContents();
+  await prompt.fill("Field review");
   author.off("request", observe);
   expect(mutations).toEqual([]);
   const saving = author.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/mindmaps\/[^/]+$/.test(response.url()));
@@ -59,8 +64,9 @@ test("reads a real PDF locally and preserves physical pages in a reopened map an
   const savedDoc = (await stored.json()).document;
   const notes: string[] = savedDoc.sheets[0].rootTopic.children.map((entry: { note: { text: string } }) => entry.note.text);
   expect(notes).toHaveLength(2);
-  expect(notes[0]).toContain("field-evidence.pdf · Page 1"); expect(notes[0]).toContain(first);
-  expect(notes[1]).toContain("field-evidence.pdf · Page 3"); expect(notes[1]).toContain(last); expect(notes[1]).toContain("周四核准预算。");
+  expect(notes).toEqual(quotes.map((quote) => `field-evidence.pdf\n\n${quote}`));
+  expect(notes[0]).toContain(first); expect(notes[1]).toContain(last); expect(notes[1]).toContain("周四核准预算。");
+  expect(JSON.stringify(savedDoc)).not.toMatch(/\bPage [123]\b|"page"\s*:/);
   expect(savedDoc.assets).toEqual({});
   const fresh = await browser.newContext(desktop);
   try {
@@ -82,8 +88,9 @@ test("reads a real PDF locally and preserves physical pages in a reopened map an
     const archive = unzipSync(await readFile(path));
     const speaker = Object.entries(archive).filter(([name]) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name)).map(([, bytes]) => strFromU8(bytes));
     expect(Object.entries(archive).some(([name, bytes]) => /^ppt\/slides\/slide\d+\.xml$/.test(name) && strFromU8(bytes).includes("Approved reserve"))).toBe(true);
-    expect(speaker.some((note) => note.includes("field-evidence.pdf · Page 1") && note.includes(first))).toBe(true);
-    expect(speaker.some((note) => note.includes("field-evidence.pdf · Page 3") && note.includes(last))).toBe(true);
+    expect(speaker.some((note) => note.includes(first))).toBe(true);
+    expect(speaker.some((note) => note.includes(last))).toBe(true);
+    for (const [name, bytes] of Object.entries(archive)) if (/\.(xml|rels)$/.test(name)) expect(strFromU8(bytes)).not.toMatch(/\bPage [123]\b/);
   } finally { await fresh.close(); }
 });
 
@@ -96,7 +103,8 @@ test("turns minutes into editable topics that retain their sources for an invite
   await context.route("https://source.example.test/**", (route) => { sourceRequests.push(route.request().url()); return route.abort(); });
   author.on("request", (request) => { if (new URL(request.url()).pathname === "/api/ai/stream") aiRequests.push(request.url()); });
   await author.goto(`${cloud.origin}/app`);
-  await author.getByRole("link", { name: "Create from source" }).click();
+  await author.getByRole("button", { name: "Add attachments" }).click();
+  await author.getByRole("button", { name: "Paste text" }).click();
   await author.getByLabel("Source title", { exact: true }).fill("Pilot minutes");
   await author.getByLabel("Original link (optional)").fill(original);
   const first = "The team kept the Friday date after the vendor call.";
@@ -106,7 +114,8 @@ test("turns minutes into editable topics that retain their sources for an invite
   await expect(author.locator("details[open] p")).toContainText(first);
   const put = () => author.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/mindmaps\/[^/]+$/.test(response.url()));
   const initial = put();
-  await author.getByRole("button", { name: "Create source-linked map" }).click();
+  await author.getByRole("button", { name: "Add to composer" }).click();
+  await author.getByRole("button", { name: "Create map", exact: true }).click();
   const created = await initial;
   expect(created.status()).toBe(200);
   expect(created.request().postDataJSON().sheets[0].rootTopic.children[1].href.target).toBe(original);

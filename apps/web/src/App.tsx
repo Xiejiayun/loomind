@@ -61,6 +61,7 @@ function SessionRoutes({ route, theme, toggle }: { route: ReturnType<typeof useR
     if (!session) return;
     const legacySpace = route.pathname === "/app" || route.pathname === "/app/library" ? new URLSearchParams(route.search).get("workspace") : null;
     if (session.user && (route.pathname === "/" || route.pathname === "/login")) navigate("/app", true);
+    else if (session.user && route.pathname === "/app/create/source") navigate("/app", true);
     else if (session.user && legacySpace && MAP_ID.test(legacySpace)) navigate(spacePath(legacySpace), true);
     else if (session.user && route.pathname === "/app/library") navigate(spacePath(PERSONAL), true);
     else if (!session.user && route.pathname.startsWith("/app")) navigate(`/login?next=${encodeURIComponent(route.pathname + route.search)}`, true);
