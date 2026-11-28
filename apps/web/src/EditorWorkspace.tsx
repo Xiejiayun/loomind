@@ -222,7 +222,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
       aiRuntime={proAiRuntime}
       chatPersistence={chatPersistence}
       accountControl={<div className="lm-editor-navigation">
-        <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} aria-controls="lm-workspace-sidebar" onClick={onToggleSidebar}>
+        <button type="button" className="lm-icon-button-sm lm-editor-sidebar-toggle" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} aria-controls="lm-workspace-sidebar" onClick={onToggleSidebar}>
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>
@@ -317,7 +317,7 @@ function ViewerEditor({ map, owner, theme, onToggleSidebar, listError }: {
       chatPersistence={chatPersistence}
       initialFormatPanelOpen={false}
       accountControl={<div className="lm-editor-navigation">
-        <button type="button" className="lm-icon-button-sm" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} aria-controls="lm-workspace-sidebar" onClick={onToggleSidebar}>
+        <button type="button" className="lm-icon-button-sm lm-editor-sidebar-toggle" title={t.workspace.toggleSidebarTitle} aria-label={t.workspace.toggleSidebarAria} aria-controls="lm-workspace-sidebar" onClick={onToggleSidebar}>
           <PanelLeft size={15}/>
         </button>
         <span className="lm-editor-map-title" title={map.title}>{map.title}</span>

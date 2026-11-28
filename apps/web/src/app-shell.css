@@ -357,6 +357,7 @@
 }
 @media (width > 800px) {
   .lm-app-shell.is-sidebar-collapsed > .lm-sidebar { visibility: hidden; }
+  .lm-app-shell:not(.is-sidebar-collapsed) .lm-editor-sidebar-toggle { display: none; }
 }
 
 .lm-sidebar {
