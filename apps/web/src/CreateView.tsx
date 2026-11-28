@@ -1,22 +1,21 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, FileText, GitBranch, Grid2x2, ListTree, Milestone, Network, Sparkles, Table2 } from "lucide-react";
-import type { MindmapDocument } from "@mindmap/core";
+import { AlignLeft, ArrowRight, Braces, FileText, GitBranch, Grid2x2, ListTree, Milestone, Network, Sparkles, Table2 } from "lucide-react";
+import { getTemplate, getTemplateInfo, richTextToPlainText, TEMPLATES, type MindmapDocument, type MindmapTopic } from "@mindmap/core";
 import type { WorkspaceSummary } from "./api.js";
 import { useI18n } from "./i18n.js";
 import { AppLink } from "./navigation.js";
-import { documentFromOutline, documentFromTopic, outlineNodeCount, parseOutline } from "./outline.js";
+import { spacePath } from "./workspace-groups.js";
+import { documentFromOutline, documentFromTopic, outlineNodeCount, parseOutline, type OutlineNode } from "./outline.js";
 import { OutlineTree } from "./OutlineTree.js";
 
-const TEMPLATE_ITEMS = [
-  { id: "blank-organic", icon: GitBranch },
-  { id: "quarterly-okr", icon: ListTree },
-  { id: "annual-roadmap", icon: Milestone },
-  { id: "root-cause-fishbone", icon: FileText },
-  { id: "swot-matrix", icon: Grid2x2 },
-  { id: "team-org", icon: Network },
-  { id: "product-launch", icon: Table2 },
-  { id: "meeting-notes", icon: ListTree },
-];
+const STRUCTURE_ICONS = {
+  mindmap: GitBranch, logic: ListTree, timeline: Milestone, fishbone: FileText, matrix: Grid2x2,
+  org: Network, treeTable: Table2, indented: AlignLeft, brace: Braces,
+};
+
+function templateOutline(topic: MindmapTopic): OutlineNode {
+  return { title: richTextToPlainText(topic.title), children: topic.children.map(templateOutline) };
+}
 
 export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces, onModeChange, onCreate }: {
   mode: "idea" | "outline";
@@ -26,7 +25,7 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
   onModeChange: (mode: "idea" | "outline") => void;
   onCreate: (document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const writable = workspaces.filter((space) => space.role !== "viewer");
   const [prompt, setPrompt] = useState(initialPrompt);
   const [outlineText, setOutlineText] = useState("");
@@ -34,17 +33,21 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
   const [workspaceId, setWorkspaceId] = useState<string | null>(() => writable.some((space) => space.id === activeWorkspaceId) ? activeWorkspaceId : null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const empty = !(mode === "idea" ? prompt : outlineText).trim();
+  const sample = useMemo(() => empty ? getTemplate(templateId).create() : null, [empty, templateId]);
   const parsed = useMemo(() => {
     if (!outlineText.trim()) return { outline: null, error: "" };
     try { return { outline: parseOutline(outlineText), error: "" }; }
     catch (reason) { return { outline: null, error: reason instanceof Error ? reason.message : t.createView.parseError }; }
   }, [outlineText, t.createView.parseError]);
+  const preview = sample ? templateOutline(sample.sheets[0].rootTopic) : mode === "outline" ? parsed.outline : null;
 
   async function create() {
     if (busy) return;
     setError("");
     setBusy(true);
     try {
+      if (sample) { await onCreate(sample, workspaceId); return; }
       const document = mode === "outline"
         ? documentFromOutline(parsed.outline ?? parseOutline(outlineText), templateId)
         : documentFromTopic(prompt, templateId);
@@ -60,6 +63,7 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
       <button type="button" role="tab" aria-selected={mode === "idea"} onClick={() => { setError(""); onModeChange("idea"); }}><Sparkles size={16}/> {t.createView.tabIdea}</button>
       <button type="button" role="tab" aria-selected={mode === "outline"} onClick={() => { setError(""); onModeChange("outline"); }}><ListTree size={16}/> {t.createView.tabOutline}</button>
     </div>
+    <AppLink href="/app/create/source" className="lm-secondary-button">{t.source.heading}</AppLink>
     <div className="lm-create-grid">
       <section className="lm-create-input-panel" aria-label={mode === "outline" ? t.createView.outlineInputAria : t.createView.topicInputAria}>
         {mode === "idea" ? <>
@@ -81,28 +85,28 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
       </section>
       <aside className="lm-create-preview-panel" aria-label={t.createView.previewAria}>
         <div className="lm-panel-heading"><span className="lm-eyebrow">02 / STRUCTURE</span><span className="lm-badge">PREVIEW</span></div>
-        <h2>{mode === "outline" ? t.createView.previewOutlineTitle : t.createView.previewIdeaTitle}</h2>
+        <h2>{sample ? t.createView.previewSample : mode === "outline" ? t.createView.previewOutlineTitle : t.createView.previewIdeaTitle}</h2>
         <div className="lm-structure-preview">
-          {mode === "outline" && parsed.outline ? <OutlineTree outline={parsed.outline}/>
+          {preview ? <OutlineTree outline={preview}/>
             : mode === "outline" ? <p className="lm-muted">{t.createView.previewOutlineEmpty}</p>
             : <div className="lm-topic-preview"><span>{t.createView.previewCenterTopic}</span><strong>{prompt.trim() || t.createView.previewWaiting}</strong><small>{t.createView.previewAddLater}</small></div>}
         </div>
-        <p className="lm-preview-count">{mode === "outline" && parsed.outline ? t.createView.previewCount(outlineNodeCount(parsed.outline), parsed.outline.children.length) : t.createView.previewEditableLater}</p>
+        <p className="lm-preview-count">{preview ? t.createView.previewCount(outlineNodeCount(preview), preview.children.length) : t.createView.previewEditableLater}</p>
         <div className="lm-create-settings"><label htmlFor="lm-create-space">{t.createView.saveToLabel}</label><select id="lm-create-space" value={workspaceId ?? ""} onChange={(event) => setWorkspaceId(event.target.value || null)}>
           <option value="">{t.common.myMaps}</option>{writable.map((space) => <option key={space.id} value={space.id}>{space.name}</option>)}
-        </select></div>
+        </select>{workspaceId && <AppLink href={spacePath(workspaceId)} className="lm-secondary-button">{t.mapList.teamLink}</AppLink>}</div>
       </aside>
     </div>
     <section className="lm-template-section" aria-labelledby="lm-template-title"><div className="lm-section-line"><div><span className="lm-eyebrow">03 / VISUAL LANGUAGE</span><h2 id="lm-template-title">{t.createView.templateTitle}</h2></div><p>{t.createView.templateNote}</p></div>
-      <div className="lm-template-grid">{TEMPLATE_ITEMS.map((template) => {
-        const Icon = template.icon;
-        const info = t.createView.templateDetails[template.id];
+      <div className="lm-template-grid">{TEMPLATES.map((template) => {
+        const Icon = STRUCTURE_ICONS[template.structure];
+        const info = getTemplateInfo(template.id, locale, template);
         return <button key={template.id} type="button" className="lm-template-card" aria-pressed={templateId === template.id}
-          onClick={() => setTemplateId(template.id)}><Icon size={20}/><strong>{info?.name ?? template.id}</strong><span>{info?.detail ?? ""}</span></button>;
+          onClick={() => setTemplateId(template.id)}><Icon size={20}/><strong>{info.name}</strong><span>{info.description}</span></button>;
       })}</div></section>
-    <div className="lm-create-actions"><span>{mode === "outline" ? t.createView.footerOutline : t.createView.footerIdea}</span>
-      <button type="button" className="lm-primary-button" disabled={busy || (mode === "outline" ? !parsed.outline?.children.length : !prompt.trim())}
-        onClick={() => void create()}>{busy ? t.createView.creating : t.createView.createBtn}<ArrowRight size={17}/></button></div>
+    <div className="lm-create-actions"><span>{sample ? t.createView.footerSample : mode === "outline" ? t.createView.footerOutline : t.createView.footerIdea}</span>
+      <button type="button" className="lm-primary-button" disabled={busy || (!sample && (mode === "outline" ? !parsed.outline?.children.length : !prompt.trim()))}
+        onClick={() => void create()}>{busy ? t.createView.creating : sample ? t.createView.createSample : t.createView.createBtn}<ArrowRight size={17}/></button></div>
     {error && <p className="lm-form-error" role="alert">{error}</p>}
   </div>;
 }

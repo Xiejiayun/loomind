@@ -1,20 +1,6 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { documentFromTopic } from "../src/outline.js";
-
-async function useLocalFixtures(page: Page, signedIn = false) {
-  await page.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ contentType: "text/css", body: "" }));
-  await page.route("**/api/**", (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname === "/api/auth/session") {
-      return route.fulfill({ json: { user: signedIn ? { id: "mobile-test", email: "mobile@example.test" } : null, expiresAt: null } });
-    }
-    if (["/api/workspaces", "/api/workspaces/order", "/api/mindmaps"].includes(url.pathname)) return route.fulfill({ json: [] });
-    if (url.pathname === "/api/ai/config") {
-      return route.fulfill({ json: { tier: url.searchParams.get("tier"), available: true, isMock: true, providerLabel: "Test fixture", modelLabel: "Test fixture", dailyLimit: 3, remainingToday: 3 } });
-    }
-    return route.fulfill({ status: 503, json: { error: "Offline fixture: cloud services are unavailable" } });
-  });
-}
+import { useLocalFixtures } from "./fixtures.js";
 
 async function expectTouchTarget(button: Locator) {
   await expect(button).toBeInViewport({ ratio: 1 });
@@ -212,6 +198,25 @@ test("sidebar order can be canceled, retried and saved from a phone without chan
   await expect(names).toHaveText(["Personal", "Shared", "Work"]);
 });
 
+test("indented outline siblings retain their levels from preview through a local reopen", async ({ page }) => {
+  await useLocalFixtures(page, true);
+  await page.goto("/app/create?mode=outline");
+  await page.locator("#lm-outline-input").fill("Launch\n  - Pricing\n    - Costs\n  - Timeline");
+  await expect(page.getByText("4 nodes · 2 top-level branches", { exact: true })).toBeVisible();
+  await expect(page.locator(".lm-outline-tree > ul > li > span")).toHaveText(["Pricing", "Timeline"]);
+  await expect(page.locator(".lm-outline-tree li li > span")).toHaveText(["Costs"]);
+  await page.getByRole("button", { name: "Create Map" }).tap();
+  const checkLevels = async () => {
+    const canvas = page.getByRole("application");
+    await expect(canvas.getByRole("treeitem", { name: /^Pricing,/ })).toHaveAttribute("aria-level", "2");
+    await expect(canvas.getByRole("treeitem", { name: /^Timeline,/ })).toHaveAttribute("aria-level", "2");
+    await expect(canvas.getByRole("treeitem", { name: /^Costs,/ })).toHaveAttribute("aria-level", "3");
+  };
+  await checkLevels();
+  await page.reload();
+  await checkLevels();
+});
+
 test("wide layouts still show chat beside the canvas", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await useLocalFixtures(page);
@@ -223,4 +228,35 @@ test("wide layouts still show chat beside the canvas", async ({ page }) => {
   const panel = await chat.boundingBox();
   const canvas = await page.getByRole("application").boundingBox();
   expect(canvas!.x).toBeGreaterThanOrEqual(panel!.x + panel!.width);
+});
+
+test("desktop editor shows only one sidebar toggle icon whether expanded or collapsed", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await useLocalFixtures(page, true);
+  const id = "b20d682c-988a-48e2-8278-01796ed4faab";
+  const title = "Desktop sidebar toggle check";
+  await page.route("**/api/mindmaps", (route) => route.fulfill({ json: [{ id, title, access: "owner", workspaceId: null, updatedAt: "2026-01-01T00:00:00Z" }] }));
+  await page.route(`**/api/mindmaps/${id}`, (route) => route.fulfill({ json: { revision: 1, document: documentFromTopic(title) } }));
+  await page.goto(`/app/mindmaps/${id}`);
+  await expect(page.getByRole("application")).toBeVisible();
+
+  const sidebarToggle = page.locator(".lm-sidebar-collapse-btn");
+  const editorToggle = page.locator(".lm-editor-sidebar-toggle");
+
+  // Collapsed by default in editor: only editor header toggle is visible
+  await expect(editorToggle).toBeVisible();
+  await expect(sidebarToggle).toBeHidden();
+  await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(1);
+
+  // Expand sidebar: only sidebar header toggle is visible
+  await editorToggle.click();
+  await expect(sidebarToggle).toBeVisible();
+  await expect(editorToggle).toBeHidden();
+  await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(1);
+
+  // Collapse sidebar again: editor header toggle returns
+  await sidebarToggle.click();
+  await expect(editorToggle).toBeVisible();
+  await expect(sidebarToggle).toBeHidden();
+  await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(1);
 });

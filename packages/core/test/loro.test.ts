@@ -64,6 +64,47 @@ describe("LoroSyncAdapter (M4 CRDT collaborative sync)", () => {
     }
   });
 
+  it("restores a reordered JSON draft without replacing retained topics or erasing an independent peer edit", () => {
+    const source = new LoroSyncAdapter(getTemplate("blank-organic").create());
+    const restored = LoroSyncAdapter.fromSnapshot(source.exportSnapshot());
+    const peer = LoroSyncAdapter.fromSnapshot(source.exportSnapshot());
+    const draft = structuredClone(restored.getDocument());
+    const root = draft.sheets[0].rootTopic;
+    const [first, second, third] = root.children;
+    first.children = first.children.slice(1);
+    second.children.push(createTopic("extra", "Offline addition"));
+    root.children = [third, first, second];
+    restored.reconcileDraft(draft);
+    expect(restored.getDocument()).toEqual(draft);
+    peer.applyCommand({ type: "topic/setTitle", sheetId: draft.activeSheetId, topicId: first.id, title: createRichText("Remote rename") });
+    expect(restored.importUpdates(peer.exportUpdates(source.getVersion()))).toBe(true);
+    peer.importUpdates(restored.exportUpdates(peer.getVersion()));
+    expect(peer.getDocument()).toEqual(restored.getDocument());
+    const children = peer.getDocument().sheets[0].rootTopic.children;
+    expect(children.map((child) => child.id)).toEqual([third.id, first.id, second.id]);
+    expect(children[1].title).toEqual(createRichText("Remote rename"));
+    expect(children[2].children.at(-1)?.id).toBe("extra");
+    expect(validateDocumentInvariants(peer.getDocument())).toEqual([]);
+  });
+
+  it("distinguishes a missing dependency from a duplicate and notifies only for applied changes", () => {
+    const source = new LoroSyncAdapter(getTemplate("blank-organic").create());
+    const peer = LoroSyncAdapter.fromSnapshot(source.exportSnapshot());
+    const changes = vi.fn();
+    peer.subscribe(changes);
+    source.applyCommand({ type: "topic/addChild", sheetId: "sheet-1", parentId: "root", newId: "parent" });
+    const first = source.exportUpdates(peer.getVersion());
+    const middle = source.getVersion();
+    source.applyCommand({ type: "topic/addChild", sheetId: "sheet-1", parentId: "parent", newId: "child" });
+    const second = source.exportUpdates(middle);
+    expect(peer.importUpdates(second)).toBe(false);
+    expect(changes).not.toHaveBeenCalled();
+    expect(peer.importUpdates(first)).toBe(true);
+    expect(peer.importUpdates(second)).toBe(true);
+    expect(changes).toHaveBeenCalledTimes(1);
+    expect(peer.getDocument()).toEqual(source.getDocument());
+  });
+
   it("does not add undo history for missing topics or identical serialized titles", () => {
     const adapter = new LoroSyncAdapter(getTemplate("blank-organic").create(), 1n);
     const { activeSheetId: sheetId, sheets } = adapter.getDocument();

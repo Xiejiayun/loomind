@@ -402,7 +402,7 @@ const MindmapEditorInner: React.FC<
         {!readOnly && viewMode === "canvas" && <FormatPanel isDark={isDark} />}
       </div>
 
-      <SheetBar layout={layout} isDark={isDark} viewportRef={viewportRef} />
+      <SheetBar layout={layout} isDark={isDark} viewportRef={viewportRef} readOnly={readOnly} />
 
       <ContextMenu
         menu={contextMenu}
@@ -411,7 +411,7 @@ const MindmapEditorInner: React.FC<
         onClose={() => setContextMenu(null)}
         onOpenAiForTopic={readOnly ? undefined : () => setInlineAiOpen(true)}
       />
-      <ExportModal open={exportOpen} onOpenChange={setExportOpen} layout={exportLayout} />
+      <ExportModal open={exportOpen} onOpenChange={setExportOpen} layout={exportLayout} readOnly={readOnly} />
       <CommandK
         open={cmdkOpen}
         isDark={isDark}

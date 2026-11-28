@@ -1,11 +1,13 @@
 import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { getPlatformProxy, unstable_readConfig, type PlatformProxy } from "wrangler";
-import { getTemplate } from "@mindmap/core";
+import { createRichText, getTemplate } from "@mindmap/core";
+import { LoroSyncAdapter } from "@mindmap/core/loro";
 import worker from "../worker/auth.js";
-import { DRAFT_LIMIT, OWNER_HEADER } from "../src/drafts/shared.js";
+import { DRAFT_LIMIT, LIVE_HEADER, OWNER_HEADER, type LiveCheckpoint } from "../src/drafts/shared.js";
 
 const origin = "https://loomind.test";
 const client = "unit-test.apps.googleusercontent.com";
@@ -77,9 +79,27 @@ beforeAll(async () => {
   }
   const sidebarMigration = await readFile(new URL("../migrations/0009_workspace_sidebar_orders.sql", import.meta.url), "utf8");
   await platform.env.DB.prepare(sidebarMigration).run();
+  const legacyOrder = JSON.stringify(["shared", "personal"]);
+  await platform.env.DB.prepare("INSERT INTO workspace_sidebar_orders (subject, space_order) VALUES (?, ?)").bind("legacy", legacyOrder).run();
+  const blocksMigration = await readFile(new URL("../migrations/0010_mindmap_document_blocks.sql", import.meta.url), "utf8");
+  for (const statement of blocksMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
+  await platform.env.DB.prepare(await readFile(new URL("../migrations/0011_public_view_links.sql", import.meta.url), "utf8")).run();
+  const reviewsMigration = await readFile(new URL("../migrations/0012_node_reviews.sql", import.meta.url), "utf8");
+  for (const statement of reviewsMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
+  const checkpoints = await readFile(new URL("../migrations/0013_live_checkpoints.sql", import.meta.url), "utf8");
+  for (const statement of checkpoints.split(";").map((part) => part.trim()).filter(Boolean)) await platform.env.DB.prepare(statement).run();
+  const templatesMigration = await readFile(new URL("../migrations/0014_workspace_templates.sql", import.meta.url), "utf8");
+  for (const statement of templatesMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await platform.env.DB.prepare(statement).run();
+  }
+  expect(await platform.env.DB.prepare("SELECT space_order FROM workspace_sidebar_orders WHERE subject = ?").bind("legacy").first("space_order")).toBe(legacyOrder);
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
-  env = { DB: platform.env.DB, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
+  env = { ...platform.env, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
   const realFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -151,6 +171,39 @@ describe("collaboration API (signed sessions and local D1)", () => {
     expect(created.role).toBe(role);
     return created;
   }
+
+  it("limits template publishing and copies to the correct team and starts copies with their own history", async () => {
+    const owner = await login("template-host"), editor = await login("template-author"), viewer = await login("template-reader"), outsider = await login("other-team");
+    const space = await (await request("workspaces", "POST", owner, { name: "Template studio" })).json() as { id: string };
+    const other = await (await request("workspaces", "POST", outsider, { name: "Other studio" })).json() as { id: string };
+    const list = `workspaces/${space.id}/templates`, source = crypto.randomUUID(), personal = crypto.randomUUID();
+    const original = getTemplate("blank-organic").create();
+    const headers = { [OWNER_HEADER]: "template-host", "If-Match": '"0"' };
+    expect((await request(`mindmaps/${source}`, "PUT", owner, original, { ...headers, "X-Loomind-Workspace": space.id })).status).toBe(200);
+    expect((await request(`mindmaps/${personal}`, "PUT", owner, original, headers)).status).toBe(200);
+    const writers = await share(owner, "workspace", space.id, "editor"), readers = await share(owner, "workspace", space.id, "viewer");
+    expect((await request(`invites/${writers.token}/accept`, "POST", editor)).status).toBe(200);
+    expect((await request(`invites/${readers.token}/accept`, "POST", viewer)).status).toBe(200);
+    expect((await request(list, "GET")).status).toBe(401); expect((await request(list, "GET", outsider)).status).toBe(404);
+    expect((await request(list, "POST", viewer, { mindmapId: source })).status).toBe(403);
+    expect((await request(list, "POST", owner, { mindmapId: personal })).status).toBe(404);
+    expect((await request(list, "POST", editor, { mindmapId: source }, { Origin: "https://unrelated.example" })).status).toBe(403);
+    const published = await request(list, "POST", editor, { mindmapId: source }); expect(published.status).toBe(201);
+    const { id } = await published.json() as { id: string };
+    const catalog = await (await request(list, "GET", viewer)).json() as Record<string, unknown>[];
+    expect(catalog).toHaveLength(1); expect(catalog[0].id).toBe(id); expect(catalog[0]).not.toHaveProperty("document");
+    expect((await request(`workspaces/${other.id}/templates/${id}/copies`, "POST", outsider, {})).status).toBe(404);
+    expect((await request(`${list}/${id}/copies`, "POST", viewer, {})).status).toBe(403);
+    expect((await request(`${list}/${id}`, "DELETE", viewer)).status).toBe(403);
+    expect((await request(`mindmaps/${source}`, "DELETE", owner, undefined, { [OWNER_HEADER]: "template-host" })).status).toBe(200);
+    const copy = await request(`${list}/${id}/copies`, "POST", editor, {}); expect(copy.status).toBe(201);
+    const copied = await copy.json() as { id: string; workspaceId: string }; expect(copied.id).not.toBe(source); expect(copied.workspaceId).toBe(space.id);
+    expect((await request(`${list}/${id}`, "DELETE", owner)).status).toBe(200);
+    expect((await request(`${list}/${id}/copies`, "POST", editor, {})).status).toBe(404);
+    const readHeaders = { [OWNER_HEADER]: "template-author" };
+    expect(await (await request(`mindmaps/${copied.id}`, "GET", editor, undefined, readHeaders)).json()).toMatchObject({ revision: 1, document: original });
+    expect(await (await request(`mindmaps/${copied.id}/revisions`, "GET", editor, undefined, readHeaders)).json()).toMatchObject([{ revision: 1, savedBy: "template-author" }]);
+  });
 
   it("keeps ownership and revision while granting workspace editors and viewers distinct rights", async () => {
     const alice = await login("space-owner");
@@ -346,13 +399,132 @@ describe("collaboration API (signed sessions and local D1)", () => {
 });
 
 describe("mindmaps API (local workerd D1)", () => {
+  it("publishes only the current map and invalidates a revoked read link even on a conditional read", async () => {
+    const owner = "public-map-owner";
+    const ownerSession = await login(owner);
+    const editor = "public-map-editor";
+    const editorSession = await login(editor);
+    const mapId = crypto.randomUUID();
+    const path = `mindmaps/${mapId}`;
+    const manage = `${path}/public-link`;
+    const view = `public-maps/${mapId}`;
+    const doc = getTemplate("blank-organic").create();
+    doc.deletedIds.push("discarded-topic");
+    doc.assets.orphan = { resourceId: "orphan", mimeType: "image/png", width: 1, height: 1, sha256: "unused", dataBase64: "cHJpdmF0ZQ==" };
+    const headers = { [OWNER_HEADER]: owner };
+    expect((await request(path, "PUT", ownerSession, doc, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    await env.DB.prepare("INSERT INTO mindmap_members (mindmap_id, subject, role) VALUES (?, ?, 'editor')").bind(mapId, editor).run();
+    expect(await (await request(manage, "GET", ownerSession)).json()).toEqual({ token: null });
+    expect((await request(manage, "PUT", editorSession)).status).toBe(404);
+    expect((await request(manage, "PUT")).status).toBe(401);
+    expect((await request(manage, "PUT", ownerSession, undefined, { Origin: "https://other.test" })).status).toBe(403);
+    const enabled = await request(manage, "PUT", ownerSession);
+    expect(enabled.status).toBe(200);
+    const { token } = await enabled.json() as { token: string };
+    expect(typeof token).toBe("string");
+    expect(await (await request(manage, "GET", ownerSession)).json()).toEqual({ token });
+    expect(await (await request(manage, "PUT", ownerSession)).json()).toEqual({ token });
+    const bearer = { Authorization: `Bearer ${token}` };
+    const first = await request(view, "GET", "", undefined, bearer);
+    expect(first.headers.get("ETag")).toBe('"1"');
+    expect(first.headers.get("Cache-Control")).toContain("no-store");
+    expect(await first.json()).toEqual({ revision: 1, document: { ...doc, deletedIds: [], assets: {} } });
+    const unchanged = { ...bearer, "If-None-Match": '"1"' };
+    expect((await request(view, "GET", "", undefined, unchanged)).status).toBe(304);
+    expect((await request(view)).status).toBe(404);
+    expect((await request(`public-maps/${crypto.randomUUID()}`, "GET", "", undefined, bearer)).status).toBe(404);
+    expect((await request(view, "PUT", "", doc, bearer)).status).toBe(405);
+    expect((await request(`${path}/revisions`, "GET", "", undefined, bearer)).status).toBe(401);
+    expect((await request(manage, "DELETE", editorSession)).status).toBe(404);
+    expect((await request(manage, "DELETE", ownerSession)).status).toBe(200);
+    expect((await request(view, "GET", "", undefined, unchanged)).status).toBe(404);
+    const renewed = await (await request(manage, "PUT", ownerSession)).json() as { token: string };
+    expect(renewed.token).not.toBe(token);
+    expect((await request(view, "GET", "", undefined, bearer)).status).toBe(404);
+    expect((await request(view, "GET", "", undefined, { Authorization: `Bearer ${renewed.token}` })).status).toBe(200);
+  });
+
+  it("keeps node discussions separate from the map, scopes them to members and enforces the owner's reviewer setting", async () => {
+    const mapId = crypto.randomUUID();
+    const otherId = crypto.randomUUID();
+    const map = `mindmaps/${mapId}`;
+    const path = `${map}/comments`;
+    const owner = await login("review-author");
+    const guest = await login("review-viewer");
+    const editor = await login("review-editor");
+    const outsider = await login("review-outsider");
+    const as = (name: string) => ({ [OWNER_HEADER]: `review-${name}` });
+    const doc = getTemplate("reading-notes").create();
+    const first = { sheetId: "sheet-book", topicId: "book-1", body: "  Verify the quote.  " };
+    for (const id of [mapId, otherId]) expect((await request(`mindmaps/${id}`, "PUT", owner, doc, { ...as("author"), "If-Match": '"0"' })).status).toBe(200);
+    await env.DB.prepare("INSERT INTO mindmap_members(mindmap_id,subject,role) VALUES (?, 'review-viewer','viewer'), (?, 'review-editor','editor')").bind(mapId, mapId).run();
+    expect((await request(path, "GET")).status).toBe(401);
+    expect((await request(path, "GET", outsider, undefined, as("outsider"))).status).toBe(404);
+    expect((await request(path, "GET", guest, undefined, as("author"))).status).toBe(403);
+    expect(await (await request(path, "GET", guest, undefined, as("viewer"))).json()).toMatchObject({ access: "viewer", viewersCanComment: false, threads: [] });
+    expect((await request(path, "POST", guest, first, as("viewer"))).status).toBe(403);
+    expect((await request(path, "PATCH", editor, { viewersCanComment: true }, as("editor"))).status).toBe(403);
+    expect((await request(path, "PATCH", owner, { viewersCanComment: true }, { ...as("author"), Origin: "https://elsewhere.test" })).status).toBe(403);
+    expect((await request(path, "PATCH", owner, { viewersCanComment: true }, as("author"))).status).toBe(200);
+    expect((await request(path, "POST", guest, { ...first, topicId: "not-on-this-sheet" }, as("viewer"))).status).toBe(409);
+    expect((await request(path, "POST", guest, { ...first, body: " " }, as("viewer"))).status).toBe(400);
+    expect((await request(path, "POST", guest, { ...first, body: "a".repeat(2001) }, as("viewer"))).status).toBe(400);
+    const created = await request(path, "POST", guest, { ...first, author: "impersonated" }, as("viewer"));
+    expect(created.status).toBe(201);
+    const { id } = await created.json() as { id: number };
+    const thread = `${path}/${id}`;
+    expect(await (await request(thread, "GET", editor, undefined, as("editor"))).json()).toMatchObject({ thread: { sheetId: first.sheetId, topicId: first.topicId, body: "Verify the quote.", author: "review-viewer@example.test" }, replies: [] });
+    expect((await request(`mindmaps/${otherId}/comments/${id}`, "GET", owner, undefined, as("author"))).status).toBe(404);
+    expect((await request(`mindmaps/${otherId}/comments/${id}`, "POST", owner, { body: "wrong map" }, as("author"))).status).toBe(404);
+    expect((await request(`mindmaps/${otherId}/comments/${id}`, "PATCH", owner, { resolved: true }, as("author"))).status).toBe(404);
+    expect((await request(thread, "POST", editor, { body: "Checked page 3." }, as("editor"))).status).toBe(201);
+    expect((await request(thread, "PATCH", guest, { resolved: true }, as("viewer"))).status).toBe(403);
+    expect((await request(thread, "PATCH", editor, { resolved: true }, as("editor"))).status).toBe(200);
+    expect(await (await request(thread, "GET", guest, undefined, as("viewer"))).json()).toMatchObject({ thread: { resolvedBy: "review-editor@example.test", resolvedAt: expect.any(String) } });
+    expect((await request(thread, "POST", guest, { body: "late" }, as("viewer"))).status).toBe(409);
+    expect((await request(thread, "PATCH", owner, { resolved: false }, as("author"))).status).toBe(200);
+    expect((await request(path, "PATCH", owner, { viewersCanComment: false }, as("author"))).status).toBe(200);
+    expect((await request(thread, "POST", guest, { body: "no longer allowed" }, as("viewer"))).status).toBe(403);
+    expect(await (await request(thread, "GET", guest, undefined, as("viewer"))).json()).toMatchObject({ thread: { resolvedBy: null }, replies: [{ body: "Checked page 3." }] });
+    expect(await (await request(map, "GET", owner, undefined, as("author"))).json()).toEqual({ revision: 1, document: doc });
+    expect((await request(map, "DELETE", owner, undefined, as("author"))).status).toBe(200);
+    expect(await env.DB.prepare("SELECT count(*) AS total FROM mindmap_review_replies WHERE thread_id = ?").bind(id).first("total")).toBe(0);
+  });
+
+  it("pages earlier discussions and replies without losing or duplicating entries", async () => {
+    const mapId = crypto.randomUUID();
+    const session = await login("reviews-pages");
+    const headers = { [OWNER_HEADER]: "reviews-pages" };
+    const path = `mindmaps/${mapId}/comments`;
+    const doc = getTemplate("reading-notes").create();
+    expect((await request(`mindmaps/${mapId}`, "PUT", session, doc, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    const series = "WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < 43)";
+    await env.DB.prepare(`${series} INSERT INTO mindmap_review_threads(mindmap_id, sheet_id, topic_id, topic_title, body, author)
+      SELECT ?, 'sheet-book', 'book-1', 'Fact', 'thread ' || n, 'test-author' FROM seq`).bind(mapId).run();
+    const threadId = await env.DB.prepare("SELECT max(id) FROM mindmap_review_threads WHERE mindmap_id = ?").bind(mapId).first<number>("max(id)");
+    await env.DB.prepare(`${series} INSERT INTO mindmap_review_replies(thread_id, body, author) SELECT ?, 'reply ' || n, 'test-author' FROM seq`).bind(threadId).run();
+    for (const [url, key] of [[path, "threads"], [`${path}/${threadId}`, "replies"]] as const) {
+      type Page = { nextCursor: number | null } & Record<typeof key, { id: number }[]>;
+      const recent = await (await request(url, "GET", session, undefined, headers)).json() as Page;
+      const earlier = await (await request(`${url}?cursor=${recent.nextCursor}`, "GET", session, undefined, headers)).json() as Page;
+      expect(recent[key]).toHaveLength(40);
+      expect(earlier[key]).toHaveLength(3);
+      expect(earlier.nextCursor).toBeNull();
+      const ids = [...recent[key], ...earlier[key]].map((item) => item.id);
+      expect(ids).toEqual([...new Set(ids)].sort((left, right) => right - left));
+    }
+    expect((await request(`${path}?cursor=-1`, "GET", session, undefined, headers)).status).toBe(400);
+  });
   it("migrates the former one-map account record without changing its revision", async () => {
     const legacy = await login("legacy");
     const owner = { [OWNER_HEADER]: "legacy" };
     const maps = await (await request("mindmaps", "GET", legacy, undefined, owner)).json() as { id: string }[];
     expect(maps).toHaveLength(1);
     expect(maps[0]).toMatchObject({ workspaceId: null, access: "owner" });
-    expect(await (await request(`mindmaps/${maps[0].id}`, "GET", legacy, undefined, owner)).json()).toMatchObject({ revision: 3 });
+    const path = `mindmaps/${maps[0].id}`;
+    const current = await (await request(path, "GET", legacy, undefined, owner)).json() as { revision: number; document: unknown };
+    expect(current).toMatchObject({ revision: 3, document: { format: "mindmap-document" } });
+    expect(await (await request(`${path}/revisions/3`, "GET", legacy, undefined, owner)).json()).toMatchObject(current);
   });
   it("keeps multiple maps per account and preserves the winning revision on concurrent saves", async () => {
     const alice = await login("alice");
@@ -589,6 +761,94 @@ describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
 
 
 describe("Version history API (D1 snapshots & pruning)", () => {
+  it("accepts the exact UTF-8 size limit and preserves the saved map when the next edit exceeds it", async () => {
+    const owner = "map-limit-owner";
+    const session = await login(owner);
+    const path = `mindmaps/${crypto.randomUUID()}`;
+    const headers = { [OWNER_HEADER]: owner };
+    const doc = getTemplate("blank-organic").create();
+    doc.sheets[0].title = "资料".repeat(400);
+    const note = doc.sheets[0].rootTopic.note = { format: "markdown", text: "" };
+    note.text = "x".repeat(DRAFT_LIMIT - Buffer.byteLength(JSON.stringify(doc)));
+    expect((await request(path, "PUT", session, doc, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    note.text += "图";
+    expect((await request(path, "PUT", session, doc, { ...headers, "If-Match": '"1"' })).status).toBe(413);
+    note.text = note.text.slice(0, -1);
+    const snapshot = await (await request(`${path}/revisions/1`, "GET", session, undefined, headers)).json();
+    expect(snapshot).toMatchObject({ revision: 1, title: doc.sheets[0].title, document: doc });
+    expect(await (await request(path, "GET", session, undefined, headers)).json()).toEqual({ revision: 1, document: doc });
+  });
+
+  it("round-trips an image map larger than one D1 row without mixing concurrent revisions", async () => {
+    const owner = "large-map-owner";
+    const session = await login(owner);
+    const mapId = crypto.randomUUID();
+    const path = `mindmaps/${mapId}`;
+    const headers = { [OWNER_HEADER]: owner };
+    const original = getTemplate("blank-organic").create();
+    const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><desc>${"资料🧵".repeat(165000)}</desc><circle r="4"/></svg>`);
+    const sha256 = Buffer.from(await crypto.subtle.digest("SHA-256", svg)).toString("hex");
+    original.assets.chart = { resourceId: "chart", width: 10, height: 10, mimeType: "image/svg+xml", sha256, dataBase64: svg.toString("base64") };
+    original.sheets[0].rootTopic.image = { resourceId: "chart", width: 10, height: 10, pos: "top" };
+    expect(Buffer.byteLength(JSON.stringify(original))).toBeGreaterThan(2_000_000);
+    const write = (revision: number, doc: typeof original) => request(path, "PUT", session, doc, { ...headers, "If-Match": `"${revision}"` });
+    expect((await write(0, original)).status).toBe(200);
+    const contenders = ["Review A", "Review B"].map((title) => ({ ...original, sheets: [{ ...original.sheets[0], title }] }));
+    const responses = await Promise.all(contenders.map((doc) => write(1, doc)));
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const winner = contenders[responses.findIndex((response) => response.ok)];
+    for (const [endpoint, expected, revision] of [[path, winner, 2], [`${path}/revisions/2`, winner, 2], [`${path}/revisions/1`, original, 1]] as const) {
+      const read = await request(endpoint, "GET", session, undefined, headers);
+      expect(read.status).toBe(200);
+      const saved = await read.json() as { revision: number; document: typeof original };
+      expect(saved.revision).toBe(revision);
+      expect(saved.document).toEqual(expected);
+    }
+    const viewer = "large-map-viewer";
+    const viewerSession = await login(viewer);
+    await env.DB.prepare("INSERT INTO mindmap_members (mindmap_id, subject, role) VALUES (?, ?, 'viewer')").bind(mapId, viewer).run();
+    const visible = await request(`${path}/revisions/1`, "GET", viewerSession, undefined, { [OWNER_HEADER]: viewer });
+    expect((await visible.json() as { document: typeof original }).document).toEqual(original);
+    expect((await request(path, "PUT", viewerSession, original, { [OWNER_HEADER]: viewer, "If-Match": '"2"' })).status).toBe(403);
+
+    const manifests = await env.DB.prepare("SELECT document FROM mindmap_revisions WHERE mindmap_id = ? ORDER BY revision").bind(mapId).all<{ document: string }>();
+    const [first, second] = manifests.results.map((row) => JSON.parse(row.document) as string[]);
+    expect(first.some((digest) => second.includes(digest))).toBe(true);
+    const blockCount = () => env.DB.prepare("SELECT count(*) AS total FROM mindmap_document_blocks WHERE mindmap_id = ?").bind(mapId).first<number>("total");
+    expect(await blockCount()).toBe(new Set([...first, ...second]).size);
+    const small = getTemplate("blank-organic").create();
+    for (let revision = 2; revision < 22; revision++) expect((await write(revision, small)).status).toBe(200);
+    expect(await blockCount()).toBe(0);
+    expect((await request(`${path}/revisions/2`, "GET", session, undefined, headers)).status).toBe(404);
+    expect((await write(22, original)).status).toBe(200);
+    expect(await blockCount()).toBeGreaterThan(0);
+    await env.DB.prepare("DELETE FROM mindmap_document_blocks WHERE mindmap_id = ? AND digest = ?").bind(mapId, first[0]).run();
+    expect((await request(path, "GET", session, undefined, headers)).status).toBe(503);
+    expect((await request(`${path}/revisions/23`, "GET", session, undefined, headers)).status).toBe(503);
+    expect((await request(path, "DELETE", session, undefined, headers)).status).toBe(200);
+    expect(await blockCount()).toBe(0);
+  });
+
+  it("keeps the previous draft and all of its history when a block insert fails", async () => {
+    const owner = "atomic-map-owner";
+    const session = await login(owner);
+    const mapId = crypto.randomUUID();
+    const path = `mindmaps/${mapId}`;
+    const headers = { [OWNER_HEADER]: owner };
+    const original = getTemplate("blank-organic").create();
+    expect((await request(path, "PUT", session, original, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    const large = structuredClone(original);
+    large.sheets[0].rootTopic.note = { format: "markdown", text: "🧵资料".repeat(125000) };
+    await env.DB.prepare(`CREATE TRIGGER fail_test_blocks BEFORE INSERT ON mindmap_document_blocks BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END`).run();
+    try {
+      expect((await request(path, "PUT", session, large, { ...headers, "If-Match": '"1"' })).status).toBe(503);
+    } finally { await env.DB.prepare("DROP TRIGGER fail_test_blocks").run(); }
+    expect(await (await request(path, "GET", session, undefined, headers)).json()).toEqual({ revision: 1, document: original });
+    expect((await request(`${path}/revisions/2`, "GET", session, undefined, headers)).status).toBe(404);
+    expect((await request(path, "PUT", session, large, { ...headers, "If-Match": '"1"' })).status).toBe(200);
+    expect(await (await request(path, "GET", session, undefined, headers)).json()).toEqual({ revision: 2, document: large });
+  });
+
   it("records revision snapshots on PUT, caps at 20 revisions, enforces permissions, and cleans up on DELETE", async () => {
     const ownerCookie = await login("hist-owner");
     const strangerCookie = await login("hist-stranger");
@@ -656,7 +916,138 @@ describe("Version history API (D1 snapshots & pruning)", () => {
 });
 
 
+describe("revision-bound live checkpoints (local D1)", () => {
+  const headers = (subject: string, revision = 0, mode = "1") => ({ [OWNER_HEADER]: subject, [LIVE_HEADER]: mode, "If-Match": `"${revision}"` });
+  const checkpoint = (adapter: LoroSyncAdapter, room = crypto.randomUUID(), cursor = 0): LiveCheckpoint =>
+    ({ room, cursor, snapshot: Buffer.from(adapter.exportSnapshot()).toString("base64") });
+
+  it("only lets one editor seed legacy JSON without changing its revision or disclosing the snapshot to other accounts", async () => {
+    const owner = "seed-owner", editor = "seed-editor", viewer = "seed-viewer", outsider = "seed-outsider";
+    const [alice, bob, cara, dan] = await Promise.all([owner, editor, viewer, outsider].map(login));
+    const id = crypto.randomUUID();
+    const path = `mindmaps/${id}`;
+    const doc = getTemplate("blank-organic").create();
+    expect((await request(path, "PUT", alice, doc, { [OWNER_HEADER]: owner, "If-Match": '"0"' })).status).toBe(200);
+    for (const [member, role] of [[editor, "editor"], [viewer, "viewer"]]) {
+      await env.DB.prepare("INSERT INTO mindmap_members (mindmap_id, subject, role) VALUES (?, ?, ?)").bind(id, member, role).run();
+    }
+    const offer = (cookie: string, subject: string, seed: LiveCheckpoint) => request(path, "PUT", cookie, { checkpoint: seed }, headers(subject, 1, "seed"));
+    const seeds = [checkpoint(new LoroSyncAdapter(doc)), checkpoint(new LoroSyncAdapter(doc))];
+    expect((await offer(cara, viewer, seeds[0])).status).toBe(403);
+    expect((await offer(bob, editor, { ...seeds[0], cursor: 9 })).status).toBe(422);
+    const claims = await Promise.all([offer(alice, owner, seeds[0]), offer(bob, editor, seeds[1])]);
+    expect(claims.map((res) => res.status).sort()).toEqual([200, 409]);
+    const winner = seeds[claims.findIndex((res) => res.ok)];
+    expect(await (await request(path, "GET", cara, undefined, headers(viewer))).json()).toEqual({ revision: 1, document: doc, checkpoint: winner });
+    expect(await (await request(path, "GET", dan, undefined, headers(outsider))).json()).toEqual({ revision: 0, document: null });
+    expect(await (await request(path, "GET", alice, undefined, { [OWNER_HEADER]: owner })).json()).toEqual({ revision: 1, document: doc });
+    expect(await env.DB.prepare("SELECT count(*) FROM mindmap_revisions WHERE mindmap_id = ?").bind(id).first("count(*)")).toBe(1);
+  });
+
+  it("atomically stores a multipart snapshot, rejects stale saves and cursors, and retires the room on a legacy write", async () => {
+    const owner = "parts-owner", cookie = await login(owner);
+    const id = crypto.randomUUID(), path = `mindmaps/${id}`;
+    const doc = getTemplate("blank-organic").create(), adapter = new LoroSyncAdapter(doc);
+    const first = checkpoint(adapter);
+    const put = (rev: number, draft: LiveCheckpoint) => request(path, "PUT", cookie, { ...adapter.getDocument(), checkpoint: draft }, headers(owner, rev));
+    const read = async () => (await request(path, "GET", cookie, undefined, headers(owner))).json();
+    const roomHeaders = { [OWNER_HEADER]: owner, "X-Loomind-Room": first.room };
+    const delta = { peerId: "sender", updateB64: Buffer.from(adapter.exportUpdates()).toString("base64") };
+    expect((await put(0, first)).status).toBe(200);
+    const posted = await request(`${path}/collab`, "POST", cookie, delta, roomHeaders);
+    expect(posted.status).toBe(200);
+    const { seq } = await posted.json() as { seq: number };
+    for (let index = 0; index < 19; index++) {
+      adapter.applyCommand({ type: "topic/setTitle", sheetId: doc.activeSheetId, topicId: "b1", title: createRichText(randomBytes(96 * 1024).toString("base64")) });
+    }
+    adapter.applyCommand({ type: "topic/setTitle", sheetId: doc.activeSheetId, topicId: "b1", title: createRichText("Compact document, long history") });
+    const second = { ...checkpoint(adapter), room: first.room, cursor: seq };
+    expect(second.snapshot.length).toBeGreaterThan(2 * 1024 * 1024);
+    expect((await put(1, second)).status).toBe(200);
+    expect((await put(1, first)).status).toBe(409);
+    expect((await put(2, { ...second, cursor: seq + 1 })).status).toBe(409);
+    expect((await put(2, { ...first, room: crypto.randomUUID() })).status).toBe(409);
+    const current = await read() as { revision: number; document: unknown; checkpoint: LiveCheckpoint };
+    expect(current.revision).toBe(2);
+    expect(current.checkpoint.snapshot === second.snapshot).toBe(true);
+    expect(LoroSyncAdapter.fromSnapshot(Buffer.from(current.checkpoint.snapshot, "base64")).getDocument()).toEqual(current.document);
+    expect(await env.DB.prepare("SELECT count(*) FROM mindmap_revisions WHERE mindmap_id = ?").bind(id).first("count(*)")).toBe(2);
+    expect((await request(path, "PUT", cookie, doc, { [OWNER_HEADER]: owner, "If-Match": '"2"' })).status).toBe(200);
+    expect(await read()).toEqual({ revision: 3, document: doc, checkpoint: null });
+    expect((await request(`${path}/collab`, "POST", cookie, delta, roomHeaders)).status).toBe(409);
+    expect((await request(`${path}/collab`, "GET", cookie, undefined, roomHeaders)).status).toBe(409);
+    expect((await request(path, "PUT", cookie, { checkpoint: checkpoint(new LoroSyncAdapter(doc)) }, headers(owner, 3, "seed"))).status).toBe(200);
+    await env.DB.prepare("UPDATE mindmaps SET revision = revision + 1 WHERE id = ?").bind(id).run();
+    expect(await read()).toEqual({ revision: 4, document: doc, checkpoint: null });
+    expect((await request(path, "PUT", cookie, { checkpoint: checkpoint(new LoroSyncAdapter(doc)) }, headers(owner, 4, "seed"))).status).toBe(200);
+    expect((await request(path, "DELETE", cookie, undefined, { [OWNER_HEADER]: owner })).status).toBe(200);
+    expect(await env.DB.prepare("SELECT count(*) FROM mindmap_live_parts WHERE mindmap_id = ?").bind(id).first("count(*)")).toBe(0);
+  });
+});
+
 describe("Loro CRDT realtime collab API (updates & peer presence)", () => {
+  it("prunes the oldest frames by bytes or by count without touching another map", async () => {
+    const owner = await login("retention-owner");
+    const headers = { [OWNER_HEADER]: "retention-owner" };
+    const initial = getTemplate("blank-organic").create();
+    const { LoroSyncAdapter } = await import("@mindmap/core/loro");
+    const nextFrame = Buffer.from(new LoroSyncAdapter(initial).exportUpdates()).toString("base64");
+    const previousMaps: string[] = [];
+    for (const [count, size] of [[25, 1536 * 1024], [200, 4]]) {
+      const mapId = crypto.randomUUID();
+      expect((await request(`mindmaps/${mapId}`, "PUT", owner, initial, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+      const db = platform.env.DB;
+      await db.prepare(`WITH RECURSIVE items(position) AS (SELECT 1 UNION ALL SELECT position + 1 FROM items WHERE position < ?)
+        INSERT INTO mindmap_crdt_updates (mindmap_id, peer_id, actor, update_b64) SELECT ?, 'fixture', 'retention-owner', ? FROM items`)
+        .bind(count, mapId, "A".repeat(size)).run();
+      const oldest = await db.prepare("SELECT MIN(seq) AS first FROM mindmap_crdt_updates WHERE mindmap_id = ?").bind(mapId).first<number>("first");
+      const push = await request(`mindmaps/${mapId}/collab`, "POST", owner, { peerId: "author", updateB64: nextFrame }, headers);
+      expect(push.status).toBe(200);
+      const { seq } = await push.json() as { seq: number };
+      const retained = await db.prepare("SELECT COUNT(*) AS count, MIN(seq) AS first, MAX(seq) AS latest FROM mindmap_crdt_updates WHERE mindmap_id = ?").bind(mapId).first();
+      expect(retained).toEqual({ count, first: oldest! + 1, latest: seq });
+      previousMaps.push(mapId);
+    }
+    expect(await platform.env.DB.prepare("SELECT COUNT(*) AS count FROM mindmap_crdt_updates WHERE mindmap_id = ?").bind(previousMaps[0]).first<number>("count")).toBe(25);
+  });
+
+  it("pages large valid deltas without skipping their causal predecessor and rejects frames above the row budget", async () => {
+    const { LoroSyncAdapter } = await import("@mindmap/core/loro");
+    const mapId = crypto.randomUUID();
+    const owner = await login("image-owner");
+    const headers = { [OWNER_HEADER]: "image-owner" };
+    const initial = getTemplate("blank-organic").create();
+    expect((await request(`mindmaps/${mapId}`, "PUT", owner, initial, { ...headers, "If-Match": '"0"' })).status).toBe(200);
+    const author = new LoroSyncAdapter(initial, 10n);
+    const reviewer = LoroSyncAdapter.fromSnapshot(author.exportSnapshot(), 20n);
+    const endpoint = `mindmaps/${mapId}/collab`;
+    const sequences: number[] = [];
+    for (const topic of initial.sheets[0].rootTopic.children.slice(0, 2)) {
+      const version = author.getVersion();
+      author.applyCommand({ type: "topic/setNote", sheetId: initial.activeSheetId, topicId: topic.id, text: randomBytes(640 * 1024).toString("base64") });
+      const updateB64 = Buffer.from(author.exportUpdates(version)).toString("base64");
+      expect(updateB64.length).toBeGreaterThan(768 * 1024);
+      const pushed = await request(endpoint, "POST", owner, { peerId: "author", updateB64 }, headers);
+      expect(pushed.status).toBe(200);
+      sequences.push((await pushed.json() as { seq: number }).seq);
+    }
+    const overBudget = await request(endpoint, "POST", owner, { peerId: "author", updateB64: "A".repeat(1536 * 1024 + 4) }, headers);
+    expect(overBudget.status).toBe(413);
+    let since = 0;
+    for (const seq of sequences) {
+      const pulled = await request(`${endpoint}?since=${since}`, "GET", owner, undefined, headers);
+      expect(pulled.status).toBe(200);
+      const page = await pulled.json() as { latestSeq: number; updates: Array<{ seq: number; updateB64: string }> };
+      expect(page.updates.map((row) => row.seq)).toEqual([seq]);
+      expect(page.latestSeq).toBe(seq);
+      reviewer.importUpdates(Buffer.from(page.updates[0].updateB64, "base64"));
+      since = page.latestSeq;
+    }
+    expect(reviewer.getDocument()).toEqual(author.getDocument());
+    const empty = await request(`${endpoint}?since=${since}`, "GET", owner, undefined, headers);
+    expect(await empty.json()).toMatchObject({ latestSeq: since, updates: [] });
+  });
+
   it("exchanges binary Loro CRDT updates and live presence between collaborators while blocking viewers from writing", async () => {
     const { LoroSyncAdapter } = await import("@mindmap/core/loro");
     const ownerCookie = await login("collab-owner");

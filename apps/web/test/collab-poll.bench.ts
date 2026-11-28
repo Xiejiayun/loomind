@@ -9,6 +9,7 @@ import { handleCollab } from "../worker/collab.js";
 const configPath = fileURLToPath(new URL("./fixtures/wrangler.jsonc", import.meta.url));
 const schema = await Promise.all([
   "0001_account_drafts", "0002_mindmaps", "0004_collaboration", "0007_mindmap_collab",
+  "0013_live_checkpoints",
 ].map((name) => readFile(new URL(`../migrations/${name}.sql`, import.meta.url), "utf8")));
 
 function documentWithTitle(title: string) {

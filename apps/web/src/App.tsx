@@ -12,6 +12,7 @@ import { PERSONAL, spacePath } from "./workspace-groups.js";
 
 const themeKey = "loomind-ui-theme";
 const WorkspaceApp = lazy(() => import("./WorkspaceApp.js").then(({ WorkspaceApp }) => ({ default: WorkspaceApp })));
+const PublicViewer = lazy(() => import("./ReadOnlyMap.js").then(({ ReadOnlyMap }) => ({ default: ReadOnlyMap })));
 const TryPlaygroundPage = lazy(() => import("./TryPlaygroundPage.js").then(({ TryPlaygroundPage }) => ({ default: TryPlaygroundPage })));
 
 function useTheme() {
@@ -34,25 +35,36 @@ function safeNext(search: string) {
 export function App() {
   const route = useRoute();
   const { theme, toggle } = useTheme();
-  const { session, changeSession, sessionError, refresh } = useSession();
   const { t } = useI18n();
 
   useEffect(() => {
-    if (!session) return;
-    const invited = route.pathname === "/app" ? new URLSearchParams(route.search).get("workspace") : null;
-    if (session.user && (route.pathname === "/" || route.pathname === "/login")) navigate("/app", true);
-    else if (session.user && route.pathname === "/app/library") navigate(spacePath(PERSONAL), true);
-    else if (session.user && invited && MAP_ID.test(invited)) navigate(spacePath(invited), true);
-    else if (!session.user && route.pathname.startsWith("/app")) navigate(`/login?next=${encodeURIComponent(route.pathname + route.search)}`, true);
-  }, [session, route.pathname, route.search]);
-
-  useEffect(() => {
-    document.title = route.pathname.startsWith("/app/mindmaps/") ? t.meta.mapTitle
+    document.title = route.pathname.startsWith("/view/") ? t.shareDialog.publicTitle
+      : route.pathname.startsWith("/app/mindmaps/") ? t.meta.mapTitle
       : route.pathname.startsWith("/app") ? t.meta.workspaceTitle
       : route.pathname === "/try" ? t.meta.tryTitle
       : route.pathname === "/login" ? t.meta.loginTitle
       : t.meta.homeTitle;
   }, [route.pathname, t]);
+
+  if (route.pathname.startsWith("/view/")) return <div className="lm-theme lm-public-map" data-theme={theme}>
+    <Suspense fallback={<div className="lm-loading">{t.editorWorkspace.loadingShared}</div>}>
+      <PublicViewer key={route.pathname + route.hash} id={route.pathname.slice(6)} access={{ token: route.hash.slice(1) }} theme={theme}/>
+    </Suspense>
+  </div>;
+  return <SessionRoutes route={route} theme={theme} toggle={toggle}/>;
+}
+
+function SessionRoutes({ route, theme, toggle }: { route: ReturnType<typeof useRoute>; theme: UiTheme; toggle: () => void }) {
+  const { session, changeSession, sessionError, refresh } = useSession();
+  const { t } = useI18n();
+  useEffect(() => {
+    if (!session) return;
+    const legacySpace = route.pathname === "/app" || route.pathname === "/app/library" ? new URLSearchParams(route.search).get("workspace") : null;
+    if (session.user && (route.pathname === "/" || route.pathname === "/login")) navigate("/app", true);
+    else if (session.user && legacySpace && MAP_ID.test(legacySpace)) navigate(spacePath(legacySpace), true);
+    else if (session.user && route.pathname === "/app/library") navigate(spacePath(PERSONAL), true);
+    else if (!session.user && route.pathname.startsWith("/app")) navigate(`/login?next=${encodeURIComponent(route.pathname + route.search)}`, true);
+  }, [session, route.pathname, route.search]);
 
   if (!session) return <div className="lm-theme lm-loading">{t.common.loadingApp}</div>;
   const notice = sessionError && <div className="lm-session-notice" role="alert">{sessionError} <button type="button" onClick={() => void refresh()}>{t.common.retry}</button></div>;

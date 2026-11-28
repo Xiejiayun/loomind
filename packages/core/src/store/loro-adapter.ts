@@ -65,7 +65,7 @@ export class LoroSyncAdapter implements SyncAdapter {
 
   static fromSnapshot(snapshot: Uint8Array, peerId?: number | bigint): LoroSyncAdapter {
     const adapter = new LoroSyncAdapter(undefined, peerId);
-    adapter.importUpdates(snapshot);
+    if (!adapter.importUpdates(snapshot)) throw new Error("Incomplete Loro snapshot");
     adapter.undoManager.clear();
     return adapter;
   }
@@ -90,17 +90,45 @@ export class LoroSyncAdapter implements SyncAdapter {
     return this.loro.export(from ? { mode: "update", from } : { mode: "update" });
   }
 
-  importUpdates(bytes: Uint8Array): void {
-    this.loro.import(bytes);
-    this.rebuildIndexFromTree();
-    this.cachedDoc = this.readDocumentFromLoro();
-    this.notify(new Set());
+  importUpdates(bytes: Uint8Array): boolean {
+    const result = this.loro.import(bytes);
+    if (result.success.size) {
+      this.rebuildIndexFromTree();
+      this.cachedDoc = this.readDocumentFromLoro();
+      this.notify(new Set());
+    }
+    return !result.pending?.size;
   }
 
   replaceDocument(doc: MindmapDocument): void {
     this.writeDocumentToLoro(doc);
     this.loro.commit();
     this.undoManager.clear();
+    this.cachedDoc = this.readDocumentFromLoro();
+    this.notify(new Set());
+  }
+
+  reconcileDraft(doc: MindmapDocument): void {
+    const retained = new Set<string>();
+    const visit = (sheetId: string, topic: MindmapTopic, index: number, parent?: TreeID) => {
+      const previous = this.topicIdToTreeId.get(topic.id);
+      const node = (previous && this.tree.getNodeByID(previous)) || this.tree.createNode(parent, index);
+      if (node.parent()?.id !== parent || node.index() !== index) this.tree.move(node.id, parent, index);
+      const { children, ...fields } = topic;
+      const payload = JSON.stringify(fields);
+      if (node.data.get("topicId") !== topic.id) node.data.set("topicId", topic.id);
+      if (node.data.get("sheetId") !== sheetId) node.data.set("sheetId", sheetId);
+      if (node.data.get("payload") !== payload) node.data.set("payload", payload);
+      retained.add(topic.id);
+      children.forEach((child, position) => visit(sheetId, child, position, node.id));
+    };
+    doc.sheets.forEach((sheet, index) => visit(sheet.id, sheet.rootTopic, index));
+    for (const [id, treeId] of this.topicIdToTreeId) {
+      if (!retained.has(id) && this.tree.getNodeByID(treeId) && !this.tree.isNodeDeleted(treeId)) this.tree.delete(treeId);
+    }
+    this.writeMetaToLoro(doc);
+    this.loro.commit();
+    this.rebuildIndexFromTree();
     this.cachedDoc = this.readDocumentFromLoro();
     this.notify(new Set());
   }
@@ -183,10 +211,22 @@ export class LoroSyncAdapter implements SyncAdapter {
 
   private writeMetaToLoro(doc: MindmapDocument): void {
     const meta = this.loro.getMap("meta");
-    meta.set("activeSheetId", doc.activeSheetId);
-    meta.set("theme", JSON.stringify(doc.theme));
-    meta.set("assets", JSON.stringify(doc.assets));
-    meta.set("deletedIds", JSON.stringify(doc.deletedIds));
+    const setChanged = (key: string, value: string) => { if (meta.get(key) !== value) meta.set(key, value); };
+    setChanged("activeSheetId", doc.activeSheetId);
+    setChanged("theme", JSON.stringify(doc.theme));
+    if (typeof meta.get("assets") === "string") {
+      setChanged("assets", JSON.stringify(doc.assets));
+    } else {
+      const byId = this.loro.getMap("assetsById");
+      const existing = new Set(byId.keys());
+      for (const id of existing) if (!Object.hasOwn(doc.assets, id)) byId.delete(id);
+      for (const [id, asset] of Object.entries(doc.assets)) {
+        if (existing.has(id) && this.cachedDoc.assets[id] === asset) continue;
+        const encoded = JSON.stringify(asset);
+        if (byId.get(id) !== encoded) byId.set(id, encoded);
+      }
+    }
+    setChanged("deletedIds", JSON.stringify(doc.deletedIds));
     const sheetsMeta: SheetMeta[] = doc.sheets.map((s) => ({
       id: s.id,
       title: s.title,
@@ -200,7 +240,7 @@ export class LoroSyncAdapter implements SyncAdapter {
       summaries: s.summaries,
       relationships: s.relationships,
     }));
-    meta.set("sheetsMeta", JSON.stringify(sheetsMeta));
+    setChanged("sheetsMeta", JSON.stringify(sheetsMeta));
   }
 
   private setNodePayload(node: LoroTreeNode, sheetId: string, topic: MindmapTopic): void {
@@ -317,9 +357,9 @@ export class LoroSyncAdapter implements SyncAdapter {
     const theme: MindmapThemeConfig = meta.get("theme")
       ? JSON.parse(String(meta.get("theme")))
       : DEFAULT_THEME_CONFIG;
-    const assets: Record<string, InlineAsset> = meta.get("assets")
-      ? JSON.parse(String(meta.get("assets")))
-      : {};
+    const legacyAssets = meta.get("assets");
+    const assets: Record<string, InlineAsset> = typeof legacyAssets === "string" ? JSON.parse(legacyAssets)
+      : Object.fromEntries(this.loro.getMap("assetsById").entries().map(([id, encoded]) => [id, JSON.parse(String(encoded))]));
     const deletedIds: string[] = meta.get("deletedIds")
       ? JSON.parse(String(meta.get("deletedIds")))
       : [];

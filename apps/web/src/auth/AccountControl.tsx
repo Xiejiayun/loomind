@@ -94,7 +94,11 @@ export function AccountControl({
           {onExportBackup && <button type="button" className="lm-text-button" onClick={onExportBackup}>{t.sync.exportBackupBtn}</button>}
         </div>
       ) : (
-        <button type="button" className="lm-text-button" disabled={syncing} onClick={() => onSync()}>{t.account.syncNow}</button>
+        <div className="lm-account-recovery">
+          <button type="button" className="lm-text-button" disabled={syncing} onClick={() => onSync()}>{t.account.syncNow}</button>
+          {sync.status === "unsynced" && onSaveAsNew && <button type="button" className="lm-text-button" onClick={() => { dialog.current?.close(); onSaveAsNew(); }}>{t.sync.saveAsNewBtn}</button>}
+          {sync.status === "unsynced" && onExportBackup && <button type="button" className="lm-text-button" onClick={onExportBackup}>{t.sync.exportBackupBtn}</button>}
+        </div>
       )}
       {hasCorrupt && (
         <div className="lm-account-recovery">

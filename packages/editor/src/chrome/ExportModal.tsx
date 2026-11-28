@@ -5,6 +5,7 @@ import {
   exportToMarkdown,
   exportToOpml,
   exportToXMind,
+  importLoomindBackup,
   importFromMarkdown,
   importFromOpml,
   importFromXMind,
@@ -24,9 +25,10 @@ interface ExportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   layout: MindmapLayoutResult;
+  readOnly: boolean;
 }
 
-export const ExportModal: React.FC<ExportModalProps> = ({ open, onOpenChange, layout }) => {
+export const ExportModal: React.FC<ExportModalProps> = ({ open, onOpenChange, layout, readOnly }) => {
   const doc = useMindmapStore((s) => s.doc);
   const replaceDocument = useMindmapStore((s) => s.replaceDocument);
   const { t } = useEditorI18n();
@@ -37,24 +39,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({ open, onOpenChange, la
   const baseName = sheet.title.replace(/[\\/:*?"<>|]/g, "_") || "mindmap";
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    if (!file || readOnly) return;
+    setStatus(null);
     try {
       const name = file.name.toLowerCase();
-      if (name.endsWith(".xmind")) {
-        const buf = new Uint8Array(await file.arrayBuffer());
-        replaceDocument(importFromXMind(buf));
-      } else if (name.endsWith(".opml") || name.endsWith(".xml")) {
-        replaceDocument(importFromOpml(await file.text()));
-      } else {
-        replaceDocument(importFromMarkdown(await file.text()));
-      }
+      const imported = name.endsWith(".json") ? importLoomindBackup(await file.text())
+        : name.endsWith(".xmind") ? importFromXMind(new Uint8Array(await file.arrayBuffer()))
+        : name.endsWith(".opml") || name.endsWith(".xml") ? importFromOpml(await file.text())
+        : importFromMarkdown(await file.text());
+      if (!window.confirm(t.exportModal.replaceConfirm)) return;
+      replaceDocument(imported);
       setStatus(t.exportModal.importSuccess(file.name));
       onOpenChange(false);
     } catch (err) {
       setStatus(t.exportModal.importError(err instanceof Error ? err.message : String(err)));
     } finally {
-      e.target.value = "";
+      input.value = "";
     }
   };
 
@@ -62,7 +64,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ open, onOpenChange, la
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <Dialog.Title className="text-base font-bold text-slate-900">{t.exportModal.title}</Dialog.Title>
@@ -76,11 +78,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ open, onOpenChange, la
           </div>
 
           {/* Import drop button */}
-          <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-3">
+          {!readOnly && <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-3">
             <input
               ref={fileRef}
               type="file"
-              accept=".xmind,.md,.markdown,.opml,.xml"
+              accept=".json,.xmind,.md,.markdown,.opml,.xml"
               className="hidden"
               onChange={(e) => void handleImportFile(e)}
             />
@@ -91,11 +93,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({ open, onOpenChange, la
             >
               <FileUp className="h-4 w-4 text-blue-600" /> {t.exportModal.importBtn}
             </button>
-          </div>
+          </div>}
 
           {/* Export Grid with format badges */}
           <div className="mb-2 text-[11px] font-semibold text-slate-500">{t.exportModal.exportHeading}</div>
           <div className="grid grid-cols-2 gap-2.5 text-xs">
+            <ExportBtn
+              badge="JSON"
+              badgeClass="bg-indigo-50 text-indigo-600"
+              label={t.exportModal.backupLabel}
+              desc={t.exportModal.backupDesc}
+              onClick={() => downloadBlob(new Blob([JSON.stringify(doc)], { type: "application/json" }), `${baseName}.loomind.json`)}
+            />
             <ExportBtn
               badge="XMIND"
               badgeClass="bg-red-50 text-red-600"
@@ -169,7 +178,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ open, onOpenChange, la
             />
           </div>
 
-          {status && <div className="mt-3 text-center text-xs text-blue-600">{status}</div>}
+          {status && <div role="status" className="mt-3 text-center text-xs text-blue-600">{status}</div>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

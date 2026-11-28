@@ -1,6 +1,6 @@
-import type { MindmapDocument, PeerPresence } from "@mindmap/core";
+import type { PeerPresence } from "@mindmap/core";
 import type { LoroSyncAdapter } from "@mindmap/core/loro";
-import { OWNER_HEADER } from "./shared.js";
+import { OWNER_HEADER, ROOM_HEADER } from "./shared.js";
 
 const PEER_COLORS = [
   "#3B82F6FF",
@@ -38,12 +38,6 @@ export function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-export function randomLoroPeerId(): bigint {
-  const buf = new Uint32Array(2);
-  crypto.getRandomValues(buf);
-  return (BigInt(buf[0]) << 32n) | BigInt(buf[1]);
-}
-
 interface BroadcastPacket {
   kind: "update" | "presence";
   peerId: string;
@@ -54,6 +48,7 @@ interface BroadcastPacket {
 }
 
 interface CollabGetResponse {
+  revision?: number;
   latestSeq: number;
   updates: Array<{ seq: number; peerId: string; actor: string; updateB64: string }>;
   peers: PeerPresence[];
@@ -63,7 +58,8 @@ export class CollabSession {
   readonly peerId = crypto.randomUUID();
   readonly color: string;
   private channel: BroadcastChannel | null = null;
-  private lastSeq = 0;
+  private polling = false;
+  private pushing = false;
   private applyingRemote = false;
   private closed = false;
   private pendingPushTimer: number | null = null;
@@ -81,21 +77,21 @@ export class CollabSession {
     private readonly adapter: LoroSyncAdapter,
     private readonly readOnly: boolean,
     private readonly onPeersChange: (peers: PeerPresence[]) => void,
-    private readonly onRemoteDocChange?: (doc: MindmapDocument) => void,
+    readonly room: string,
+    public cursor: number,
+    public revision: number,
+    private readonly refresh: () => void,
   ) {
     this.color = hashColor(`${displayName}:${this.peerId}`);
     this.lastSentVersion = adapter.getVersion();
   }
 
-  start(): void {
+  start(unsentSince?: ReturnType<LoroSyncAdapter["getVersion"]>): void {
     if (this.closed) return;
 
     // 1. Subscribe to local Loro adapter mutations and broadcast binary deltas
-    this.unsubAdapter = this.adapter.subscribe((doc) => {
-      if (this.applyingRemote) {
-        this.onRemoteDocChange?.(doc);
-        return;
-      }
+    const publish = () => {
+      if (this.applyingRemote) return;
       if (this.readOnly) return;
       const delta = this.adapter.exportUpdates(this.lastSentVersion);
       this.lastSentVersion = this.adapter.getVersion();
@@ -112,17 +108,18 @@ export class CollabSession {
       });
       this.pendingDeltaBytes.push(delta);
       this.schedulePush();
-    });
+    };
+    this.unsubAdapter = this.adapter.subscribe(publish);
 
     // 2. Instant same-browser multi-tab sync via BroadcastChannel
     if (typeof BroadcastChannel !== "undefined") {
       try {
-        this.channel = new BroadcastChannel(`loomind-collab:${this.mapId}`);
+        this.channel = new BroadcastChannel(`loomind-collab:${this.owner}:${this.mapId}:${this.room}`);
         this.channel.onmessage = (event: MessageEvent<BroadcastPacket>) => {
           const msg = event.data;
           if (!msg || msg.peerId === this.peerId) return;
           if (msg.kind === "update" && msg.updateB64) {
-            this.applyRemoteBytes(base64ToBytes(msg.updateB64));
+            if (!this.applyRemoteBytes(base64ToBytes(msg.updateB64))) this.refresh();
           }
           if (msg.selectedTopicIds) {
             this.peerMap.set(msg.peerId, {
@@ -143,6 +140,10 @@ export class CollabSession {
     // 3. Initial cloud pull + presence heartbeat
     void this.pollNow();
     void this.postUpdate(null);
+    if (unsentSince && unsentSince.compare(this.adapter.getVersion()) !== 0) {
+      this.lastSentVersion = unsentSince;
+      publish();
+    }
 
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.handleVisibility);
@@ -202,14 +203,15 @@ export class CollabSession {
     }
   }
 
-  private applyRemoteBytes(bytes: Uint8Array): void {
-    if (this.closed || bytes.byteLength === 0) return;
+  applyRemoteBytes(bytes: Uint8Array): boolean {
+    if (this.closed || !bytes.byteLength) return false;
     this.applyingRemote = true;
     try {
-      this.adapter.importUpdates(bytes);
+      const applied = this.adapter.importUpdates(bytes);
       this.lastSentVersion = this.adapter.getVersion();
+      return applied;
     } catch {
-      // Ignore malformed update frames
+      return false;
     } finally {
       this.applyingRemote = false;
     }
@@ -224,30 +226,30 @@ export class CollabSession {
   }
 
   private async flushPending(): Promise<void> {
-    if (this.closed) return;
-    const chunks = this.pendingDeltaBytes.splice(0);
-    if (chunks.length === 0) {
-      await this.postUpdate(null);
-      return;
+    if (this.closed || this.pushing) return;
+    this.pushing = true;
+    try {
+      do {
+        const frame = this.pendingDeltaBytes[0];
+        if (!await this.postUpdate(frame ? bytesToBase64(frame) : null)) break;
+        if (frame && this.pendingDeltaBytes[0] === frame) this.pendingDeltaBytes.shift();
+      } while (!this.closed && this.pendingDeltaBytes.length);
+    } finally {
+      this.pushing = false;
+      if (this.pendingDeltaBytes.length) this.schedulePush(2_000);
     }
-    // Re-export consolidated delta if multiple chunks queued, or send single chunk directly
-    let payload: Uint8Array;
-    if (chunks.length === 1) {
-      payload = chunks[0];
-    } else {
-      const total = chunks.reduce((s, c) => s + c.byteLength, 0);
-      payload = new Uint8Array(total);
-      let offset = 0;
-      for (const c of chunks) {
-        payload.set(c, offset);
-        offset += c.byteLength;
-      }
-    }
-    await this.postUpdate(bytesToBase64(payload));
   }
 
-  private async postUpdate(updateB64: string | null): Promise<void> {
-    if (this.closed) return;
+  queueWatermark() { return this.pendingDeltaBytes.at(-1); }
+
+  saved(revision: number, watermark: Uint8Array | undefined) {
+    this.revision = Math.max(revision, this.revision);
+    const index = watermark ? this.pendingDeltaBytes.indexOf(watermark) : -1;
+    if (index >= 0) this.pendingDeltaBytes.splice(0, index + 1);
+  }
+
+  private async postUpdate(updateB64: string | null): Promise<boolean> {
+    if (this.closed) return false;
     try {
       const res = await fetch(`/api/mindmaps/${this.mapId}/collab`, {
         method: "POST",
@@ -255,6 +257,7 @@ export class CollabSession {
         headers: {
           "Content-Type": "application/json",
           [OWNER_HEADER]: this.owner,
+          [ROOM_HEADER]: this.room,
         },
         body: JSON.stringify({
           peerId: this.peerId,
@@ -265,21 +268,22 @@ export class CollabSession {
         }),
         signal: AbortSignal.timeout(8_000),
       });
-      if (!res.ok) return;
-      const data = (await res.json()) as { seq?: number; peers?: PeerPresence[] };
-      if (typeof data.seq === "number" && data.seq > this.lastSeq) {
-        this.lastSeq = data.seq;
+      if (!res.ok) {
+        if (!this.closed && (res.status === 413 || res.status === 409 || res.status === 400)) this.refresh();
+        return false;
       }
+      const data = (await res.json()) as { seq?: number; peers?: PeerPresence[] };
       if (Array.isArray(data.peers)) {
         this.mergeServerPeers(data.peers);
       }
+      return !updateB64 || (typeof data.seq === "number" && data.seq > 0);
     } catch {
-      // Transient offline errors will retry on next poll/edit
+      return false;
     }
   }
 
   private async pollNow(): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || this.polling) return;
     if (this.pollTimer !== null) {
       window.clearTimeout(this.pollTimer);
       this.pollTimer = null;
@@ -290,33 +294,33 @@ export class CollabSession {
       return;
     }
 
+    this.polling = true;
     try {
-      const res = await fetch(`/api/mindmaps/${this.mapId}/collab?since=${this.lastSeq}`, {
+      const res = await fetch(`/api/mindmaps/${this.mapId}/collab?since=${this.cursor}`, {
         credentials: "same-origin",
         cache: "no-store",
-        headers: { [OWNER_HEADER]: this.owner },
+        headers: { [OWNER_HEADER]: this.owner, [ROOM_HEADER]: this.room },
         signal: AbortSignal.timeout(8_000),
       });
       if (res.ok) {
         const data = (await res.json()) as CollabGetResponse;
+        if (this.closed) return;
+        let incomplete = false;
         if (Array.isArray(data.updates)) {
           for (const item of data.updates) {
-            if (item.seq > this.lastSeq) this.lastSeq = item.seq;
-            if (item.peerId !== this.peerId && item.updateB64) {
-              this.applyRemoteBytes(base64ToBytes(item.updateB64));
-            }
+            if (item.seq <= this.cursor) continue;
+            if (item.peerId !== this.peerId && !this.applyRemoteBytes(base64ToBytes(item.updateB64))) incomplete = true;
+            if (!incomplete) this.cursor = item.seq;
           }
         }
-        if (typeof data.latestSeq === "number" && data.latestSeq > this.lastSeq) {
-          this.lastSeq = data.latestSeq;
-        }
+        if (incomplete || (data.revision ?? 0) > this.revision) this.refresh();
         if (Array.isArray(data.peers)) {
           this.mergeServerPeers(data.peers);
         }
-      }
+      } else if (res.status === 409 && !this.closed) this.refresh();
     } catch {
       // Ignore network blips
-    }
+    } finally { this.polling = false; }
 
     this.scheduleNextPoll();
   }

@@ -4,6 +4,7 @@ import {
   exportToOpml,
   exportToXMind,
   getTemplate,
+  importLoomindBackup,
   importFromMarkdown,
   importFromOpml,
   importFromXMind,
@@ -12,6 +13,14 @@ import {
 } from "../src/index.js";
 
 describe("@mindmap/core I/O codecs", () => {
+  it("restores native JSON and rejects unsupported versions and broken references", () => {
+    const original = getTemplate("reading-notes").create();
+    expect(importLoomindBackup(JSON.stringify(original))).toEqual(original);
+    expect(() => importLoomindBackup(JSON.stringify({ ...original, version: 2 }))).toThrow();
+    expect(() => importLoomindBackup(JSON.stringify({ ...original, activeSheetId: "missing" }))).toThrow(/activeSheetId/);
+    expect(() => importLoomindBackup("not a backup")).toThrow();
+  });
+
   it("round-trips .xmind zip archive losslessly for topics, notes, and summaries", () => {
     const original = getTemplate("reading-notes").create();
     const zipBytes = exportToXMind(original);

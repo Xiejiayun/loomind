@@ -16,11 +16,12 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { getIntlLocale, type MindmapDocument } from "@mindmap/core";
+import { getIntlLocale, getTemplateInfo, TEMPLATES, type MindmapDocument } from "@mindmap/core";
 import { authRequest } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
 import { createWorkspace, getWorkspaceOrder, listWorkspaces, moveMindmap, saveWorkspaceOrder, type WorkspaceSummary } from "./api.js";
 import { CreateView } from "./CreateView.js";
+import { SourceView } from "./SourceView.js";
 import { clearLocalAiChatCache, seedLocalAiChatCache } from "./drafts/ai-chat.js";
 import { deleteCloud, listCloud } from "./drafts/cloud.js";
 import { mapTitle, MAP_ID, type MindmapSummary } from "./drafts/shared.js";
@@ -47,8 +48,6 @@ interface Props {
   toggleTheme: () => void;
 }
 
-const TEMPLATE_IDS = ["blank-organic", "quarterly-okr", "annual-roadmap", "root-cause-fishbone"] as const;
-
 function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
 }
@@ -66,6 +65,8 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   const [listError, setListError] = useState("");
   const [actionError, setActionError] = useState("");
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => {
+    const requested = route.pathname.startsWith("/app/create") ? new URLSearchParams(route.search).get("workspace") : null;
+    if (requested && MAP_ID.test(requested)) return requested;
     try { return localStorage.getItem(`loomind:space:${owner}`) || null; }
     catch { return null; }
   });
@@ -220,7 +221,11 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   async function createMap(document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) {
     const id = crypto.randomUUID();
     await saveLocal(owner, { document, revision: 0, dirty: true, workspaceId, access: "owner" }, id);
-    setMaps((current) => [{ id, title: mapTitle(document), updatedAt: new Date().toISOString(), workspaceId, access: "owner" }, ...current]);
+    openCreatedMap(id, mapTitle(document), workspaceId, aiPrompt);
+  }
+
+  function openCreatedMap(id: string, title: string, workspaceId: string | null, aiPrompt?: string) {
+    setMaps((current) => [{ id, title, updatedAt: new Date().toISOString(), workspaceId, access: "owner" }, ...current]);
     setActiveWorkspaceId(workspaceId);
     setPendingAiPrompt(aiPrompt);
     navigate(`/app/mindmaps/${id}`);
@@ -339,6 +344,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
               onConsumeAiPrompt={consumeAiPrompt}
               onToggleSidebar={toggleSidebar}
               onRename={rename}
+              onRecoveredMap={(id, title) => openCreatedMap(id, title, null)}
               onShare={() => setShareTarget({ type: "mindmap", id: activeMap.id, name: activeMap.title })}
               listError={listError}
             />
@@ -367,7 +373,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
 
           {pageGroup ? (
             <WorkspaceMapsView key={pageGroup.id} group={pageGroup} workspaces={workspaces}
-              onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+              onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
+          ) : route.pathname === "/app/create/source" ? (
+            <SourceView workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onCreate={createMap}/>
           ) : isCreate ? (
             <CreateView
               mode={createMode}
@@ -543,7 +551,7 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
               <label className="lm-chip-select" title={t.home.templateTitle}>
                 <GitBranch size={12}/>
                 <select aria-label={t.home.templateAria} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                  {TEMPLATE_IDS.map((id) => <option key={id} value={id}>{t.workspace.templates[id] ?? id}</option>)}
+                  {TEMPLATES.map((template) => <option key={template.id} value={template.id}>{getTemplateInfo(template.id, locale, template).name}</option>)}
                 </select>
               </label>
               {writable.length > 0 && (
@@ -570,6 +578,7 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
         {error && <p className="lm-form-error" role="alert">{error}</p>}
 
         <div className="lm-suggestion-row">
+          <AppLink href="/app/create/source" className="lm-secondary-button">{t.source.heading}</AppLink>
           {t.home.suggestions.map((idea) => (
             <button key={idea} type="button" onClick={() => setText(idea)}>
               {idea}

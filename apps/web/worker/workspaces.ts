@@ -2,6 +2,7 @@ import { MAP_ID, OWNER_HEADER } from "../src/drafts/shared.js";
 import { PERSONAL, SHARED, type WorkspaceSummary } from "../src/workspace-groups.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
 import { database, workspaceRole } from "./permissions.js";
+import { workspaceTemplates } from "./workspace-templates.js";
 
 async function visibleWorkspaces(db: D1Database, subject: string) {
   const rows = await db.prepare(`
@@ -18,6 +19,8 @@ async function visibleWorkspaces(db: D1Database, subject: string) {
 export async function handleWorkspace(request: Request, env: Env, subject: string | undefined, path: string): Promise<Response> {
   if (!subject) throw new HttpError(401, "请先登录后访问工作空间。");
   const db = database(env);
+  const templateRoute = /^\/api\/workspaces\/([^/]+)\/templates(?:\/([^/]+)(?:\/(copies))?)?$/.exec(path);
+  if (templateRoute) return workspaceTemplates(request, env, db, subject, templateRoute[1], templateRoute[2], templateRoute[3]);
   if (path === "/api/workspaces/order") {
     if (request.headers.get(OWNER_HEADER) !== subject) throw new HttpError(403, "账号已切换，请刷新页面后重试。");
     if (request.method === "GET") {

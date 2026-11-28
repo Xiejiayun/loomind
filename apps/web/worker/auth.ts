@@ -4,9 +4,12 @@ import { handleAi } from "./ai.js";
 import { handleAiChat } from "./ai-chat.js";
 import { handleCollab } from "./collab.js";
 import { handleDraft, handleRevisions } from "./drafts.js";
-import { HttpError, json, readJson, requireOrigin } from "./http.js";
+import { HttpError, json, readJson, requireOrigin, signingKey } from "./http.js";
+import { managePublicLink, readPublicMap } from "./public-links.js";
+import { handleNodeReviews } from "./reviews.js";
 import { handleShare, handleInvite } from "./sharing.js";
 import { handleWorkspace } from "./workspaces.js";
+import { handleWebpage } from "./webpage.js";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const challengeCookie = "__Host-loomind-login";
@@ -17,12 +20,6 @@ const guest: Session = { user: null, expiresAt: null };
 
 function cookie(name: string, value = "", maxAge = 0) {
   return `${name}=${value}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Strict`;
-}
-
-function signingKey(env: Env) {
-  const key = new TextEncoder().encode(env.SESSION_SECRET);
-  if (key.length < 32) throw new HttpError(503, "账号登录尚未配置。游客编辑不受影响。");
-  return key;
 }
 
 function issue(env: Env, audience: string, subject: string, expires: number, email?: string) {
@@ -93,12 +90,21 @@ async function verifyGoogle(env: Env, credential: string, nonce: string): Promis
 async function handle(request: Request, env: Env) {
   const url = new URL(request.url);
   const path = url.pathname;
+  if (path.startsWith("/api/public-maps/")) return readPublicMap(request, env, path.slice("/api/public-maps/".length));
+  if (path === "/api/sources/webpage") {
+    const session = await readCookie(request, env, sessionCookie);
+    return handleWebpage(request, env, session?.sub);
+  }
   if (path === "/api/mindmaps" || path.startsWith("/api/mindmaps/")) {
     const session = await readCookie(request, env, sessionCookie);
     if (path === "/api/mindmaps") return handleDraft(request, env, session?.sub);
     const rest = path.slice("/api/mindmaps/".length);
     const segments = rest.split("/");
     if (segments.length === 1) return handleDraft(request, env, session?.sub, segments[0]);
+    if (segments[1] === "public-link" && segments.length === 2) return managePublicLink(request, env, session?.sub, segments[0]);
+    if (segments[1] === "comments" && (segments.length === 2 || segments.length === 3)) {
+      return handleNodeReviews(request, env, session?.sub, session?.email, segments[0], segments[2]);
+    }
     if (segments[1] === "revisions" && (segments.length === 2 || segments.length === 3)) {
       return handleRevisions(request, env, session?.sub, segments[0], segments[2]);
     }

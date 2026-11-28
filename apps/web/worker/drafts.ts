@@ -1,7 +1,10 @@
 import { MindmapDocumentSchema, validateDocumentInvariants } from "@mindmap/core/model";
-import { DRAFT_LIMIT, DRAFT_SIZE_ERROR, MAP_ID, OWNER_HEADER, mapTitle, type CloudDraft, type MindmapSummary } from "../src/drafts/shared.js";
+import { DRAFT_LIMIT, DRAFT_SIZE_ERROR, LIVE_HEADER, MAP_ID, MAX_CHECKPOINT_B64, OWNER_HEADER, mapTitle, type CloudDraft, type MindmapSummary } from "../src/drafts/shared.js";
+import { assembleCheckpoint, checkpointQuery, parseCheckpoint, replaceCheckpoint } from "./checkpoints.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
-import { database, mindmapPermission, visibleMindmap, workspaceRole, type Access } from "./permissions.js";
+import { packDocument, pruneBlocks, unpackDocument, writeBlocks } from "./document-storage.js";
+import { database, mapAccessSql, mindmapPermission, visibleMindmap, visibleMindmapQuery, workspaceRole, type Access } from "./permissions.js";
+import { knownRevision, snapshotResponse } from "./snapshot-response.js";
 
 const workspaceHeader = "X-Loomind-Workspace";
 const MAX_REVISIONS_PER_MAP = 20;
@@ -46,9 +49,15 @@ export async function handleDraft(request: Request, env: Env, subject: string | 
   }
 
   if (request.method === "GET") {
-    const row = await visibleMindmap(db, subject, id);
+    if (request.headers.has(LIVE_HEADER)) {
+      const [head, parts] = await db.batch([visibleMindmapQuery(db, subject, id), checkpointQuery(db, subject, id)]);
+      const row = head.results[0] as { revision: number; document: string } | undefined;
+      return json(row ? { revision: row.revision, document: await unpackDocument(db, id, row.document), checkpoint: assembleCheckpoint(parts.results as { room: string; cursor: number; payload: string }[]) } : { revision: 0, document: null });
+    }
+    const known = knownRevision(request);
+    const row = await visibleMindmap(db, subject, id, known);
     // Unknown and inaccessible IDs are indistinguishable to the existing create-on-first-save client.
-    return json(row ? { revision: row.revision, document: JSON.parse(row.document) } : { revision: 0, document: null } satisfies CloudDraft);
+    return row ? snapshotResponse(db, id, row, known) : json({ revision: 0, document: null } satisfies CloudDraft);
   }
 
   if (request.method === "DELETE") {
@@ -71,7 +80,26 @@ export async function handleDraft(request: Request, env: Env, subject: string | 
   if (requestedWorkspace !== null && (!MAP_ID.test(requestedWorkspace) || revision !== 0)) {
     throw new HttpError(400, "仅新建导图时可指定有效的工作空间 ID。");
   }
-  const input = await readJson(request, DRAFT_LIMIT, DRAFT_SIZE_ERROR);
+  if (requestedWorkspace !== null) {
+    const role = await workspaceRole(db, subject, requestedWorkspace);
+    if (role !== "owner" && role !== "editor") throw new HttpError(403, "没有在该工作空间新建导图的权限。");
+  } else if (revision !== 0) {
+    const permit = await mindmapPermission(db, subject, id);
+    if (permit && permit.access !== "owner" && permit.access !== "editor") throw new HttpError(403, "没有编辑该导图的权限。");
+  }
+  const live = request.headers.get(LIVE_HEADER);
+  if (live !== null && live !== "1" && live !== "seed") throw new HttpError(400, "协作快照请求无效。");
+  const input = await readJson(request, live ? DRAFT_LIMIT + MAX_CHECKPOINT_B64 + 1024 : DRAFT_LIMIT, DRAFT_SIZE_ERROR);
+  const checkpoint = live ? parseCheckpoint((input as { checkpoint?: unknown } | null)?.checkpoint) : undefined;
+  const token = crypto.randomUUID();
+  if ((revision === 0 || live === "seed") && checkpoint && checkpoint.cursor !== 0) throw new HttpError(422, "初始协作快照的游标必须为零。");
+  if (live === "seed" && checkpoint) {
+    const [claimed] = await db.batch([db.prepare(`UPDATE mindmaps AS m SET checkpoint_token = ? WHERE m.id = ? AND m.revision = ?
+      AND ${mapAccessSql(true)} AND NOT EXISTS (SELECT 1 FROM mindmap_live_parts WHERE mindmap_id = m.id AND part = 0 AND revision = m.revision)`)
+      .bind(token, id, revision, subject, subject, subject, subject), ...replaceCheckpoint(db, id, token, checkpoint)]);
+    if (!claimed.meta.changes) throw new HttpError(409, "请重新读取协作快照。");
+    return json({ revision, room: checkpoint.room });
+  }
   let document: string;
   let title: string;
   try {
@@ -84,52 +112,47 @@ export async function handleDraft(request: Request, env: Env, subject: string | 
     throw error;
   }
 
-  let result: D1Result;
+  const { stored, blocks, indexTitle } = await packDocument(document, title);
+  let save: D1PreparedStatement;
   if (revision === 0 && requestedWorkspace !== null) {
-    const role = await workspaceRole(db, subject, requestedWorkspace);
-    if (role !== "owner" && role !== "editor") throw new HttpError(403, "没有在该工作空间新建导图的权限。");
-    result = await db.prepare(`
-      INSERT INTO mindmaps (id, owner, title, revision, document, workspace_id)
-      SELECT ?, ?, ?, 1, ?, w.id
+    save = db.prepare(`
+      INSERT INTO mindmaps (id, owner, title, revision, document, save_token, checkpoint_token, workspace_id)
+      SELECT ?, ?, ?, 1, ?, ?, ?, w.id
       FROM workspaces w
       LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.subject = ?
       WHERE w.id = ? AND (w.owner = ? OR wm.role = 'editor')
       ON CONFLICT(id) DO NOTHING
-    `).bind(id, subject, title, document, subject, requestedWorkspace, subject).run();
+    `).bind(id, subject, indexTitle, stored, token, token, subject, requestedWorkspace, subject);
   } else if (revision === 0) {
-    result = await db.prepare("INSERT INTO mindmaps (id, owner, title, revision, document) VALUES (?, ?, ?, 1, ?) ON CONFLICT(id) DO NOTHING")
-      .bind(id, subject, title, document).run();
+    save = db.prepare("INSERT INTO mindmaps (id, owner, title, revision, document, save_token, checkpoint_token) VALUES (?, ?, ?, 1, ?, ?, ?) ON CONFLICT(id) DO NOTHING")
+      .bind(id, subject, indexTitle, stored, token, token);
   } else {
-    const permit = await mindmapPermission(db, subject, id);
-    if (permit && permit.access !== "owner" && permit.access !== "editor") throw new HttpError(403, "没有编辑该导图的权限。");
-    result = await db.prepare(`
-      UPDATE mindmaps SET document = ?, title = ?, revision = revision + 1,
+    save = db.prepare(`
+      UPDATE mindmaps AS m SET document = ?, title = ?, save_token = ?, checkpoint_token = ?, revision = revision + 1,
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      WHERE id = ? AND revision = ? AND (
-        owner = ? OR EXISTS (
-          SELECT 1 FROM workspaces w
-          LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.subject = ?
-          WHERE w.id = mindmaps.workspace_id AND (w.owner = ? OR wm.role = 'editor')
-        ) OR EXISTS (
-          SELECT 1 FROM mindmap_members mm
-          WHERE mm.mindmap_id = mindmaps.id AND mm.subject = ? AND mm.role = 'editor'
-        )
-      )
-    `).bind(document, title, id, revision, subject, subject, subject, subject).run();
+      WHERE m.id = ? AND m.revision = ? AND ${mapAccessSql(true)} AND (? IS NULL OR EXISTS (
+        SELECT 1 FROM mindmap_live_parts part WHERE part.mindmap_id = m.id AND part.part = 0 AND part.revision = m.revision AND part.room = ?
+          AND (? <= part.cursor OR EXISTS (SELECT 1 FROM mindmap_crdt_updates u WHERE u.mindmap_id = m.id AND u.room = part.room AND u.seq >= ?))
+      ))
+    `).bind(stored, indexTitle, token, token, id, revision, subject, subject, subject, subject,
+      checkpoint?.room ?? null, checkpoint?.room ?? null, checkpoint?.cursor ?? 0, checkpoint?.cursor ?? 0);
   }
-  if (!result.meta.changes) throw new HttpError(409, "另一处已修改云端草稿，未覆盖任何云端内容。");
   const nextRevision = revision + 1;
-  await db.batch([
-    db.prepare(
-      "INSERT OR REPLACE INTO mindmap_revisions (mindmap_id, revision, title, document, saved_by) VALUES (?, ?, ?, ?, ?)",
-    ).bind(id, nextRevision, title, document, subject),
-    db.prepare(
-      `DELETE FROM mindmap_revisions WHERE mindmap_id = ? AND revision NOT IN (
-        SELECT revision FROM mindmap_revisions WHERE mindmap_id = ? ORDER BY revision DESC LIMIT ?
-      )`,
-    ).bind(id, id, MAX_REVISIONS_PER_MAP),
+  // Only the successful compare-and-swap sets this token; a stale writer changes nothing in the batch.
+  const [result] = await db.batch([
+    save, ...writeBlocks(db, id, token, blocks), ...replaceCheckpoint(db, id, token, checkpoint),
+    db.prepare(`INSERT INTO mindmap_revisions (mindmap_id, revision, title, document, saved_by)
+      SELECT id, revision, title, document, ? FROM mindmaps WHERE id = ? AND save_token = ?`).bind(subject, id, token),
+    ...(nextRevision > MAX_REVISIONS_PER_MAP ? [
+      db.prepare(`DELETE FROM mindmap_revisions WHERE mindmap_id = ? AND revision NOT IN (
+          SELECT revision FROM mindmap_revisions WHERE mindmap_id = ? ORDER BY revision DESC LIMIT ?
+        ) AND EXISTS (SELECT 1 FROM mindmaps WHERE id = ? AND save_token = ?)`)
+        .bind(id, id, MAX_REVISIONS_PER_MAP, id, token),
+      pruneBlocks(db, id, token),
+    ] : []),
   ]);
-  return json({ revision: nextRevision });
+  if (!result.meta.changes) throw new HttpError(409, "另一处已修改云端草稿，未覆盖任何云端内容。");
+  return json({ revision: nextRevision, ...(checkpoint && { room: checkpoint.room }) });
 }
 
 export async function handleRevisions(
@@ -145,65 +168,23 @@ export async function handleRevisions(
   if (!MAP_ID.test(id)) throw new HttpError(400, "导图 ID 无效。");
 
   const db = database(env);
-  const current = await visibleMindmap(db, subject, id);
-  if (!current) throw new HttpError(404, "导图不存在或无权访问。");
-
-  if (!revParam) {
-    const rows = await db.prepare(`
-      SELECT revision, title, saved_by AS savedBy, created_at AS createdAt
-      FROM mindmap_revisions
-      WHERE mindmap_id = ?
-      ORDER BY revision DESC
-      LIMIT ?
-    `).bind(id, MAX_REVISIONS_PER_MAP).all<StoredRevisionSummary>();
-
-    if (rows.results.length > 0) {
-      return json(rows.results);
-    }
-
-    // Legacy fallback for mindmaps saved before 0006_mindmap_revisions
-    const meta = await db.prepare("SELECT title, owner, updated_at AS updatedAt FROM mindmaps WHERE id = ?")
-      .bind(id).first<{ title: string; owner: string; updatedAt: string }>();
-    if (!meta) return json([]);
-    return json([{
-      revision: current.revision,
-      title: meta.title,
-      savedBy: meta.owner,
-      createdAt: meta.updatedAt,
-    } satisfies StoredRevisionSummary]);
-  }
-
-  if (!/^[1-9]\d{0,14}$/.test(revParam)) throw new HttpError(400, "版本号无效。");
-  const targetRevision = Number(revParam);
-  const entry = await db.prepare(`
-    SELECT revision, title, saved_by AS savedBy, created_at AS createdAt, document
-    FROM mindmap_revisions
-    WHERE mindmap_id = ? AND revision = ?
-  `).bind(id, targetRevision).first<StoredRevisionSummary & { document: string }>();
-
-  if (entry) {
-    return json({
-      revision: entry.revision,
-      title: entry.title,
-      savedBy: entry.savedBy,
-      createdAt: entry.createdAt,
-      document: JSON.parse(entry.document),
-    });
-  }
-
-  if (targetRevision === current.revision) {
-    const meta = await db.prepare("SELECT title, owner, updated_at AS updatedAt FROM mindmaps WHERE id = ?")
-      .bind(id).first<{ title: string; owner: string; updatedAt: string }>();
-    if (meta) {
-      return json({
-        revision: current.revision,
-        title: meta.title,
-        savedBy: meta.owner,
-        createdAt: meta.updatedAt,
-        document: JSON.parse(current.document),
-      });
-    }
-  }
-
-  throw new HttpError(404, "历史版本不存在或已过期。");
+  if (revParam && !/^[1-9]\d{0,14}$/.test(revParam)) throw new HttpError(400, "版本号无效。");
+  const { results } = await db.prepare(`
+    WITH visible AS (
+      SELECT m.id, m.revision, m.title, m.owner AS savedBy, m.updated_at AS createdAt ${revParam ? ", m.document" : ""}
+      FROM mindmaps m WHERE m.id = ? AND ${mapAccessSql()}
+    ), versions AS (
+      SELECT r.revision, r.title, r.saved_by AS savedBy, r.created_at AS createdAt ${revParam ? ", r.document" : ""}
+      FROM mindmap_revisions r JOIN visible m ON m.id = r.mindmap_id
+      UNION ALL
+      SELECT m.revision, m.title, m.savedBy, m.createdAt ${revParam ? ", m.document" : ""}
+      FROM visible m WHERE NOT EXISTS (SELECT 1 FROM mindmap_revisions r WHERE r.mindmap_id = m.id AND r.revision = m.revision)
+    )
+    SELECT * FROM versions ${revParam ? "WHERE revision = ?" : ""} ORDER BY revision DESC LIMIT ?
+  `).bind(id, subject, subject, subject, subject, ...(revParam ? [Number(revParam), 1] : [MAX_REVISIONS_PER_MAP]))
+    .all<StoredRevisionSummary & { document: string }>();
+  if (!results.length) throw new HttpError(404, "导图或历史版本不可用。");
+  if (!revParam) return json(results);
+  const entry = results[0];
+  return json({ ...entry, document: await unpackDocument(db, id, entry.document) });
 }

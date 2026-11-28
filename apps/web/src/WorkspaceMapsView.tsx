@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { FilePlus2, GitBranch, MoveRight, Search, Share2, Trash2, Users } from "lucide-react";
+import { BookCopy, FilePlus2, GitBranch, MoveRight, Search, Share2, Trash2, Users } from "lucide-react";
 import { getIntlLocale, getLocale, type Locale } from "@mindmap/core";
-import type { WorkspaceSummary } from "./api.js";
+import { saveTeamTemplate, type WorkspaceSummary } from "./api.js";
 import type { MindmapSummary } from "./drafts/shared.js";
 import { getWebMessages, useI18n } from "./i18n.js";
 import { AppLink } from "./navigation.js";
+import { TeamTemplates, type OpenTemplateCopy } from "./TeamTemplates.js";
 import { SHARED, spacePath, type WorkspaceGroup } from "./workspace-groups.js";
 
 export function formatRelativeTime(value: string, locale: Locale = getLocale()) {
@@ -23,12 +24,13 @@ export function formatRelativeTime(value: string, locale: Locale = getLocale()) 
   return new Intl.DateTimeFormat(getIntlLocale(locale), { month: "short", day: "numeric" }).format(date);
 }
 
-export function WorkspaceMapsView({ group, workspaces, onShare, onMove, onDelete }: {
+export function WorkspaceMapsView({ group, workspaces, onShare, onMove, onDelete, onTemplateCopy }: {
   group: WorkspaceGroup;
   workspaces: WorkspaceSummary[];
   onShare: (map: MindmapSummary) => void;
   onMove: (map: MindmapSummary, workspaceId: string) => Promise<void>;
   onDelete: (map: MindmapSummary) => Promise<void>;
+  onTemplateCopy: OpenTemplateCopy;
 }) {
   const { locale, t } = useI18n();
   const intlLocale = getIntlLocale(locale);
@@ -36,6 +38,9 @@ export function WorkspaceMapsView({ group, workspaces, onShare, onMove, onDelete
   const [sort, setSort] = useState<"recent" | "title">("recent");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [templateVersion, setTemplateVersion] = useState(0);
+  const space = group.workspace;
 
   const needle = query.trim().toLocaleLowerCase(intlLocale);
   const children = group.children.filter((child) => child.name.toLocaleLowerCase(intlLocale).includes(needle));
@@ -51,6 +56,7 @@ export function WorkspaceMapsView({ group, workspaces, onShare, onMove, onDelete
 
   async function perform(map: MindmapSummary, action: () => Promise<void>) {
     setBusyId(map.id);
+    setNotice("");
     setError("");
     try { await action(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : t.mapList.actionFailed); }
@@ -83,6 +89,8 @@ export function WorkspaceMapsView({ group, workspaces, onShare, onMove, onDelete
 
     {error && <p className="lm-form-error" role="alert">{error}</p>}
 
+    {notice && <p role="status">{notice}</p>}
+    {space && <TeamTemplates key={space.id} space={space} refresh={templateVersion} onCopy={onTemplateCopy}/>}
     {children.length > 0 && <nav className="lm-joined-spaces" aria-label={t.workspace.spacesEyebrow}>
       {children.map((child) => <AppLink key={child.id} href={spacePath(child.id)} className="lm-secondary-button"><Users size={14}/>{child.name}</AppLink>)}
     </nav>}
@@ -97,6 +105,9 @@ export function WorkspaceMapsView({ group, workspaces, onShare, onMove, onDelete
             <span>{formatRelativeTime(map.updatedAt, locale)}</span>
           </div>
           <div className="lm-library-actions">
+            {space && !map.localOnly && space.role !== "viewer" && map.access !== "viewer" && <button type="button" title={t.mapList.teamSave(map.title)} aria-label={t.mapList.teamSave(map.title)} disabled={busyId === map.id} onClick={() => void perform(map, async () => {
+              await saveTeamTemplate(space.id, map.id); setTemplateVersion((value) => value + 1); setNotice(t.mapList.teamSaved(map.title));
+            })}><BookCopy size={14}/></button>}
             {map.access === "owner" && <>
               <button type="button" title={t.mapList.shareTitle} aria-label={t.mapList.shareAria(map.title)} onClick={() => onShare(map)}><Share2 size={14}/></button>
               {!!moveTargets.length && (
