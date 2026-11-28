@@ -1291,7 +1291,7 @@ export const HybridCanvas: React.FC<HybridCanvasProps> = ({
               onClick={onOpenAi}
               className="flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-violet-700 hover:bg-violet-100"
             >
-              <Sparkles className="h-3.5 w-3.5" /> {t.canvas.aiCoCreate}
+              <Sparkles className="h-3.5 w-3.5" /> {t.aiChat.title}
             </button>
           )}
         </div>

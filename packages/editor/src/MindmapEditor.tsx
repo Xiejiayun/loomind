@@ -17,7 +17,6 @@ import type { AiChatMessage, AiChatPersistence, EditorAiRuntime } from "./ai-run
 import { HybridCanvas } from "./canvas/HybridCanvas.js";
 import { Minimap } from "./canvas/Minimap.js";
 import { AiChatPanel, type QueuedAiRequest } from "./chrome/AiChatPanel.js";
-import type { NodeAiActionKind } from "@mindmap/ai";
 import { CanvasDock } from "./chrome/CanvasDock.js";
 import { CommandK } from "./chrome/CommandK.js";
 import { ContextMenu } from "./chrome/ContextMenu.js";
@@ -25,7 +24,6 @@ import { ExportModal } from "./chrome/ExportModal.js";
 import { findTopicsInSheet } from "./chrome/find-replace.js";
 import { FindReplaceBar } from "./chrome/FindReplaceBar.js";
 import { FormatPanel } from "./chrome/FormatPanel.js";
-import { InlineAiBar } from "./chrome/InlineAiBar.js";
 import { SheetBar } from "./chrome/SheetBar.js";
 import { ShortcutsHelp } from "./chrome/ShortcutsHelp.js";
 import { TopToolbar } from "./chrome/TopToolbar.js";
@@ -113,9 +111,8 @@ const MindmapEditorInner: React.FC<
     return typeof window === "undefined" ? "ai" : window.innerWidth >= 900 ? "ai" : "none";
   });
   const [queuedAiRequest, setQueuedAiRequest] = useState<QueuedAiRequest | undefined>(() =>
-    initialAiPrompt ? { prompt: initialAiPrompt } : undefined,
+    initialAiPrompt ? { type: "prompt", prompt: initialAiPrompt } : undefined,
   );
-  const [inlineAiOpen, setInlineAiOpen] = useState(false);
   const canOpenAiPanel = !readOnly || Boolean(chatPersistence);
 
   // Sync initial panels & mobile collapse
@@ -210,8 +207,9 @@ const MindmapEditorInner: React.FC<
 
   const toggleAiPanel = () => {
     if (!canOpenAiPanel) return;
+    if (zenMode) setZenMode(false);
     if (formatCoversLeft) setFormatPanelOpen(false);
-    setLeftPanel((prev) => (prev === "ai" && !formatCoversLeft ? "none" : "ai"));
+    setLeftPanel((prev) => (prev === "ai" && !formatCoversLeft && !zenMode ? "none" : "ai"));
   };
 
   const toggleOutlineSidebar = () => {
@@ -229,11 +227,12 @@ const MindmapEditorInner: React.FC<
     setFormatPanelOpen(!formatPanelOpen);
   };
 
-  const openAiWithPrompt = (prompt?: string, action?: NodeAiActionKind) => {
+  const openAiChat = (request: QueuedAiRequest = { type: "focus" }) => {
     if (readOnly) return;
+    if (zenMode) setZenMode(false);
     if (formatCoversLeft) setFormatPanelOpen(false);
     setLeftPanel("ai");
-    if (prompt || action) setQueuedAiRequest({ prompt, action });
+    setQueuedAiRequest(request);
   };
 
   const focusTopicOnCanvas = useCallback(
@@ -266,13 +265,9 @@ const MindmapEditorInner: React.FC<
         e.preventDefault();
         setFindOpen(true);
         setShowReplace(true);
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j" && !readOnly) {
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j" && !e.shiftKey && !e.altKey && !readOnly) {
         e.preventDefault();
-        if (e.shiftKey) {
-          setInlineAiOpen((prev) => !prev);
-        } else {
-          toggleAiPanel();
-        }
+        toggleAiPanel();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
         e.preventDefault();
         toggleOutlineSidebar();
@@ -326,7 +321,7 @@ const MindmapEditorInner: React.FC<
                 aiRuntime={aiRuntime}
                 chatPersistence={chatPersistence}
                 readOnly={readOnly}
-                onConsumeQueuedPrompt={() => setQueuedAiRequest(undefined)}
+                onConsumeQueuedRequest={() => setQueuedAiRequest(undefined)}
                 onMessagesChange={onAiMessagesChange}
                 onClose={() => setLeftPanel("none")}
               />
@@ -359,7 +354,7 @@ const MindmapEditorInner: React.FC<
                 searchMatchedIds={searchMatchedIds}
                 activeSearchMatchId={activeSearchMatchId}
                 onOpenContextMenu={(topicId, pos) => setContextMenu({ topicId, ...pos })}
-                onOpenAi={() => openAiWithPrompt()}
+                onOpenAi={() => openAiChat()}
               />
               <FindReplaceBar
                 open={findOpen}
@@ -379,18 +374,7 @@ const MindmapEditorInner: React.FC<
                 onFocusTopic={focusTopicOnCanvas}
                 onClose={() => setFindOpen(false)}
               />
-              {!readOnly && (
-                <>
-                  <CanvasDock isDark={isDark} onOpenInlineAi={() => setInlineAiOpen((v) => !v)} />
-                  <InlineAiBar
-                    open={inlineAiOpen}
-                    isDark={isDark}
-                    aiRuntime={aiRuntime}
-                    onClose={() => setInlineAiOpen(false)}
-                    onContinueInPanel={(p, action) => openAiWithPrompt(p, action)}
-                  />
-                </>
-              )}
+              {!readOnly && <CanvasDock isDark={isDark} />}
               <Minimap layout={layout} appearance={chromeTheme} />
               {!zenMode && <ShortcutsHelp isDark={isDark} />}
             </>
@@ -409,7 +393,7 @@ const MindmapEditorInner: React.FC<
         isDark={isDark}
         readOnly={readOnly}
         onClose={() => setContextMenu(null)}
-        onOpenAiForTopic={readOnly ? undefined : () => setInlineAiOpen(true)}
+        onOpenAiForTopic={readOnly ? undefined : (topicId) => openAiChat({ type: "focus", topicId })}
       />
       <ExportModal open={exportOpen} onOpenChange={setExportOpen} layout={exportLayout} readOnly={readOnly} />
       <CommandK
@@ -422,7 +406,7 @@ const MindmapEditorInner: React.FC<
           setFindOpen(true);
           setShowReplace(!readOnly);
         }}
-        onOpenAi={readOnly ? undefined : (p) => openAiWithPrompt(p)}
+        onOpenAi={readOnly ? undefined : (prompt) => openAiChat(prompt ? { type: "prompt", prompt } : undefined)}
       />
       <PitchOverlay />
       {lastRejection && (
