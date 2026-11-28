@@ -36,6 +36,11 @@ export async function mindmapPermission(db: D1Database, subject: string, id: str
     .first<{ owner: string; workspaceId: string | null; access: Access | null; viewersCanComment: number }>();
 }
 
+export async function canViewMindmap(db: D1Database, subject: string, id: string): Promise<boolean> {
+  return (await db.prepare(`SELECT 1 FROM mindmaps m WHERE m.id = ? AND ${mapAccessSql()}`)
+    .bind(id, subject, subject, subject, subject).first()) !== null;
+}
+
 export function mapAccessSql(write = false) {
   return `(m.owner = ? OR EXISTS (
     SELECT 1 FROM workspaces w LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.subject = ?

@@ -7,7 +7,7 @@ export async function useLocalFixtures(page: Page, signedIn = false) {
     if (url.pathname === "/api/auth/session") {
       return route.fulfill({ json: { user: signedIn ? { id: "mobile-test", email: "mobile@example.test" } : null, expiresAt: null } });
     }
-    if (url.pathname === "/api/workspaces" || url.pathname === "/api/mindmaps") return route.fulfill({ json: [] });
+    if (["/api/workspaces", "/api/workspaces/order", "/api/mindmaps"].includes(url.pathname)) return route.fulfill({ json: [] });
     if (url.pathname === "/api/ai/config") {
       return route.fulfill({ json: { tier: url.searchParams.get("tier"), available: true, isMock: true, providerLabel: "Test fixture", modelLabel: "Test fixture", dailyLimit: 3, remainingToday: 3 } });
     }

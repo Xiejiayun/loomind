@@ -25,7 +25,7 @@
 
 ### 9 Professional Structures, Mixed Layouts & 14 Templates
 
-**Team templates:** In the Library, a workspace owner or editor can save a workspace map’s last cloud revision as a team template. Select that workspace’s filter to see its templates, or use **Browse team templates** from the creation page after selecting a team. Creating a copy starts a new map and revision history in the same workspace; editing or deleting the source, template, or copy does not change the others. Image blocks are copied too. Workspace viewers can see the catalog but cannot publish, remove, or create copies. Each workspace can hold 50 templates.
+**Team templates:** On a workspace’s map list, its owner or editors can save a workspace map’s last cloud revision as a team template. Open the workspace from the sidebar to see its templates, or use **Browse team templates** from the creation page after selecting a team. Creating a copy starts a new map and revision history in the same workspace; editing or deleting the source, template, or copy does not change the others. Image blocks are copied too. Workspace viewers can see the catalog but cannot publish, remove, or create copies. Each workspace can hold 50 templates.
 Switch layout structures per branch on a single canvas to fit every stage from brainstorming to executive presentation:
 - **Mind Map** (Balanced / One-Sided)
 - **Logic Chart** · **Org Chart** · **Brace Map**
@@ -64,6 +64,7 @@ Switch layout structures per branch on a single canvas to fit every stage from b
 - **Public read-only links**: Off by default. From **Share → Enable read-only link**, the map owner can share all sheets, notes and referenced images with anyone who has the link, without sign-in. Anonymous readers cannot access history, member details or AI chat. Both anonymous and invited viewers refresh the latest saved revision every five seconds while the page is visible; this is not a live keystroke feed. Revocation blocks further public reads without changing member access. It cannot recall copies already viewed or downloaded.
 - **Reviewing a photo-heavy map**: Readers get the same saved photos and source notes whether the cloud snapshot fits in one row or several. Comments remain member-only; revoking the public link does not revoke a member's invitation or delete the discussion.
 - **Node comments**: Select a saved topic and open **Node comments** to start a discussion. Map members can read it; the owner and editors can reply, resolve or reopen it. Viewers can post and reply only if the map owner enables **Allow viewers to comment**; this does not grant map editing. Members see each author's account email. Refresh the dialog to see others' replies. Discussions follow node IDs through renames and remain labeled after node deletion. File exports and map revision restores do not include or modify these separate records; deleting the map removes them.
+- **Workspace sidebar**: Open a workspace by its name or expand its arrow to see maps. **Personal** holds your unfiled maps; **Shared**, directly below it by default, holds incoming maps and the workspaces you’ve joined. Use **Reorder workspaces** beside the Workspaces heading to save your own sidebar order across devices. Global search still finds maps across workspaces.
 
 ### Pitch Mode 2.0 & Fullscreen Outliner
 - **Pitch Mode**: Automatically compiles your mind map into polished presentation slides with speaker notes and exports directly to **`.pptx`**.
@@ -85,7 +86,7 @@ Loomind is organized as a **pnpm Monorepo**:
 loomind/
 ├── apps/
 │   └── web/              # Vite + React 19 + Tailwind CSS v4 web app & Cloudflare Workers config
-│       ├── migrations/   # D1 SQL migrations: maps, sharing, AI, revisions, CRDT, document blocks, node reviews
+│       ├── migrations/   # D1 migrations for maps, sharing, AI, revisions, document blocks, collaboration, reviews, templates & sidebar preferences
 │       └── worker/       # Google / Turnstile auth, D1 drafts/revisions/collab, sharing & dual-tier AI proxy
 └── packages/
     ├── core/             # Document schema, 9 layout engines, 14 templates, 11 palettes, Loro CRDT & I/O codecs
@@ -128,6 +129,9 @@ pnpm test
 # Benchmark collaborative leaf renames on 1,001- and 3,001-topic maps (command time only)
 pnpm exec vitest bench --run packages/core/test/loro-rename.bench.ts
 
+# Benchmark idle collaboration polling against local D1 (1 or 8 concurrent readers)
+pnpm exec vitest bench --run apps/web/test/collab-poll.bench.ts
+
 # Build all packages and the web app
 pnpm build
 
@@ -139,6 +143,8 @@ pnpm test:mobile
 Mobile layout tests use loopback and explicit API fixtures. The live editing tests run the built app against a real local Worker and D1, with isolated signed test accounts in Chromium and WebKit. They check unsaved changes in both canvases, late joining, retry, offline recovery, images and cold reopen; they do not call production, Google login or AI models. Set `LOOMIND_E2E_LARGE_FRAME=1` to require a successful frame larger than 192 KiB reaching the peer canvas without a full document reload. The transport test separately verifies byte-for-byte delivery.
 The cloud-storage tests upload photos in the editor, reopen them in the other browser engine, download the earlier version, and check that over-limit edits stay on the originating device.
 
+See the [collaboration polling benchmark report](docs/COLLAB_POLL_PERFORMANCE.md) for before/after timings and measurement limits.
+
 ### Login and storage
 
 - **Google:** use a Web application OAuth client with authorized JavaScript origin `https://loomind.jeremyxie.com` (no path). The Google button returns an ID token to a JavaScript popup callback, so no authorized redirect URI or Google client secret is needed. `/api/auth/google` is a same-origin JSON endpoint, not a redirect target.
@@ -148,7 +154,7 @@ The cloud-storage tests upload photos in the editor, reopen them in the other br
 
 ### Release to Cloudflare Workers
 
-The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. PRs run GitHub Actions CI (`Verify`), and pushes to `main` automatically verify, record a D1 Time Travel recovery point, apply pending D1 migrations, deploy the Worker + static assets, and run live production smoke checks. Live checkpoint sync requires `0012_live_checkpoints.sql` before the new Worker handles requests. See [production deployment and recovery](docs/DEPLOYMENT.md) for recovery and rollback steps.
+The existing `loomind` Worker, custom domain and D1 database are pinned in `apps/web/wrangler.jsonc`. PRs run GitHub Actions CI (`Verify`), and pushes to `main` automatically verify, record a D1 Time Travel recovery point, apply pending D1 migrations, deploy the Worker + static assets, and run live production smoke checks. Live checkpoint sync requires `0013_live_checkpoints.sql` before the new Worker handles requests. See [production deployment and recovery](docs/DEPLOYMENT.md) for recovery and rollback steps.
 
 ---
 

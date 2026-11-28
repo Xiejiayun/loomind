@@ -28,7 +28,7 @@
 4. 作业把**发布前 Worker 版本 ID**和**迁移前 D1 bookmark**写入本次 Actions 的 Job summary，列出待应用的远端迁移，然后运行 `wrangler d1 migrations apply DB --remote`。Wrangler 在迁移时也会自动捕获备份；工作流随后核对远端 `mindmaps` 表存在。
 5. 迁移通过后才运行 `wrangler deploy`。部署成功后自动检查生产首页、构建的 JS 静态资源、游客会话、登录 challenge 与未授权导图访问，并记录新 Worker 版本。绿色工作流表示这些自动检查通过；真实 Google 登录和跨设备导图同步仍须按第 1 步的验收清单在生产域名人工复核。
 
-PR 本身不发布。引入实时协作快照时，必须在部署新 Worker 前应用 `0012_live_checkpoints.sql`。它只扩展表结构，不重写既有导图；首位编辑者按当前版本注册快照，不产生新内容版本。回退 Worker 时保留新增列和快照表，不要盲目回退 D1。旧 Worker 若保存较新版本，不匹配该版本的快照不会被新 Worker 读取。见 [编辑器恢复说明](RECOVERY_RUNBOOK.md#live-editor-recovery)。
+PR 本身不发布。引入实时协作快照时，必须在部署新 Worker 前应用 `0013_live_checkpoints.sql`。它只扩展表结构，不重写既有导图；首位编辑者按当前版本注册快照，不产生新内容版本。回退 Worker 时保留新增列和快照表，不要盲目回退 D1。旧 Worker 若保存较新版本，不匹配该版本的快照不会被新 Worker 读取。见 [编辑器恢复说明](RECOVERY_RUNBOOK.md#live-editor-recovery)。
 
 > **本地脚本边界说明**：`apps/web/package.json` 的 `deploy` 脚本已禁用直接本地 `wrangler deploy`，仅用于消除误操作入口，**不等于撤销已持有者的 Cloudflare 访问权限**。常规发布必须通过 GitHub Actions 的 `Deploy production` 工作流执行；经批准的应急回滚与数据恢复仍按下方「失败与回退」流程在受信任终端操作。
 
@@ -42,14 +42,14 @@ PR 本身不发布。引入实时协作快照时，必须在部署新 Worker 前
 
 当前 `0002_mindmaps.sql` 会把旧 `account_drafts` 数据复制到 `mindmaps`，`0003_remove_account_drafts.sql` 会删除旧表。若这两项在某次发布中仍待应用，审批前应特别核对旧 Worker 是否能继续使用迁移后的表结构。
 
-`0009_mindmap_document_blocks.sql` 是增量迁移，不重写既有快照。以实际工作流为准：当前 `deploy-production.yml` 也监听 `main` push，应在合并前确认发布批准、D1 bookmark 和回退版本。发布后验证旧图、超过 1 MiB 的带图导图及其历史版都能跨会话打开。一旦已有分块快照，不要回滚到只认识内联 JSON 的 Worker；优先向前修复，或发布保留分块读取能力的修复版。不要删除分块表或为代码回滚而直接恢复整库。
+`0010_mindmap_document_blocks.sql` 是增量迁移，不重写既有快照。以实际工作流为准：当前 `deploy-production.yml` 也监听 `main` push，应在合并前确认发布批准、D1 bookmark 和回退版本。发布后验证旧图、超过 1 MiB 的带图导图及其历史版都能跨会话打开。一旦已有分块快照，不要回滚到只认识内联 JSON 的 Worker；优先向前修复，或发布保留分块读取能力的修复版。不要删除分块表或为代码回滚而直接恢复整库。
 
-`0010_public_view_links.sql` 仅增加可为空的授权列，旧图默认不公开。发布后用无敏感内容的测试图验证匿名只读、查看新版和撤销链接（已打开的页面也应停止读取），并确认正式成员仍可查看。回退 Worker 不会清除已保存的授权；如需永久停用某链接，请由所有者显式撤销。
+`0011_public_view_links.sql` 仅增加可为空的授权列，旧图默认不公开。发布后用无敏感内容的测试图验证匿名只读、查看新版和撤销链接（已打开的页面也应停止读取），并确认正式成员仍可查看。回退 Worker 不会清除已保存的授权；如需永久停用某链接，请由所有者显式撤销。
 
 合并上述存储和协作变更时，用超过 1 MiB 的含图测试文档再走一次评审：受邀查看者能看图和原文并在被允许后评论，匿名读者只见图文，不见讨论；撤销链接后旧页面不能再取得新版，已加入的成员仍能重新打开导图和讨论。不要用真实的保密资料做匿名分享验收。
 
-`0011_node_reviews.sql` 新增独立的讨论表和默认关闭的查看者评论权限，不重写已有导图。验收时用已受邀的查看者确认默认只读；由所有者开启后留言，再用未登录和未获邀请的身份确认评论不可见。回滚到上一版应用不需要删除评论表或恢复整库。
+`0012_node_reviews.sql` 新增独立的讨论表和默认关闭的查看者评论权限，不重写已有导图。验收时用已受邀的查看者确认默认只读；由所有者开启后留言，再用未登录和未获邀请的身份确认评论不可见。回滚到上一版应用不需要删除评论表或恢复整库。
 
-团队模板迁移 `0013_workspace_templates.sql` 只新增模板快照及图片分块表，不改写已有导图。发布后，使用测试工作空间验证一名编辑者保存模板、另一名成员创建并修改独立副本。回退到支持分块但不支持模板的 Worker 会暂时隐藏模板；不要删除模板表。已有副本是普通工作空间导图。
+团队模板迁移 `0014_workspace_templates.sql` 只新增模板快照及图片分块表，不改写已有导图。发布后，使用测试工作空间验证一名编辑者保存模板、另一名成员创建并修改独立副本。回退到支持分块但不支持模板的 Worker 会暂时隐藏模板；不要删除模板表。已有副本是普通工作空间导图。
 
 参考：[D1 迁移](https://developers.cloudflare.com/d1/reference/migrations/)、[D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)、[Worker 回滚](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)、[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。

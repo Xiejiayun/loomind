@@ -43,8 +43,7 @@ test("an editor publishes a large map as a team template; independently editable
   const colleague = await browser.newContext(browser.browserType().name() === "webkit" ? { ...cloudBrowser, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : desktop);
   try {
     const member = await cloud.openPage(colleague, "field-editor"); await member.goto(`${cloud.origin}/invite/${token}`);
-    await member.getByRole("button", { name: /Accept Invite|Accept invitation/i }).click(); await expect(member).toHaveURL(/\/app\?workspace=/);
-    await member.goto(`${cloud.origin}/app/library?workspace=${workspace}`);
+    await member.getByRole("button", { name: /Accept Invite|Accept invitation/i }).click(); await expect(member).toHaveURL(`${cloud.origin}/app/workspaces/${workspace}`);
     await member.getByRole("button", { name: "Save as team template: Field inspection" }).click();
     await expect(member.getByRole("status").filter({ hasText: "Saved team template: Field inspection" })).toBeVisible();
     expect(await member.getByRole("region", { name: "Team templates in Field lab" }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -75,7 +74,7 @@ test("an editor publishes a large map as a team template; independently editable
     expect((await owner.request.delete(`${api}/mindmaps/${source}`, { headers: sourceHeaders })).status()).toBe(200);
     const second = await makeCopy(member); expect(new Set([source, first, second]).size).toBe(3);
     await expect(member.getByRole("application").getByText("Original evidence", { exact: true })).toBeVisible();
-    await owner.goto(`${cloud.origin}/app/library?workspace=${workspace}`); owner.once("dialog", (dialog) => dialog.accept());
+    await owner.goto(`${cloud.origin}/app/workspaces/${workspace}`); owner.once("dialog", (dialog) => dialog.accept());
     await catalog.getByRole("button", { name: "Remove template: Field inspection" }).click(); await expect(catalog.getByText(/No team templates yet/)).toBeVisible();
     await member.reload(); await expect(member.getByRole("application").locator('img[src^="data:image/"]')).toHaveJSProperty("naturalWidth", 640);
     await verify(member, second, "field-editor", "Original evidence"); await verify(owner, first, "field-owner", "Revised observation");

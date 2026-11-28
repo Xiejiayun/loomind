@@ -2,9 +2,9 @@ import { getWebMessages } from "./i18n.js";
 import { OWNER_HEADER } from "./drafts/shared.js";
 import type { ReviewDetail, ReviewList } from "./drafts/reviews.js";
 import type { WebpageSource } from "./webpage-contract.js";
+import type { WorkspaceSummary } from "./workspace-groups.js";
 
-export type Access = "owner" | "editor" | "viewer";
-export interface WorkspaceSummary { id: string; name: string; role: Access; createdAt: string }
+export type { WorkspaceSummary } from "./workspace-groups.js";
 export interface ShareSummary { id: string; role: "editor" | "viewer"; expiresAt: string }
 export interface CreatedShare extends ShareSummary { token: string }
 export interface InvitePreview { type: "workspace" | "mindmap"; id: string; name: string; role: "editor" | "viewer"; expiresAt: string }
@@ -45,6 +45,10 @@ export const copyTeamTemplate = (workspace: string, template: string) =>
   send<{ id: string; title: string; workspaceId: string }>(`${templatesPath(workspace)}/${encodeURIComponent(template)}/copies`, {});
 export const removeTeamTemplate = (workspace: string, template: string) =>
   request<{ deleted: boolean }>(`${templatesPath(workspace)}/${encodeURIComponent(template)}`, { method: "DELETE" });
+export const getWorkspaceOrder = (owner: string) => request<string[]>("/api/workspaces/order", { headers: { [OWNER_HEADER]: owner } });
+export const saveWorkspaceOrder = (owner: string, order: string[]) => request<string[]>("/api/workspaces/order", {
+  method: "PUT", headers: { "Content-Type": "application/json", [OWNER_HEADER]: owner }, body: JSON.stringify(order),
+});
 export const createWorkspace = (name: string) => send<WorkspaceSummary>("/api/workspaces", { name });
 export const moveMindmap = (workspaceId: string, mindmapId: string) => send<{ workspaceId: string }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/mindmaps`, { mindmapId });
 export const createShare = (type: "workspace" | "mindmap", resourceId: string, role: "viewer" | "editor") =>

@@ -1,6 +1,6 @@
 import { MAP_ID, OWNER_HEADER, ROOM_HEADER } from "../src/drafts/shared.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
-import { database, mapAccessSql, mindmapPermission } from "./permissions.js";
+import { canViewMindmap, database, mapAccessSql, mindmapPermission } from "./permissions.js";
 
 const MAX_UPDATE_B64_LEN = 1536 * 1024;
 const MAX_COLLAB_BODY = MAX_UPDATE_B64_LEN + 8 * 1024;
@@ -90,8 +90,8 @@ export async function handleCollab(
   const nowMs = Date.now();
   const room = request.headers.get(ROOM_HEADER);
   if (room !== null && !MAP_ID.test(room)) throw new HttpError(400, "无效的协作房间。");
-  const permit = await mindmapPermission(db, subject, id);
-  if (!permit?.access) throw new HttpError(404, "导图不存在或无权访问。");
+  const permit = request.method === "POST" ? await mindmapPermission(db, subject, id) : null;
+  if (!(request.method === "GET" ? await canViewMindmap(db, subject, id) : permit?.access)) throw new HttpError(404, "导图不存在或无权访问。");
   const head = room ? await db.prepare(`SELECT map.revision, part.room FROM mindmaps AS map LEFT JOIN mindmap_live_parts AS part
     ON part.mindmap_id = map.id AND part.token = map.checkpoint_token AND part.revision = map.revision AND part.part = 0 WHERE map.id = ?`).bind(id).first<{ revision: number; room: string | null }>() : null;
   if (room && room !== head?.room) throw new HttpError(409, "协作历史已更新，请同步云端版本。");
@@ -139,7 +139,7 @@ export async function handleCollab(
 
   const updateB64 = typeof rec.updateB64 === "string" && rec.updateB64.length > 0 ? rec.updateB64 : null;
   if (updateB64) {
-    if (permit.access !== "owner" && permit.access !== "editor") {
+    if (permit?.access !== "owner" && permit?.access !== "editor") {
       throw new HttpError(403, "只读协作者不能提交编辑更新。");
     }
     if (updateB64.length > MAX_UPDATE_B64_LEN) throw new HttpError(413, "协作同步数据过大。");

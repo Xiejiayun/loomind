@@ -4,6 +4,7 @@ import { getTemplate, getTemplateInfo, richTextToPlainText, TEMPLATES, type Mind
 import type { WorkspaceSummary } from "./api.js";
 import { useI18n } from "./i18n.js";
 import { AppLink } from "./navigation.js";
+import { spacePath } from "./workspace-groups.js";
 import { documentFromOutline, documentFromTopic, outlineNodeCount, parseOutline, type OutlineNode } from "./outline.js";
 import { OutlineTree } from "./OutlineTree.js";
 
@@ -93,7 +94,7 @@ export function CreateView({ mode, initialPrompt, activeWorkspaceId, workspaces,
         <p className="lm-preview-count">{preview ? t.createView.previewCount(outlineNodeCount(preview), preview.children.length) : t.createView.previewEditableLater}</p>
         <div className="lm-create-settings"><label htmlFor="lm-create-space">{t.createView.saveToLabel}</label><select id="lm-create-space" value={workspaceId ?? ""} onChange={(event) => setWorkspaceId(event.target.value || null)}>
           <option value="">{t.common.myMaps}</option>{writable.map((space) => <option key={space.id} value={space.id}>{space.name}</option>)}
-        </select>{workspaceId && <AppLink href={`/app/library?workspace=${encodeURIComponent(workspaceId)}`} className="lm-secondary-button">{t.library.teamLink}</AppLink>}</div>
+        </select>{workspaceId && <AppLink href={spacePath(workspaceId)} className="lm-secondary-button">{t.mapList.teamLink}</AppLink>}</div>
       </aside>
     </div>
     <section className="lm-template-section" aria-labelledby="lm-template-title"><div className="lm-section-line"><div><span className="lm-eyebrow">03 / VISUAL LANGUAGE</span><h2 id="lm-template-title">{t.createView.templateTitle}</h2></div><p>{t.createView.templateNote}</p></div>

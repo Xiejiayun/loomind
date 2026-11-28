@@ -77,21 +77,26 @@ beforeAll(async () => {
   for (const statement of aiChatMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
-  const blocksMigration = await readFile(new URL("../migrations/0009_mindmap_document_blocks.sql", import.meta.url), "utf8");
+  const sidebarMigration = await readFile(new URL("../migrations/0009_workspace_sidebar_orders.sql", import.meta.url), "utf8");
+  await platform.env.DB.prepare(sidebarMigration).run();
+  const legacyOrder = JSON.stringify(["shared", "personal"]);
+  await platform.env.DB.prepare("INSERT INTO workspace_sidebar_orders (subject, space_order) VALUES (?, ?)").bind("legacy", legacyOrder).run();
+  const blocksMigration = await readFile(new URL("../migrations/0010_mindmap_document_blocks.sql", import.meta.url), "utf8");
   for (const statement of blocksMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
-  await platform.env.DB.prepare(await readFile(new URL("../migrations/0010_public_view_links.sql", import.meta.url), "utf8")).run();
-  const reviewsMigration = await readFile(new URL("../migrations/0011_node_reviews.sql", import.meta.url), "utf8");
+  await platform.env.DB.prepare(await readFile(new URL("../migrations/0011_public_view_links.sql", import.meta.url), "utf8")).run();
+  const reviewsMigration = await readFile(new URL("../migrations/0012_node_reviews.sql", import.meta.url), "utf8");
   for (const statement of reviewsMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
-  const checkpoints = await readFile(new URL("../migrations/0012_live_checkpoints.sql", import.meta.url), "utf8");
+  const checkpoints = await readFile(new URL("../migrations/0013_live_checkpoints.sql", import.meta.url), "utf8");
   for (const statement of checkpoints.split(";").map((part) => part.trim()).filter(Boolean)) await platform.env.DB.prepare(statement).run();
-  const templatesMigration = await readFile(new URL("../migrations/0013_workspace_templates.sql", import.meta.url), "utf8");
+  const templatesMigration = await readFile(new URL("../migrations/0014_workspace_templates.sql", import.meta.url), "utf8");
   for (const statement of templatesMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
     await platform.env.DB.prepare(statement).run();
   }
+  expect(await platform.env.DB.prepare("SELECT space_order FROM workspace_sidebar_orders WHERE subject = ?").bind("legacy").first("space_order")).toBe(legacyOrder);
   expect(await platform.env.DB.prepare("SELECT revision, document, workspace_id AS workspaceId FROM mindmaps WHERE owner = ?")
     .bind("legacy").first()).toEqual({ revision: 3, document: JSON.stringify(legacyDocument), workspaceId: null });
   env = { ...platform.env, AUTH_ORIGIN: origin, GOOGLE_CLIENT_ID: client, TURNSTILE_SITE_KEY: "test-site", TURNSTILE_SECRET: "test-widget-secret", SESSION_SECRET: "test-only-session-secret-not-for-production" };
@@ -273,6 +278,69 @@ describe("collaboration API (signed sessions and local D1)", () => {
     expect((await (await request("mindmaps", "GET", outsider, undefined, { [OWNER_HEADER]: "space-outsider" })).json())).toEqual([]);
     expect(await (await request("mindmaps/" + first, "GET", outsider, undefined, { [OWNER_HEADER]: "space-outsider" })).json())
       .toEqual({ revision: 0, document: null });
+  });
+
+  it("persists sidebar order per account, including viewer memberships, without changing workspace permissions", async () => {
+    const owner = await login("order-owner");
+    const viewer = await login("order-viewer");
+    const ownerHeader = { [OWNER_HEADER]: "order-owner" };
+    const viewerHeader = { [OWNER_HEADER]: "order-viewer" };
+    const { id } = await (await request("workspaces", "POST", owner, { name: "Team" })).json() as { id: string };
+    const path = "workspaces/order";
+    const ownerOrder = [id, "personal", "shared"];
+    const viewerOrder = ["shared", "personal", id];
+    expect(await (await request(path, "GET", owner, undefined, ownerHeader)).json()).toEqual([]);
+    expect((await request(path, "PUT", "", ownerOrder, ownerHeader)).status).toBe(401);
+    expect((await request(path, "PUT", owner, ownerOrder, { ...ownerHeader, Origin: "https://other.test" })).status).toBe(403);
+    expect((await request(path, "PUT", viewer, ownerOrder, ownerHeader)).status).toBe(403);
+    expect((await request(path, "PUT", viewer, viewerOrder, viewerHeader)).status).toBe(409);
+    const invite = await share(owner, "workspace", id, "viewer");
+    expect((await request("invites/" + invite.token + "/accept", "POST", viewer)).status).toBe(200);
+    expect((await request(path, "PUT", owner, ownerOrder, ownerHeader)).status).toBe(200);
+    expect(await (await request(path, "GET", viewer, undefined, viewerHeader)).json()).toEqual([]);
+    expect((await request(path, "PUT", viewer, viewerOrder, viewerHeader)).status).toBe(200);
+    for (const invalid of [["shared"], ["personal", "shared", "shared"], ["personal", "shared", 1]]) {
+      expect((await request(path, "PUT", viewer, invalid, viewerHeader)).status).toBe(400);
+    }
+    expect(await (await request(path, "GET", viewer, undefined, viewerHeader)).json()).toEqual(viewerOrder);
+    expect(await (await request(path, "GET", owner, undefined, ownerHeader)).json()).toEqual(ownerOrder);
+    expect(await (await request("workspaces", "GET", viewer)).json()).toMatchObject([{ id, role: "viewer" }]);
+    const revised = ["personal", id, "shared"];
+    expect((await request(path, "PUT", owner, revised, ownerHeader)).status).toBe(200);
+    expect(await (await request(path, "GET", owner, undefined, ownerHeader)).json()).toEqual(revised);
+  });
+
+  it("rechecks workspace access to collaboration and chat reads without changing their distinct denial responses", async () => {
+    const workspaceId = crypto.randomUUID();
+    const mapId = crypto.randomUUID();
+    const workspaceOwner = "poll-workspace-owner";
+    const viewer = "poll-workspace-viewer";
+    const ownerCookie = await login(workspaceOwner);
+    const viewerCookie = await login(viewer);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO workspaces (id, owner, name) VALUES (?, ?, 'Team')").bind(workspaceId, workspaceOwner),
+      env.DB.prepare("INSERT INTO mindmaps (id, owner, title, revision, document, workspace_id) VALUES (?, 'map-creator', 'Map', 1, ?, ?)")
+        .bind(mapId, JSON.stringify(getTemplate("blank-organic").create()), workspaceId),
+      env.DB.prepare("INSERT INTO workspace_members (workspace_id, subject, role) VALUES (?, ?, 'viewer')").bind(workspaceId, viewer),
+    ]);
+    expect((await request(`mindmaps/${mapId}/ai-chat`, "POST", ownerCookie, {
+      messages: [{ id: "shared-note", role: "user", content: "Team note" }],
+    }, { [OWNER_HEADER]: workspaceOwner })).status).toBe(200);
+
+    async function readMetadata(id: string, subject: string, cookie: string) {
+      const read = (path: string) => request(`mindmaps/${id}/${path}`, "GET", cookie, undefined, { [OWNER_HEADER]: subject });
+      const [poll, chat] = await Promise.all([read("collab"), read("ai-chat")]);
+      const { messages } = await chat.json() as { messages: { id: string }[] };
+      return { poll: poll.status, chat: chat.status, messageIds: messages.map(({ id }) => id) };
+    }
+
+    const allowed = { poll: 200, chat: 200, messageIds: ["shared-note"] };
+    expect(await readMetadata(mapId, workspaceOwner, ownerCookie)).toEqual(allowed);
+    expect(await readMetadata(mapId, viewer, viewerCookie)).toEqual(allowed);
+    await env.DB.prepare("DELETE FROM workspace_members WHERE workspace_id = ? AND subject = ?").bind(workspaceId, viewer).run();
+    const denied = { poll: 404, chat: 200, messageIds: [] };
+    expect(await readMetadata(mapId, viewer, viewerCookie)).toEqual(denied);
+    expect(await readMetadata(crypto.randomUUID(), viewer, viewerCookie)).toEqual(denied);
   });
 
   it("stores only invitation hashes, enforces revocation and expiry, and never downgrades a member", async () => {

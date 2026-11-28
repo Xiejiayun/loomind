@@ -1,17 +1,16 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
+  ArrowUpDown,
   Command,
   FolderOpen,
   GitBranch,
   Languages,
-  Layers,
   LogOut,
   Menu,
   PanelLeft,
   Plus,
   Search,
-  Share2,
   Sparkles,
   SquarePen,
   Users,
@@ -20,14 +19,16 @@ import {
 import { getIntlLocale, getTemplateInfo, TEMPLATES, type MindmapDocument } from "@mindmap/core";
 import { authRequest } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
-import { createWorkspace, listWorkspaces, moveMindmap, type WorkspaceSummary } from "./api.js";
+import { createWorkspace, getWorkspaceOrder, listWorkspaces, moveMindmap, saveWorkspaceOrder, type WorkspaceSummary } from "./api.js";
 import { CreateView } from "./CreateView.js";
 import { SourceView } from "./SourceView.js";
 import { clearLocalAiChatCache, seedLocalAiChatCache } from "./drafts/ai-chat.js";
 import { deleteCloud, listCloud } from "./drafts/cloud.js";
 import { mapTitle, MAP_ID, type MindmapSummary } from "./drafts/shared.js";
 import { useI18n } from "./i18n.js";
-import { formatRelativeTime, LibraryView } from "./LibraryView.js";
+import { formatRelativeTime, WorkspaceMapsView } from "./WorkspaceMapsView.js";
+import { WorkspaceOrderDialog, WorkspaceTree } from "./WorkspaceTree.js";
+import { buildWorkspaceGroups, mapGroupId, PERSONAL, SHARED, spaceFromPath, spacePath } from "./workspace-groups.js";
 import { MapThumbnail } from "./MapThumbnail.js";
 import { AppLink, navigate } from "./navigation.js";
 import { documentFromOutline, documentFromTopic, outlineNodeCount, parseOutline } from "./outline.js";
@@ -64,11 +65,13 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   const [listError, setListError] = useState("");
   const [actionError, setActionError] = useState("");
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => {
-    const invited = new URLSearchParams(route.search).get("workspace");
-    if (invited && MAP_ID.test(invited)) return invited;
+    const requested = route.pathname.startsWith("/app/create") ? new URLSearchParams(route.search).get("workspace") : null;
+    if (requested && MAP_ID.test(requested)) return requested;
     try { return localStorage.getItem(`loomind:space:${owner}`) || null; }
     catch { return null; }
   });
+  const [workspaceOrder, setWorkspaceOrder] = useState<string[] | null>(null);
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [pendingAiPrompt, setPendingAiPrompt] = useState<string | undefined>(undefined);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
@@ -129,9 +132,10 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
       let remote: MindmapSummary[] | null = null;
       try { remote = await listCloud(owner); }
       catch (reason) { failures.push(errorText(reason, t.workspace.readCloudError)); }
-      let spaces: WorkspaceSummary[] = [];
-      try { spaces = await listWorkspaces(); }
-      catch (reason) { failures.push(errorText(reason, t.workspace.readSpacesError)); }
+      const [spaces, order] = await Promise.all([
+        listWorkspaces().catch((reason) => { failures.push(errorText(reason, t.workspace.readSpacesError)); return null; }),
+        getWorkspaceOrder(owner).catch((reason) => { failures.push(errorText(reason, t.workspace.orderFailed)); return null; }),
+      ]);
       if (!active) return;
       const merged = remote
         ? [
@@ -142,8 +146,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           ]
         : local;
       setMaps(sortMaps(merged));
-      setWorkspaces(spaces);
-      setActiveWorkspaceId((current) => current && spaces.some((space) => space.id === current) ? current : null);
+      setWorkspaces(spaces ?? []);
+      setWorkspaceOrder(spaces ? order : null);
+      setActiveWorkspaceId((current) => spaces?.some((space) => space.id === current && space.role !== "viewer") ? current : null);
       setListError(failures.join(" "));
       setLoading(false);
 
@@ -178,6 +183,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   // Global shortcuts: [ toggles sidebar, Cmd/Ctrl+K opens Workspace CommandK when outside editor
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return;
       const inInput = event.target instanceof HTMLElement &&
         (event.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName));
 
@@ -197,7 +203,20 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
     return () => window.removeEventListener("keydown", shortcut);
   }, [mapId, toggleSidebar]);
 
-  const recent = useMemo(() => sortMaps(maps.filter((map) => map.workspaceId === activeWorkspaceId)).slice(0, 6), [maps, activeWorkspaceId]);
+  const groups = useMemo(() => buildWorkspaceGroups(workspaces, sortMaps(maps), workspaceOrder ?? [], t.common.myMaps, t.workspace.navShared),
+    [workspaces, maps, workspaceOrder, t.common.myMaps, t.workspace.navShared]);
+  const pageId = spaceFromPath(route.pathname);
+  const pageGroup = pageId ? groups.byId.get(pageId) : undefined;
+  const activeMap = mapId && MAP_ID.test(mapId) ? maps.find((item) => item.id === mapId) : undefined;
+  const browsedGroup = activeMap ? groups.byId.get(mapGroupId(activeMap, groups.byId)) : pageGroup;
+  const selected = browsedGroup ?? (!pageId && !mapId ? groups.byId.get(activeWorkspaceId ?? PERSONAL) : undefined);
+  const recent = useMemo(() => groups.byId.get(activeWorkspaceId ?? PERSONAL)?.maps.slice(0, 6) ?? [], [groups, activeWorkspaceId]);
+
+  useEffect(() => {
+    if (!browsedGroup) return;
+    const space = browsedGroup.workspace;
+    setActiveWorkspaceId(space && space.role !== "viewer" ? space.id : null);
+  }, [browsedGroup]);
 
   async function createMap(document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) {
     const id = crypto.randomUUID();
@@ -214,8 +233,10 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
 
   async function createSpace(name: string) {
     const space = await createWorkspace(name);
-    setWorkspaces((current) => [...current, space]);
+    setWorkspaces((current) => [space, ...current]);
     setActiveWorkspaceId(space.id);
+    setMobileOpen(false);
+    navigate(spacePath(space.id));
     setActionError("");
   }
 
@@ -252,18 +273,8 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
 
   if (loading) return <div className="lm-loading">{t.common.openingWorkspace}</div>;
 
-  const isLibrary = route.pathname === "/app/library";
-  const isShared = route.pathname === "/app/shared";
   const isCreate = route.pathname === "/app/create";
   const createMode = new URLSearchParams(route.search).get("mode") === "outline" ? "outline" : "idea";
-  const chooseSpace = (id: string | null) => {
-    setActiveWorkspaceId(id);
-    setMobileOpen(false);
-    if (mapId) navigate("/app");
-  };
-
-  const activeMap = mapId && MAP_ID.test(mapId) ? maps.find((item) => item.id === mapId) : undefined;
-
   return <div className={`lm-app-shell ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
     <aside id="lm-workspace-sidebar" className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label={t.workspace.sidebarAria}
       onKeyDown={(event) => { if (mobileOpen && event.key === "Escape") setMobileOpen(false); }}>
@@ -280,82 +291,23 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
         <AppLink href="/app" className={`lm-nav-item ${route.pathname === "/app" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
           <SquarePen size={14}/><span>{t.workspace.navHome}</span><kbd>N</kbd>
         </AppLink>
-        <AppLink href="/app/library" className={`lm-nav-item ${isLibrary || isShared ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
-          <FolderOpen size={14}/><span>{t.workspace.navLibrary}</span>
-        </AppLink>
       </nav>
 
-      <section className="lm-sidebar-section" aria-label={t.workspace.selectSpaceAria}>
-        {workspaces.length === 0 ? (
-          <button
-            type="button"
-            className="lm-workspace-empty-row"
-            title={t.workspace.newSpace}
-            aria-label={t.workspace.newSpace}
-            onClick={() => setWorkspaceDialogOpen(true)}
-          >
+      <div className="lm-sidebar-scroll">
+        <section className="lm-sidebar-section" aria-label={t.workspace.selectSpaceAria}>
+          <div className="lm-sidebar-section-title">
             <span>{t.workspace.spacesEyebrow}</span>
-            <Plus size={12}/>
-          </button>
-        ) : (
-          <>
-            <div className="lm-sidebar-section-title">
-              <span>{t.workspace.spacesEyebrow}</span>
-              <button
-                type="button"
-                className="lm-sidebar-section-action"
-                title={t.workspace.newSpace}
-                aria-label={t.workspace.newSpace}
-                onClick={() => setWorkspaceDialogOpen(true)}
-              >
-                <Plus size={12}/>
-              </button>
+            <div className="lm-space-tools">
+              <button type="button" className="lm-sidebar-section-action" title={t.workspace.reorder} aria-label={t.workspace.reorder}
+                disabled={!workspaceOrder} onClick={() => setOrderDialogOpen(true)}><ArrowUpDown size={13}/></button>
+              <button type="button" className="lm-sidebar-section-action" title={t.workspace.newSpace} aria-label={t.workspace.newSpace}
+                onClick={() => setWorkspaceDialogOpen(true)}><Plus size={12}/></button>
             </div>
-            <div className="lm-space-list">
-              <button
-                type="button"
-                className={`lm-space-item ${!activeWorkspaceId ? "is-selected" : ""}`}
-                aria-pressed={!activeWorkspaceId}
-                onClick={() => chooseSpace(null)}
-              >
-                <Layers size={13} className="lm-space-icon"/>
-                <span className="lm-space-name">{t.common.myMaps}</span>
-                {!activeWorkspaceId && <span className="lm-space-active-dot" aria-hidden="true"/>}
-              </button>
-              {workspaces.map((space) => {
-                const selected = activeWorkspaceId === space.id;
-                return (
-                  <div key={space.id} className={`lm-space-row ${selected ? "is-selected" : ""}`}>
-                    <button
-                      type="button"
-                      className={`lm-space-item ${selected ? "is-selected" : ""}`}
-                      aria-pressed={selected}
-                      onClick={() => chooseSpace(space.id)}
-                    >
-                      <span className="lm-space-glyph" aria-hidden="true">{space.name.slice(0, 1).toUpperCase()}</span>
-                      <span className="lm-space-name">{space.name}</span>
-                      {selected && space.role !== "owner" && <span className="lm-space-active-dot" aria-hidden="true"/>}
-                    </button>
-                    {space.role === "owner" && (
-                      <button
-                        type="button"
-                        className="lm-space-share-btn"
-                        title={t.workspace.shareSpace}
-                        aria-label={`${t.workspace.shareSpace}: ${space.name}`}
-                        onClick={() => setShareTarget({ type: "workspace", id: space.id, name: space.name })}
-                      >
-                        <Share2 size={12}/>
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </section>
-
-      <div className="lm-sidebar-spacer" aria-hidden="true"/>
+          </div>
+          <WorkspaceTree groups={groups.roots} selected={selected} mapId={mapId} onNavigate={() => setMobileOpen(false)}
+            onShare={(space) => setShareTarget({ type: "workspace", id: space.id, name: space.name })}/>
+        </section>
+      </div>
 
       <div className="lm-sidebar-bottom">
         <div className="lm-sidebar-account-btn" title={session.user!.email}>
@@ -402,7 +354,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             <span className="lm-eyebrow">{t.notFound.eyebrow}</span>
             <h1>{t.notFound.mapTitle}</h1>
             <p>{t.notFound.mapDesc}</p>
-            <AppLink href="/app/library" className="lm-primary-button">{t.notFound.backToLibrary} <ArrowRight size={15}/></AppLink>
+            <AppLink href="/app" className="lm-primary-button">{t.notFound.backToWorkspace} <ArrowRight size={15}/></AppLink>
           </div>
         )
       ) : (
@@ -419,10 +371,9 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
             </div>
           )}
 
-          {isLibrary ? (
-            <LibraryView key={`library:${route.search}`} maps={maps} workspaces={workspaces} initialFilter={workspaces.find((space) => space.id === new URLSearchParams(route.search).get("workspace"))?.id} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
-          ) : isShared ? (
-            <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
+          {pageGroup ? (
+            <WorkspaceMapsView key={pageGroup.id} group={pageGroup} workspaces={workspaces}
+              onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap} onTemplateCopy={openCreatedMap}/>
           ) : route.pathname === "/app/create/source" ? (
             <SourceView workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onCreate={createMap}/>
           ) : isCreate ? (
@@ -454,12 +405,13 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
 
     <ShareDialog target={shareTarget} onClose={() => setShareTarget(null)}/>
     <CreateWorkspaceDialog open={workspaceDialogOpen} onClose={() => setWorkspaceDialogOpen(false)} onCreate={createSpace}/>
+    {orderDialogOpen && <WorkspaceOrderDialog roots={groups.roots} joined={groups.shared.children} onClose={() => setOrderDialogOpen(false)}
+      onSave={async (order) => setWorkspaceOrder(await saveWorkspaceOrder(owner, order))}/>}
     <WorkspaceCommandK
       open={cmdkOpen}
       maps={maps}
       workspaces={workspaces}
       onClose={() => setCmdkOpen(false)}
-      onSelectSpace={chooseSpace}
       onToggleTheme={toggleTheme}
       onToggleLocale={() => { toggleLocale(); }}
       onQuickAiCreate={async (prompt) => {
@@ -639,7 +591,7 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
         <section className="lm-home-recent" aria-label={t.home.recentAria}>
           <div className="lm-home-recent-head">
             <span className="lm-eyebrow">{t.home.recentHeading}</span>
-            <AppLink href="/app/library">{t.home.viewAll} <ArrowRight size={12}/></AppLink>
+            <AppLink href={spacePath(activeWorkspaceId ?? PERSONAL)}>{t.home.viewAll} <ArrowRight size={12}/></AppLink>
           </div>
           <div className="lm-recent-grid" role="list">
             {recentMaps.map((map) => (
@@ -660,12 +612,11 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
   </div>;
 }
 
-function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onToggleTheme, onToggleLocale, onQuickAiCreate }: {
+function WorkspaceCommandK({ open, maps, workspaces, onClose, onToggleTheme, onToggleLocale, onQuickAiCreate }: {
   open: boolean;
   maps: MindmapSummary[];
   workspaces: WorkspaceSummary[];
   onClose: () => void;
-  onSelectSpace: (id: string | null) => void;
   onToggleTheme: () => void;
   onToggleLocale: () => void;
   onQuickAiCreate: (prompt: string) => Promise<void>;
@@ -745,17 +696,14 @@ function WorkspaceCommandK({ open, maps, workspaces, onClose, onSelectSpace, onT
         <button type="button" className="lm-cmdk-item" onClick={() => { onClose(); navigate("/app"); }}>
           <Plus size={13}/><span>{t.cmdk.newMap}</span>
         </button>
-        <button type="button" className="lm-cmdk-item" onClick={() => { onClose(); navigate("/app/library"); }}>
-          <FolderOpen size={13}/><span>{t.cmdk.openLibrary}</span>
-        </button>
         <button type="button" className="lm-cmdk-item" onClick={() => { onToggleTheme(); onClose(); }}>
           <Sparkles size={13}/><span>{t.cmdk.toggleTheme}</span>
         </button>
         <button type="button" className="lm-cmdk-item" onClick={() => { onToggleLocale(); onClose(); }}>
           <Languages size={13}/><span>{t.cmdk.toggleLang}</span>
         </button>
-        {workspaces.map((ws) => (
-          <button key={ws.id} type="button" className="lm-cmdk-item" onClick={() => { onSelectSpace(ws.id); onClose(); }}>
+        {[{ id: PERSONAL, name: t.common.myMaps }, { id: SHARED, name: t.workspace.navShared }, ...workspaces].map((ws) => (
+          <button key={ws.id} type="button" className="lm-cmdk-item" onClick={() => { onClose(); navigate(spacePath(ws.id)); }}>
             <Users size={13}/><span>{t.cmdk.switchSpace(ws.name)}</span>
           </button>
         ))}

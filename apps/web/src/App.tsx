@@ -4,9 +4,11 @@ import { LoginForm } from "./auth/LoginForm.js";
 import { useSession } from "./auth/session.js";
 import type { Session } from "./auth/shared.js";
 import { acceptInvite, previewInvite, type InvitePreview } from "./api.js";
+import { MAP_ID } from "./drafts/shared.js";
 import { useI18n } from "./i18n.js";
 import { AppLink, navigate, useRoute } from "./navigation.js";
 import { Brand, LanguageToggle, LoomindMark, ThemeToggle, type UiTheme } from "./ui.js";
+import { PERSONAL, spacePath } from "./workspace-groups.js";
 
 const themeKey = "loomind-ui-theme";
 const WorkspaceApp = lazy(() => import("./WorkspaceApp.js").then(({ WorkspaceApp }) => ({ default: WorkspaceApp })));
@@ -57,7 +59,10 @@ function SessionRoutes({ route, theme, toggle }: { route: ReturnType<typeof useR
   const { t } = useI18n();
   useEffect(() => {
     if (!session) return;
+    const legacySpace = route.pathname === "/app" || route.pathname === "/app/library" ? new URLSearchParams(route.search).get("workspace") : null;
     if (session.user && (route.pathname === "/" || route.pathname === "/login")) navigate("/app", true);
+    else if (session.user && legacySpace && MAP_ID.test(legacySpace)) navigate(spacePath(legacySpace), true);
+    else if (session.user && route.pathname === "/app/library") navigate(spacePath(PERSONAL), true);
     else if (!session.user && route.pathname.startsWith("/app")) navigate(`/login?next=${encodeURIComponent(route.pathname + route.search)}`, true);
   }, [session, route.pathname, route.search]);
 
@@ -260,7 +265,7 @@ function InvitePage({ token, session, theme, toggle }: { token: string; session:
     setError("");
     try {
       const result = await acceptInvite(token);
-      navigate(result.type === "mindmap" ? `/app/mindmaps/${result.id}` : `/app?workspace=${encodeURIComponent(result.id)}`, true);
+      navigate(result.type === "mindmap" ? `/app/mindmaps/${result.id}` : spacePath(result.id), true);
     } catch (reason) { setError(reason instanceof Error ? reason.message : t.invite.joinFailed); }
     finally { setBusy(false); }
   }
