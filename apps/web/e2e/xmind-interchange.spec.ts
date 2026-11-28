@@ -39,6 +39,8 @@ test("opens the topics and embedded picture from a workbook produced by Xmind's 
 test("renders native sheet styles and clockwise branches after import, save and reload", async ({ context, cloud }) => {
   const page = await cloud.openPage(context, "designer");
   const { api } = await openSavedMap(page, cloud.origin, "designer", createDocument());
+  const synced = page.getByRole("button", { name: "Synced", exact: true });
+  await expect(synced).toBeVisible();
   const dialog = await fileDialog(page);
   const sheets = [nativeSheet("typeset", false), nativeSheet("handwriting", true)];
   const saved = page.waitForResponse((response) => response.url() === api && response.request().method() === "PUT" && response.request().postDataJSON().sheets?.[0]?.id === "typeset");
@@ -48,31 +50,38 @@ test("renders native sheet styles and clockwise branches after import, save and 
   await expect(dialog).toBeHidden();
   expect((await saved).status()).toBe(200);
   await page.reload();
+  // Binding the live checkpoint replaces the editor initially shown from the local cache.
+  await expect(synced).toBeVisible();
   const canvas = page.getByRole("application");
   for (const [index, sheet] of sheets.entries()) {
     if (index) await page.getByText(sheet.title, { exact: true }).click();
     await expect(canvas).toHaveCSS("background-color", "rgb(255, 255, 255)");
     await expect(canvas).toHaveCSS("background-image", "none");
-    const root = canvas.getByRole("treeitem", { level: 1 });
-    const title = root.getByText("Project Overview", { exact: true });
+    const tree = canvas.getByRole("tree", { name: sheet.title, exact: true });
+    const title = tree.getByRole("treeitem", { level: 1 }).getByText(sheet.rootTopic.title, { exact: true });
+    await expect(title).toBeVisible();
     await expect(title).toHaveCSS("font-family", index ? /NeverMind Hand.*cursive/ : /Arvo.*serif/);
-    const titleBox = (await title.boundingBox())!, rootBox = (await root.boundingBox())!;
-    expect(titleBox.x).toBeGreaterThanOrEqual(rootBox.x);
-    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(rootBox.x + rootBox.width + 1);
-    const main = canvas.locator(`[role="treeitem"][data-topic-id="${sheet.id}-0"] > div`).first();
+    await expect.poll(() => title.evaluate((element) => {
+      const text = element.getBoundingClientRect();
+      const card = element.closest('[role="treeitem"]')?.getBoundingClientRect();
+      return !!card && card.width > 0 && card.height > 0 && text.width > 0 && text.height > 0 &&
+        text.left >= card.left && text.right <= card.right + 1;
+    }), { message: `${sheet.title}: the title must fit inside the root topic` }).toBe(true);
+    const main = tree.locator(`[role="treeitem"][data-topic-id="${sheet.id}-0"] > div`).first();
     await expect(main).toHaveCSS("background-color", index ? "rgb(249, 66, 58)" : "rgba(0, 0, 0, 0)");
     await expect(main).toHaveCSS("background-image", index ? /repeating-linear-gradient/ : "none");
     const edges = canvas.locator(index ? 'svg path[fill="rgb(249, 66, 58)"]' : 'svg path[stroke="rgb(249, 66, 58)"][d*=" L "]');
     await expect(edges.first()).toBeVisible();
     const labels = sheet.rootTopic.children.attached.map((topic) => topic.id);
     const split = index ? 4 : 3;
-    await expect.poll(async () => {
-      const center = (await root.boundingBox())!.x;
-      const positions = await canvas.getByRole("treeitem", { level: 2 }).evaluateAll((nodes) => nodes.map((node) => {
+    await expect.poll(() => tree.getByRole("treeitem").evaluateAll((nodes) => {
+      const root = nodes.find((node) => node.getAttribute("aria-level") === "1")?.getBoundingClientRect();
+      if (!root || !root.width || !root.height) return null;
+      const positions = nodes.filter((node) => node.getAttribute("aria-level") === "2").map((node) => {
         const { x, y } = node.getBoundingClientRect(); return { id: node.getAttribute("data-topic-id"), x, y };
-      }).sort((a, b) => a.y - b.y));
-      return [positions.filter((node) => node.x > center), positions.filter((node) => node.x < center)].map((side) => side.map((node) => node.id));
-    }).toEqual([labels.slice(0, split), labels.slice(split).reverse()]);
+      }).sort((a, b) => a.y - b.y);
+      return [positions.filter((node) => node.x > root.x), positions.filter((node) => node.x < root.x)].map((side) => side.map((node) => node.id));
+    })).toEqual([labels.slice(0, split), labels.slice(split).reverse()]);
   }
 });
 
