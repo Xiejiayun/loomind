@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
+  ChevronRight,
   Command,
   FolderOpen,
   GitBranch,
@@ -47,6 +48,8 @@ interface Props {
 }
 
 const TEMPLATE_IDS = ["blank-organic", "quarterly-okr", "annual-roadmap", "root-cause-fishbone"] as const;
+const PERSONAL_SPACE_KEY = "__personal__";
+const SIDEBAR_SPACE_LIMIT = 10;
 
 function errorText(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -70,6 +73,10 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
     try { return localStorage.getItem(`loomind:space:${owner}`) || null; }
     catch { return null; }
   });
+  const [libraryFilter, setLibraryFilter] = useState<string>("all");
+  const [expandedSpaces, setExpandedSpaces] = useState<Record<string, boolean>>(() => ({
+    [activeWorkspaceId ?? PERSONAL_SPACE_KEY]: true,
+  }));
   const [pendingAiPrompt, setPendingAiPrompt] = useState<string | undefined>(undefined);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
@@ -144,7 +151,11 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
         : local;
       setMaps(sortMaps(merged));
       setWorkspaces(spaces);
-      setActiveWorkspaceId((current) => current && spaces.some((space) => space.id === current) ? current : null);
+      setActiveWorkspaceId((current) => {
+        const next = current && spaces.some((space) => space.id === current) ? current : null;
+        setExpandedSpaces((prev) => ({ ...prev, [next ?? PERSONAL_SPACE_KEY]: true }));
+        return next;
+      });
       setListError(failures.join(" "));
       setLoading(false);
 
@@ -198,13 +209,45 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
     return () => window.removeEventListener("keydown", shortcut);
   }, [mapId, toggleSidebar]);
 
-  const recent = useMemo(() => sortMaps(maps.filter((map) => map.workspaceId === activeWorkspaceId)).slice(0, 6), [maps, activeWorkspaceId]);
+  const { personalMaps, directSharedMaps, mapsByWorkspace } = useMemo(() => {
+    const personal: MindmapSummary[] = [];
+    const directShared: MindmapSummary[] = [];
+    const bySpace = new Map<string, MindmapSummary[]>();
+    for (const map of sortMaps(maps)) {
+      if (map.workspaceId) {
+        const bucket = bySpace.get(map.workspaceId);
+        if (bucket) bucket.push(map);
+        else bySpace.set(map.workspaceId, [map]);
+      } else if (map.access === "owner") {
+        personal.push(map);
+      } else {
+        directShared.push(map);
+      }
+    }
+    return { personalMaps: personal, directSharedMaps: directShared, mapsByWorkspace: bySpace };
+  }, [maps]);
+
+  const recent = useMemo(
+    () => (activeWorkspaceId ? (mapsByWorkspace.get(activeWorkspaceId) ?? []) : personalMaps).slice(0, 6),
+    [activeWorkspaceId, mapsByWorkspace, personalMaps],
+  );
+
+  const activeMap = mapId && MAP_ID.test(mapId) ? maps.find((item) => item.id === mapId) : undefined;
+
+  useEffect(() => {
+    if (!activeMap) return;
+    if (activeMap.workspaceId || activeMap.access === "owner") {
+      const key = activeMap.workspaceId ?? PERSONAL_SPACE_KEY;
+      setExpandedSpaces((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+    }
+  }, [activeMap?.id, activeMap?.workspaceId, activeMap?.access]);
 
   async function createMap(document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) {
     const id = crypto.randomUUID();
     await saveLocal(owner, { document, revision: 0, dirty: true, workspaceId, access: "owner" }, id);
     setMaps((current) => [{ id, title: mapTitle(document), updatedAt: new Date().toISOString(), workspaceId, access: "owner" }, ...current]);
     setActiveWorkspaceId(workspaceId);
+    setExpandedSpaces((prev) => ({ ...prev, [workspaceId ?? PERSONAL_SPACE_KEY]: true }));
     setPendingAiPrompt(aiPrompt);
     navigate(`/app/mindmaps/${id}`);
   }
@@ -213,6 +256,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
     const space = await createWorkspace(name);
     setWorkspaces((current) => [...current, space]);
     setActiveWorkspaceId(space.id);
+    setExpandedSpaces((prev) => ({ ...prev, [space.id]: true }));
     setActionError("");
   }
 
@@ -253,13 +297,69 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   const isShared = route.pathname === "/app/shared";
   const isCreate = route.pathname === "/app/create";
   const createMode = new URLSearchParams(route.search).get("mode") === "outline" ? "outline" : "idea";
+  const toggleSpaceExpanded = (key: string) => {
+    setExpandedSpaces((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
   const chooseSpace = (id: string | null) => {
     setActiveWorkspaceId(id);
-    setMobileOpen(false);
-    if (mapId) navigate("/app");
+    setExpandedSpaces((prev) => ({ ...prev, [id ?? PERSONAL_SPACE_KEY]: true }));
+    if (isLibrary || isShared) {
+      setLibraryFilter(id ?? "personal");
+      if (isShared) navigate("/app/library");
+      setMobileOpen(false);
+    } else if (!mapId) {
+      setMobileOpen(false);
+    }
   };
-
-  const activeMap = mapId && MAP_ID.test(mapId) ? maps.find((item) => item.id === mapId) : undefined;
+  const openSpaceLibrary = (spaceId: string | null) => {
+    setActiveWorkspaceId(spaceId);
+    setLibraryFilter(spaceId ?? "personal");
+    setMobileOpen(false);
+    navigate("/app/library");
+  };
+  const renderSpaceMaps = (spaceId: string | null, spaceMaps: MindmapSummary[], flat = false) => {
+    const visible = spaceMaps.slice(0, SIDEBAR_SPACE_LIMIT);
+    if (activeMap && !visible.some((item) => item.id === activeMap.id) && spaceMaps.some((item) => item.id === activeMap.id)) {
+      visible[visible.length - 1] = activeMap;
+    }
+    return (
+      <div className={`lm-space-maps ${flat ? "is-flat" : ""}`} role="list">
+        {visible.map((map) => (
+          <AppLink
+            key={map.id}
+            href={`/app/mindmaps/${map.id}`}
+            className={`lm-space-map-item ${map.id === mapId ? "is-active" : ""}`}
+            role="listitem"
+            title={map.title}
+            onClick={() => setMobileOpen(false)}
+          >
+            <GitBranch size={12} className="lm-space-map-icon" aria-hidden="true"/>
+            <span>{map.title}</span>
+          </AppLink>
+        ))}
+        {spaceMaps.length > visible.length && (
+          <button
+            type="button"
+            className="lm-space-map-more"
+            onClick={() => {
+              if (flat) {
+                setLibraryFilter("shared");
+                setMobileOpen(false);
+                navigate("/app/library");
+              } else {
+                openSpaceLibrary(spaceId);
+              }
+            }}
+          >
+            {t.workspace.viewAllInSpace(spaceMaps.length)}
+          </button>
+        )}
+        {spaceMaps.length === 0 && !flat && (
+          <div className="lm-space-maps-empty">{t.workspace.emptySpaceMaps}</div>
+        )}
+      </div>
+    );
+  };
 
   return <div className={`lm-app-shell ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
     <aside id="lm-workspace-sidebar" className={`lm-sidebar ${mobileOpen ? "is-open" : ""}`} aria-label={t.workspace.sidebarAria}
@@ -277,52 +377,67 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
         <AppLink href="/app" className={`lm-nav-item ${route.pathname === "/app" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
           <SquarePen size={14}/><span>{t.workspace.navHome}</span><kbd>N</kbd>
         </AppLink>
-        <AppLink href="/app/library" className={`lm-nav-item ${isLibrary || isShared ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
+        <AppLink href="/app/library" className={`lm-nav-item ${isLibrary || isShared ? "is-active" : ""}`} onClick={() => { setLibraryFilter("all"); setMobileOpen(false); }}>
           <FolderOpen size={14}/><span>{t.workspace.navLibrary}</span>
         </AppLink>
       </nav>
 
-      <section className="lm-sidebar-section" aria-label={t.workspace.selectSpaceAria}>
-        {workspaces.length === 0 ? (
-          <button
-            type="button"
-            className="lm-workspace-empty-row"
-            title={t.workspace.newSpace}
-            aria-label={t.workspace.newSpace}
-            onClick={() => setWorkspaceDialogOpen(true)}
-          >
+      <div className="lm-sidebar-scroll">
+        <section className="lm-sidebar-section" aria-label={t.workspace.selectSpaceAria}>
+          <div className="lm-sidebar-section-title">
             <span>{t.workspace.spacesEyebrow}</span>
-            <Plus size={12}/>
-          </button>
-        ) : (
-          <>
-            <div className="lm-sidebar-section-title">
-              <span>{t.workspace.spacesEyebrow}</span>
-              <button
-                type="button"
-                className="lm-sidebar-section-action"
-                title={t.workspace.newSpace}
-                aria-label={t.workspace.newSpace}
-                onClick={() => setWorkspaceDialogOpen(true)}
-              >
-                <Plus size={12}/>
-              </button>
+            <button
+              type="button"
+              className="lm-sidebar-section-action"
+              title={t.workspace.newSpace}
+              aria-label={t.workspace.newSpace}
+              onClick={() => setWorkspaceDialogOpen(true)}
+            >
+              <Plus size={12}/>
+            </button>
+          </div>
+          <div className="lm-space-list">
+            <div className="lm-space-group">
+              <div className={`lm-space-row ${!activeWorkspaceId ? "is-selected" : ""}`}>
+                <button
+                  type="button"
+                  className={`lm-space-toggle ${expandedSpaces[PERSONAL_SPACE_KEY] ? "is-expanded" : ""}`}
+                  aria-expanded={Boolean(expandedSpaces[PERSONAL_SPACE_KEY])}
+                  aria-label={t.workspace.toggleSpaceMapsAria(t.common.myMaps)}
+                  onClick={() => toggleSpaceExpanded(PERSONAL_SPACE_KEY)}
+                >
+                  <ChevronRight size={12}/>
+                </button>
+                <button
+                  type="button"
+                  className={`lm-space-item ${!activeWorkspaceId ? "is-selected" : ""}`}
+                  aria-pressed={!activeWorkspaceId}
+                  onClick={() => chooseSpace(null)}
+                >
+                  <Layers size={13} className="lm-space-icon"/>
+                  <span className="lm-space-name">{t.common.myMaps}</span>
+                  {personalMaps.length > 0 && <span className="lm-space-count">{personalMaps.length}</span>}
+                  {!activeWorkspaceId && <span className="lm-space-active-dot" aria-hidden="true"/>}
+                </button>
+              </div>
+              {expandedSpaces[PERSONAL_SPACE_KEY] && renderSpaceMaps(null, personalMaps)}
             </div>
-            <div className="lm-space-list">
-              <button
-                type="button"
-                className={`lm-space-item ${!activeWorkspaceId ? "is-selected" : ""}`}
-                aria-pressed={!activeWorkspaceId}
-                onClick={() => chooseSpace(null)}
-              >
-                <Layers size={13} className="lm-space-icon"/>
-                <span className="lm-space-name">{t.common.myMaps}</span>
-                {!activeWorkspaceId && <span className="lm-space-active-dot" aria-hidden="true"/>}
-              </button>
-              {workspaces.map((space) => {
-                const selected = activeWorkspaceId === space.id;
-                return (
-                  <div key={space.id} className={`lm-space-row ${selected ? "is-selected" : ""}`}>
+            {workspaces.map((space) => {
+              const selected = activeWorkspaceId === space.id;
+              const expanded = Boolean(expandedSpaces[space.id]);
+              const spaceMaps = mapsByWorkspace.get(space.id) ?? [];
+              return (
+                <div key={space.id} className="lm-space-group">
+                  <div className={`lm-space-row ${selected ? "is-selected" : ""}`}>
+                    <button
+                      type="button"
+                      className={`lm-space-toggle ${expanded ? "is-expanded" : ""}`}
+                      aria-expanded={expanded}
+                      aria-label={t.workspace.toggleSpaceMapsAria(space.name)}
+                      onClick={() => toggleSpaceExpanded(space.id)}
+                    >
+                      <ChevronRight size={12}/>
+                    </button>
                     <button
                       type="button"
                       className={`lm-space-item ${selected ? "is-selected" : ""}`}
@@ -331,7 +446,8 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
                     >
                       <span className="lm-space-glyph" aria-hidden="true">{space.name.slice(0, 1).toUpperCase()}</span>
                       <span className="lm-space-name">{space.name}</span>
-                      {selected && space.role !== "owner" && <span className="lm-space-active-dot" aria-hidden="true"/>}
+                      {spaceMaps.length > 0 && <span className="lm-space-count">{spaceMaps.length}</span>}
+                      {selected && <span className="lm-space-active-dot" aria-hidden="true"/>}
                     </button>
                     {space.role === "owner" && (
                       <button
@@ -345,14 +461,22 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
                       </button>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </section>
+                  {expanded && renderSpaceMaps(space.id, spaceMaps)}
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
-      <div className="lm-sidebar-spacer" aria-hidden="true"/>
+        {directSharedMaps.length > 0 && (
+          <section className="lm-sidebar-section" aria-label={t.workspace.navShared}>
+            <div className="lm-sidebar-section-title">
+              <span>{t.workspace.navShared}</span>
+            </div>
+            {renderSpaceMaps(null, directSharedMaps, true)}
+          </section>
+        )}
+      </div>
 
       <div className="lm-sidebar-bottom">
         <div className="lm-sidebar-account-btn" title={session.user!.email}>
@@ -416,7 +540,25 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
           )}
 
           {isLibrary ? (
-            <LibraryView key="library" maps={maps} workspaces={workspaces} onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
+            <LibraryView
+              key="library"
+              maps={maps}
+              workspaces={workspaces}
+              filter={libraryFilter}
+              onFilterChange={(next) => {
+                setLibraryFilter(next);
+                if (next === "personal") {
+                  setActiveWorkspaceId(null);
+                  setExpandedSpaces((prev) => ({ ...prev, [PERSONAL_SPACE_KEY]: true }));
+                } else if (workspaces.some((space) => space.id === next)) {
+                  setActiveWorkspaceId(next);
+                  setExpandedSpaces((prev) => ({ ...prev, [next]: true }));
+                }
+              }}
+              onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })}
+              onMove={moveMap}
+              onDelete={deleteMap}
+            />
           ) : isShared ? (
             <LibraryView key="shared" maps={maps} workspaces={workspaces} initialFilter="shared" isSharedView onShare={(map) => setShareTarget({ type: "mindmap", id: map.id, name: map.title })} onMove={moveMap} onDelete={deleteMap}/>
           ) : isCreate ? (
@@ -434,6 +576,7 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
               activeWorkspaceId={activeWorkspaceId}
               workspaces={workspaces}
               recentMaps={recent}
+              onViewAll={() => setLibraryFilter(activeWorkspaceId ?? "personal")}
               onCreate={createMap}
             />
           ) : (
@@ -464,11 +607,12 @@ export function WorkspaceApp({ route, session, changeSession, theme, toggleTheme
   </div>;
 }
 
-function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, onCreate }: {
+function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, onViewAll, onCreate }: {
   owner: string;
   activeWorkspaceId: string | null;
   workspaces: WorkspaceSummary[];
   recentMaps: MindmapSummary[];
+  onViewAll: () => void;
   onCreate: (document: MindmapDocument, workspaceId: string | null, aiPrompt?: string) => Promise<void>;
 }) {
   const { locale, t } = useI18n();
@@ -632,7 +776,7 @@ function HomeComposerView({ owner, activeWorkspaceId, workspaces, recentMaps, on
         <section className="lm-home-recent" aria-label={t.home.recentAria}>
           <div className="lm-home-recent-head">
             <span className="lm-eyebrow">{t.home.recentHeading}</span>
-            <AppLink href="/app/library">{t.home.viewAll} <ArrowRight size={12}/></AppLink>
+            <AppLink href="/app/library" onClick={onViewAll}>{t.home.viewAll} <ArrowRight size={12}/></AppLink>
           </div>
           <div className="lm-recent-grid" role="list">
             {recentMaps.map((map) => (

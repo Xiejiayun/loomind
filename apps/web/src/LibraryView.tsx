@@ -22,10 +22,12 @@ export function formatRelativeTime(value: string, locale: Locale = getLocale()) 
   return new Intl.DateTimeFormat(getIntlLocale(locale), { month: "short", day: "numeric" }).format(date);
 }
 
-export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedView = false, onShare, onMove, onDelete }: {
+export function LibraryView({ maps, workspaces, initialFilter = "all", filter: controlledFilter, onFilterChange, isSharedView = false, onShare, onMove, onDelete }: {
   maps: MindmapSummary[];
   workspaces: WorkspaceSummary[];
   initialFilter?: string;
+  filter?: string;
+  onFilterChange?: (filter: string) => void;
   isSharedView?: boolean;
   onShare: (map: MindmapSummary) => void;
   onMove: (map: MindmapSummary, workspaceId: string) => Promise<void>;
@@ -34,7 +36,12 @@ export function LibraryView({ maps, workspaces, initialFilter = "all", isSharedV
   const { locale, t } = useI18n();
   const intlLocale = getIntlLocale(locale);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState(initialFilter);
+  const [localFilter, setLocalFilter] = useState(initialFilter);
+  const filter = controlledFilter ?? localFilter;
+  const setFilter = (next: string) => {
+    if (onFilterChange) onFilterChange(next);
+    else setLocalFilter(next);
+  };
   const [sort, setSort] = useState<"recent" | "title">("recent");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
