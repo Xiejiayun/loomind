@@ -34,7 +34,7 @@ import { useEditorI18n } from "../i18n.js";
 export type { AiChatMessage };
 
 export interface QueuedAiRequest {
-  prompt: string;
+  prompt?: string;
   action?: NodeAiActionKind;
   forceFullMap?: boolean;
 }
@@ -189,11 +189,12 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   };
 
   const executePrompt = async (
-    rawText: string,
+    rawText: string | undefined,
     explicitAction?: NodeAiActionKind,
     forceFullMap = false,
   ) => {
-    const text = rawText.trim();
+    const question = rawText?.trim();
+    const text = question || (explicitAction ? t.aiChat.quickActions[explicitAction].prompt : "");
     if (!text || busy || readOnly) return;
 
     const targetId = forceFullMap ? sheet.rootTopic.id : activeTopicId ?? sheet.rootTopic.id;
@@ -265,17 +266,15 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           targetId,
           inferredAction,
           locale,
-          aiRuntime
-            ? {
-                transport: aiRuntime.transport,
-                tier: aiRuntime.tier,
-                prompt: text,
-                selectedTopicIds,
-                history,
-                signal: controller.signal,
-                onEvent,
-              }
-            : { prompt: text, history, onEvent },
+          {
+            transport: aiRuntime?.transport,
+            tier: aiRuntime?.tier,
+            prompt: question,
+            selectedTopicIds,
+            history,
+            signal: controller.signal,
+            onEvent,
+          },
         );
         setMessages((prev) => {
           const next = prev.map((m) =>
@@ -317,12 +316,12 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   ...m,
                   pending: false,
                   status: "done" as const,
-                  content: result?.message || t.aiChat.generatedFull(text),
-                  plan: result?.plan ?? m.plan,
-                  steps: result?.steps ?? m.steps,
-                  outcome: result?.outcome ?? m.outcome,
+                  content: result.message,
+                  plan: result.plan ?? m.plan,
+                  steps: result.steps ?? m.steps,
+                  outcome: result.outcome ?? m.outcome,
                   mutation: {
-                    summary: result?.summary || t.aiChat.generatedFullMutation,
+                    summary: result.summary,
                     targetTopicId: sheet.rootTopic.id,
                   },
                 }
@@ -388,7 +387,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
   useEffect(() => {
     if (!open || busy || readOnly) return;
-    if (queuedRequest?.prompt) {
+    if (queuedRequest?.prompt || queuedRequest?.action) {
       const req = queuedRequest;
       onConsumeQueuedPrompt?.();
       void executePrompt(

@@ -79,13 +79,14 @@ export function reconcileStreamingTree(
     const titleStr = node.title?.trim().slice(0, AI_LIMITS.MAX_TITLE_CHARS);
 
     if (!existing && parentId) {
+      if (!titleStr) return;
       adapter.applyCommand(
         {
           type: "topic/addChild",
           sheetId,
           parentId,
           newId: nodeId,
-          title: createRichText(titleStr || "思考中..."),
+          title: createRichText(titleStr),
         },
         { coalesceKey },
       );

@@ -9,12 +9,12 @@
 | 编号 | 资源名称 | 对应环境变量 / 配置项 | 用途 | 当前开发态替代方案（Mock） | 是否必填（生产） |
 |---|---|---|---|---|---|
 | **R1** | **自有付费 LLM 代理站地址** | `PRO_LLM_BASE_URL`（Worker Secret / Var） | 已登录 Pro 用户调用的 OpenAI Responses / Chat 兼容接口根地址（已写入本地 `.dev.vars`：`https://aerial.jeremyxie.com/v1`） | 本地 `.dev.vars` 已配置真实地址；线上缺失且 `AI_ALLOW_MOCK=true` 时走 `Pro Mock Provider` | **需写入 Cloudflare Worker Secret** |
-| **R2** | **自有付费 LLM 代理站密钥** | `PRO_LLM_API_KEY`（Worker Secret） | 调用代理站的 `Authorization: Bearer <key>` 凭据（已从本地文件写入被 `.gitignore` 忽略的 `apps/web/.dev.vars`） | 本地 `.dev.vars` 已配置真实密钥；线上未写入前走 Mock 兜底 | **需写入 Cloudflare Worker Secret** |
+| **R2** | **自有付费 LLM 代理站密钥** | `PRO_LLM_API_KEY`（Worker Secret） | 调用代理站的 `Authorization: Bearer <key>` 凭据 | 未配置时 Pro 不可用；只有显式开启演示模式才会返回 Mock | **需写入 Cloudflare Worker Secret** |
 | **R3** | **付费模式默认模型名** | `PRO_LLM_MODEL`（Worker Var） | 指定代理站上的强力模型 ID（已在 `wrangler.jsonc` 配置为 `gpt-6.2-sol`，已实测通过 `/v1/responses` 流式返回） | 已配置真实模型名 | **已完成配置** |
 | **R4** | **Cloudflare Workers AI 绑定确认** | `wrangler.jsonc` 中 `"ai": { "binding": "AI" }` | `/try` 免费体验页调用 Cloudflare 原生免费 10,000 Neurons/天 推理 | 本地 `wrangler dev --local` 无远端 AI 绑定且 `AI_ALLOW_MOCK=true` 时走 `Free Mock Provider` | **生产自动生效**（确认账户已开通 Workers AI） |
 | **R5** | **免费体验默认模型名** | `AI_FREE_MODEL`（Worker Var） | Workers AI 目录中支持流式文本生成的模型 ID | 默认 `@cf/google/gemma-4-26b-a4b-it` | 可选（已有默认值） |
 | **R6** | **每日调用配额阈值** | `AI_FREE_DAILY_LIMIT`、`AI_PRO_DAILY_LIMIT` | 控制单 IP 免费体验次数与单登录用户付费调用次数 | 代码默认 `10`（免费） / `100`（付费） | 可选（已有默认值） |
-| **R7** | **生产关闭 Mock 开关** | `AI_ALLOW_MOCK`（Worker Var） | 控制缺失上游凭据时是否允许降级为 Mock | 本地/预发默认 `true` 便于测试；**生产必须设为 `false`** | **生产必改 `false`** |
+| **R7** | **生产关闭 Mock 开关** | `AI_ALLOW_MOCK`（Worker Var） | 控制缺失上游凭据时是否允许降级为 Mock | 不自动启用；仅本地演示或测试按需设为 `true` | **生产保持 `false`** |
 | **R8** | **线上 D1 执行 `0005` 迁移** | `apps/web/migrations/0005_ai_usage.sql` | 创建 `ai_usage_daily` 每日配额限流表 | 本地与单测自动执行；生产发布工作流会自动 apply | **生产必执行** |
 
 ---
@@ -36,7 +36,7 @@ AI_FREE_MODEL=@cf/google/gemma-4-26b-a4b-it
 AI_FREE_DAILY_LIMIT=10
 AI_PRO_DAILY_LIMIT=100
 
-# 本地若要严格验证真实上游（不降级 Mock），设为 false
+# 使用真实上游；仅需要测试固定演示数据时改为 true
 AI_ALLOW_MOCK=false
 ```
 
@@ -57,7 +57,7 @@ pnpm dev
 2. **确认非敏感 Vars（`apps/web/wrangler.jsonc` 或 Cloudflare Dashboard）**：
    - 更换 `AI_FREE_MODEL` 前，在 `apps/web` 下用 `pnpm exec wrangler ai models list --search <模型名> --task "Text Generation"` 核对完整 ID，并用新模型实际完成一次节点扩展。`/api/ai/config` 的 `isMock: false` 只表示有 AI 绑定，不代表模型可以调用；
    - 将 `PRO_LLM_MODEL` 更新为你代理站支持的强力模型名称；
-   - 将 `AI_ALLOW_MOCK` 改为 `"false"`；
+   - 确认 `AI_ALLOW_MOCK` 保持 `"false"`；
    - 确认 `wrangler.jsonc` 中 `"ai": { "binding": "AI" }` 已存在。
 3. **通过现有受控生产发布工作流发布**：
    - 触发 `.github/workflows/deploy-production.yml`，该工作流会自动对生产 D1 执行待运行的 `0005_ai_usage.sql` 迁移并部署 Worker。

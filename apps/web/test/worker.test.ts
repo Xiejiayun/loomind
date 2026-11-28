@@ -7,6 +7,7 @@ import { getPlatformProxy, unstable_readConfig, type PlatformProxy } from "wrang
 import { createRichText, getTemplate } from "@mindmap/core";
 import { LoroSyncAdapter } from "@mindmap/core/loro";
 import worker from "../worker/auth.js";
+import { runProOpenAiStream } from "../worker/ai-providers.js";
 import { DRAFT_LIMIT, LIVE_HEADER, OWNER_HEADER, type LiveCheckpoint } from "../src/drafts/shared.js";
 
 const origin = "https://loomind.test";
@@ -556,11 +557,72 @@ describe("mindmaps API (local workerd D1)", () => {
 });
 
 describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
+  it.each([
+    { locale: "en", question: "比较蒸发和沸腾", title: "汽化方式", branches: ["蒸发", "沸腾"] },
+    { locale: "zh", question: "Map the seasons in Australia", title: "Seasons", branches: ["Summer", "Autumn", "Winter", "Spring"] },
+    { locale: "en", question: "请用西班牙语画出一周里的每一天", title: "Días de la semana", branches: ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] },
+  ])("keeps the user's question and the model's actual branches and summary ($title)", async ({ locale, question, title, branches }) => {
+    const root = { title, children: branches.map(title => ({ title })) };
+    const output = { root, title, summary: branches.join(" · ") };
+    const run = vi.fn(async (_model: string, _input: { messages: { role: string; content: string }[] }) => ({ response: JSON.stringify(output) }));
+    const response = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.76" },
+      body: JSON.stringify({ tier: "free", intent: "generate_map", prompt: question, locale, history: [{ role: "user", content: "Old question in another language" }] }),
+    }), { ...env, AI: { run } as unknown as Ai, AI_FREE_DAILY_LIMIT: "20" });
+    const stream = await response.text();
+    expect(response.status).toBe(200);
+    const [system, user] = run.mock.calls[0][1].messages;
+    expect(system.content).toContain("language explicitly requested");
+    expect(system.content).toContain("language of the current user's question");
+    expect(system.content).toContain("Honor an explicitly requested count");
+    expect(system.content).not.toMatch(/strictly in English|严格使用简体中文|\d+\s*(?:to|[-–])\s*\d+/i);
+    expect(user.content.endsWith(`Current user request: ${question}`)).toBe(true);
+    expect(stream).toContain(`event: map_patch\ndata: ${JSON.stringify({ partial: output })}`);
+    expect(stream).toContain(`event: message_delta\ndata: ${JSON.stringify({ delta: output.summary })}`);
+    expect(stream).not.toContain("event: plan");
+  });
+
+  it("uses map context instead of interface text for a node shortcut and rejects empty questions", async () => {
+    const run = vi.fn(async (_model: string, _input: { messages: { content: string }[] }) => ({ response: JSON.stringify({ message: "秋の季語", ops: [] }) }));
+    const body = { tier: "free", intent: "expand", prompt: "", locale: "en", targetTopicId: "haiku", context: { outline: { id: "haiku", title: "俳句" } } };
+    const response = await worker.fetch(new Request(`${origin}/api/ai/stream`, {
+      method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.77" }, body: JSON.stringify(body),
+    }), { ...env, AI: { run } as unknown as Ai });
+    expect(await response.text()).toContain('"delta":"秋の季語"');
+    const [system, user] = run.mock.calls[0][1].messages;
+    expect(system.content).toContain("language of the selected topic");
+    expect(user.content).toContain("俳句");
+    expect(user.content).not.toContain("Current user request:");
+    expect((await request("ai/stream", "POST", "", { ...body, intent: "generate_map" })).status).toBe(400);
+    expect((await request("ai/stream", "POST", "", { ...body, context: undefined })).status).toBe(400);
+  });
+
+  it.each(["responses", "chat"] as const)("keeps the language rule and model-authored text in Pro %s mode", async (mode) => {
+    const question = "Draw a map of rain in Japanese";
+    const title = "雨の種類";
+    const text = JSON.stringify({ root: { title } });
+    const upstream = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json(mode === "responses"
+      ? { output_text: text } : { choices: [{ message: { content: text } }] }));
+    try {
+      const emit = vi.fn();
+      await runProOpenAiStream({ ...env, PRO_LLM_BASE_URL: "https://pro-llm.test/v1", PRO_LLM_API_KEY: "fixture", PRO_LLM_API_MODE: mode },
+        { tier: "pro", intent: "generate_map", prompt: question, locale: "zh", targetTopicId: "root" }, emit, new AbortController().signal);
+      const body = JSON.parse(String(upstream.mock.calls[0][1]?.body));
+      expect(body.instructions ?? body.messages[0].content).toContain("language explicitly requested");
+      expect(body.input ?? body.messages[1].content).toContain(`Current user request: ${question}`);
+      expect(emit).toHaveBeenCalledWith("message_delta", { delta: title });
+      expect(emit).toHaveBeenCalledWith("done", expect.objectContaining({ summary: title }));
+    } finally {
+      upstream.mockRestore();
+    }
+  });
+
   it("uses the deployed Workers AI model by default for guest node expansion", async () => {
     const config = unstable_readConfig({ config: fileURLToPath(new URL("../wrangler.jsonc", import.meta.url)) });
     const model = "@cf/google/gemma-4-26b-a4b-it";
     expect(config.vars.AI_FREE_MODEL).toBe(model);
     expect(config.vars.AI_FREE_DAILY_LIMIT).toBe("3");
+    expect(config.vars.AI_ALLOW_MOCK).toBe("false");
 
     const ops = [{ kind: "addChildren", targetTopicId: "root", items: ["选址", "馆藏", "服务", "活动"].map(title => ({ title })) }];
     const chunk = { choices: [{ delta: { content: JSON.stringify({ ops }) } }] };
@@ -592,7 +654,12 @@ describe("dual-tier AI API (free Workers AI + logged-in Pro LLM)", () => {
 
   it("reports free config for guests and enforces auth + origin + quota + streaming", async () => {
     const guestFreeCfg = await (await request("ai/config?tier=free")).json() as { tier: string; available: boolean; isMock: boolean; requiresLogin: boolean };
-    expect(guestFreeCfg).toMatchObject({ tier: "free", available: true, isMock: true, requiresLogin: false });
+    expect(guestFreeCfg).toMatchObject({ tier: "free", available: false, isMock: false, requiresLogin: false });
+    const unavailable = await request("ai/stream", "POST", "", { tier: "free", intent: "generate_map", prompt: "No provider" });
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.json()).toMatchObject({ code: "FREE_UNAVAILABLE" });
+    const demoConfig = await worker.fetch(new Request(`${origin}/api/ai/config?tier=free`), { ...env, AI_ALLOW_MOCK: "true" });
+    expect(await demoConfig.json()).toMatchObject({ available: true, isMock: true });
 
     const guestProCfg = await (await request("ai/config?tier=pro")).json() as { tier: string; available: boolean; requiresLogin: boolean };
     expect(guestProCfg).toMatchObject({ tier: "pro", available: false, requiresLogin: true });

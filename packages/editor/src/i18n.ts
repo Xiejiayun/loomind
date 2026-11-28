@@ -89,7 +89,7 @@ const zh = {
       "拆解系统设计中的关键权衡与心智模型",
     ],
     quickActions: {
-      expand: { label: "扩展子节点", prompt: "为当前节点扩展 4 个关键子主题" },
+      expand: { label: "扩展子节点", prompt: "根据当前节点的内容展开相关子主题" },
       tasks: { label: "拆解任务", prompt: "将当前节点拆解为可执行待办任务" },
       summarize: { label: "生成概要", prompt: "为当前节点的子分支生成概要结论" },
       elaborateNote: { label: "补充备注", prompt: "为当前节点生成结构化 Markdown 长备注" },
@@ -507,7 +507,7 @@ const en: typeof zh = {
       "Break down key mental models and trade-offs in system design",
     ],
     quickActions: {
-      expand: { label: "Expand", prompt: "Expand 4 key subtopics for this node" },
+      expand: { label: "Expand", prompt: "Expand this topic into relevant subtopics" },
       tasks: { label: "Tasks", prompt: "Break this node into actionable tasks" },
       summarize: { label: "Summarize", prompt: "Generate a summary for this branch" },
       elaborateNote: { label: "Add Note", prompt: "Write a structured Markdown note for this node" },

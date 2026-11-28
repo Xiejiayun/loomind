@@ -233,7 +233,7 @@ const MindmapEditorInner: React.FC<
     if (readOnly) return;
     if (formatCoversLeft) setFormatPanelOpen(false);
     setLeftPanel("ai");
-    if (prompt) setQueuedAiRequest({ prompt, action });
+    if (prompt || action) setQueuedAiRequest({ prompt, action });
   };
 
   const focusTopicOnCanvas = useCallback(
