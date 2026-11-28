@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { LanguageModelV1 } from "ai";
 import { createDocument, LocalImmerSyncAdapter, richTextToPlainText } from "@mindmap/core";
 import {
   AiClientError,
@@ -37,6 +38,8 @@ describe("@mindmap/ai streaming & actions", () => {
     const sheetId = doc.activeSheetId;
     const rootId = doc.sheets[0].rootTopic.id;
 
+    reconcileStreamingTree(adapter, sheetId, rootId, { children: [{ children: [{ title: "细节" }] }] }, "testai");
+    expect(adapter.getDocument().sheets[0].rootTopic).toEqual(doc.sheets[0].rootTopic);
     reconcileStreamingTree(
       adapter,
       sheetId,
@@ -66,28 +69,66 @@ describe("@mindmap/ai streaming & actions", () => {
     expect(aiChildren[0].children).toHaveLength(1);
   });
 
-  it("executes node-level AI actions (expand, tasks, restyle)", async () => {
+  it("produces the fixed task fixture only in explicit demo mode", async () => {
     const doc = createDocument();
     const adapter = new LocalImmerSyncAdapter(doc);
     const sheetId = doc.activeSheetId;
     const targetId = doc.sheets[0].rootTopic.children[0].id;
 
-    await runNodeAiAction(adapter, sheetId, targetId, "tasks");
+    await runNodeAiAction(adapter, sheetId, targetId, "tasks", "zh", { demo: true });
     const updated = adapter.getDocument().sheets[0].rootTopic.children[0];
     expect(updated.children).toHaveLength(4);
     expect(updated.children.every((c) => c.task?.status === "todo")).toBe(true);
   });
 
-  it("returns localized English output when locale is set to en", async () => {
+  it("labels the localized expansion fixture as a demo", async () => {
     const doc = createDocument();
     const adapter = new LocalImmerSyncAdapter(doc);
     const sheetId = doc.activeSheetId;
     const targetId = doc.sheets[0].rootTopic.children[0].id;
 
-    const msg = await runNodeAiAction(adapter, sheetId, targetId, "expand", "en");
-    expect(msg).toContain("Expanded 4 subtopics");
+    const msg = await runNodeAiAction(adapter, sheetId, targetId, "expand", "en", { demo: true });
+    expect(msg).toContain("Demo: Expanded 4 subtopics");
     const updated = adapter.getDocument().sheets[0].rootTopic.children[0];
     expect(richTextToPlainText(updated.children[0].title)).toContain("Key Elements");
+  });
+
+  it("does not invent content or overwrite the canvas when no provider is available", async () => {
+    const doc = createDocument();
+    const adapter = new LocalImmerSyncAdapter(doc);
+    const sheetId = doc.activeSheetId;
+    const before = structuredClone(adapter.getDocument());
+    await expect(streamGenerateMindmap({ adapter, sheetId, prompt: "比较两种方案" })).rejects.toMatchObject({ code: "FREE_UNAVAILABLE" });
+    await expect(runNodeAiAction(adapter, sheetId, doc.sheets[0].rootTopic.id, "expand", "zh", { tier: "pro" })).rejects.toMatchObject({ code: "PRO_NOT_CONFIGURED" });
+    await expect(streamGenerateMindmap({ adapter, sheetId, prompt: " ", demo: true })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(adapter.getDocument()).toEqual(before);
+  });
+
+  it("passes the unwrapped question to the direct model and preserves its language and shape", async () => {
+    const doc = createDocument();
+    const adapter = new LocalImmerSyncAdapter(doc);
+    const question = "请用法语画出水的三态";
+    const titles = ["Solide", "Liquide", "Gaz"];
+    const output = { title: "États de l’eau", root: { title: "États de l’eau", children: titles.map(title => ({ title })) }, summary: "Les trois états de l’eau." };
+    const model: LanguageModelV1 = {
+      specificationVersion: "v1", provider: "fixture", modelId: "fixture", defaultObjectGenerationMode: "json",
+      doGenerate: () => { throw new Error("Expected streaming"); },
+      doStream: async ({ prompt }) => {
+        expect(prompt.find(entry => entry.role === "system")?.content).toContain("language explicitly requested");
+        expect(prompt.find(entry => entry.role === "user")?.content).toEqual([{ type: "text", text: question }]);
+        return { rawCall: { rawPrompt: prompt, rawSettings: {} }, stream: new ReadableStream({ start(controller) {
+          controller.enqueue({ type: "text-delta", textDelta: JSON.stringify(output) });
+          controller.enqueue({ type: "finish", finishReason: "stop", usage: { promptTokens: 10, completionTokens: 30 } });
+          controller.close();
+        } }) };
+      },
+    };
+    const result = await streamGenerateMindmap({ adapter, sheetId: doc.activeSheetId, prompt: question, locale: "en", model });
+    const sheet = adapter.getDocument().sheets[0];
+    expect(sheet.rootTopic.children.map(topic => richTextToPlainText(topic.title))).toEqual(titles);
+    expect(sheet.structure).toBe(doc.sheets[0].structure);
+    expect(adapter.getDocument().theme.paletteId).toBe(doc.theme.paletteId);
+    expect(result.summary).toBe(output.summary);
   });
 
   it("parses partial/fenced JSON and enforces mindmap output guardrails", () => {
@@ -175,13 +216,14 @@ describe("@mindmap/ai streaming & actions", () => {
     const sheetId = doc.activeSheetId;
     const targetId = doc.sheets[0].rootTopic.children[0].id;
 
-    const okTransport = createHttpAiTransport("/api/ai/stream", async () =>
-      sseResponse([
+    const okTransport = createHttpAiTransport("/api/ai/stream", async (_url, init) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ intent: "expand", prompt: "", context: { activeTopicId: targetId } });
+      return sseResponse([
         `event: commands\ndata: ${JSON.stringify({ ops: [{ kind: "addChildren", targetTopicId: targetId, items: [{ title: "Remote Idea A", task: "todo" }, { title: "Remote Idea B" }] }] })}\n\n`,
         `event: message_delta\ndata: ${JSON.stringify({ delta: "Added 2 remote ideas" })}\n\n`,
         `event: done\ndata: ${JSON.stringify({ summary: "Added 2 remote ideas", appliedCount: 2 })}\n\n`,
-      ]),
-    );
+      ]);
+    });
 
     const msg = await runNodeAiAction(adapter, sheetId, targetId, "expand", "en", {
       transport: okTransport,

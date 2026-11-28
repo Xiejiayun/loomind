@@ -318,7 +318,7 @@ export function serializeAiContext(
   let truncated = false;
 
   const pack = (topic: MindmapTopic, depth: number, inFocusBranch: boolean): CompactTopicNode => {
-    const title = richTextToPlainText(topic.title).trim().slice(0, AI_LIMITS.MAX_TITLE_CHARS) || "Topic";
+    const title = richTextToPlainText(topic.title).trim().slice(0, AI_LIMITS.MAX_TITLE_CHARS);
     const node: CompactTopicNode = { id: topic.id, title };
     budget -= title.length + topic.id.length + 24;
 

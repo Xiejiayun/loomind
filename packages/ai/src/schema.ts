@@ -37,15 +37,16 @@ export const AiMindmapStreamSchema = z.object({
     "timeline",
     "fishbone",
     "treeTable",
-  ]),
+  ]).optional(),
   recommendedPalette: z.enum([
     "xmind-rainbow",
     "aurora",
     "warm-paper",
     "midnight-neon",
     "forest-calm",
-  ]),
+  ]).optional(),
   root: AiTopicSchema,
+  summary: z.string().optional(),
 });
 
 export type AiMindmapStream = z.infer<typeof AiMindmapStreamSchema>;

@@ -73,7 +73,7 @@ flowchart LR
    - 服务端定时输出 `: ping\n\n` 心跳，前端支持 `AbortController` 一键停止生成并断开上游。
 5. **Mock 透明性原则**：
    - Mock 引擎严格走完整 SSE 协议（`meta` / `status` / `map_patch` / `commands` / `message_delta` / `done`），用于在未提供真实代理站 Key 或本地离线开发时打通端到端链路与 UI；
-   - 响应 `meta.isMock = true` 会在前端清晰标注「Mock 演示数据」，绝不冒充真实模型；生产环境配齐资源后设置 `AI_ALLOW_MOCK=false` 即可关闭。
+   - 仅显式设置 `AI_ALLOW_MOCK=true` 才会启用演示数据，响应标记 `meta.isMock = true`。生产配置关闭 Mock；未配置真实模型时返回不可用，不生成模板导图。
 
 ---
 
@@ -103,7 +103,7 @@ flowchart LR
   "tier": "free",
   "intent": "generate_map",
   "prompt": "2026 AI 产品增长战略",
-  "locale": "zh-CN",
+  "locale": "zh",
   "targetTopicId": "root",
   "context": {
     "sheetId": "sheet-1",
@@ -116,6 +116,8 @@ flowchart LR
 }
 ```
 支持 `intent`：`"generate_map" | "expand" | "tasks" | "summarize" | "cluster" | "elaborateNote" | "restyle" | "chat"`。
+
+`locale` 表示界面语言，不决定 AI 输出语言。整图、计划、备注和结果摘要优先使用用户明确指定的语言，否则跟随当前提问。节点快捷操作没有用户输入时传 `prompt: ""`、目标节点和大纲，沿用节点或导图语言。内容本身决定层级和分支数；通道的大小保护不是生成目标。
 
 SSE 响应事件：
 - `meta`：`{ requestId, tier, modelLabel, isMock, remainingToday }`

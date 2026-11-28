@@ -52,7 +52,7 @@ export const InlineAiBar: React.FC<InlineAiBarProps> = ({
 
   const triggerQuick = (action: NodeAiActionKind) => {
     onClose();
-    onContinueInPanel(t.aiChat.quickActions[action].prompt, action);
+    onContinueInPanel(text.trim() || undefined, action);
   };
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -14,6 +14,7 @@ import {
 } from "@mindmap/core";
 import {
   AI_LIMITS,
+  AiClientError,
   AiSafeCommandSchema,
   isValidPalette,
   isValidSkeleton,
@@ -34,6 +35,7 @@ import {
   type AiTier,
   type AiTransport,
 } from "./protocol.js";
+import { AI_CONTENT_POLICY } from "@mindmap/core/ai-content-policy";
 import { AiMindmapStreamSchema, type AiMindmapStream, type AiTopicNode, type DeepPartial } from "./schema.js";
 import { reconcileStreamingTree } from "./stream-patcher.js";
 
@@ -50,6 +52,7 @@ export interface StreamGenerateOptions {
   sheetId: string;
   prompt: string;
   model?: LanguageModelV1;
+  demo?: boolean;
   transport?: AiTransport;
   tier?: AiTier;
   signal?: AbortSignal;
@@ -60,6 +63,7 @@ export interface StreamGenerateOptions {
 }
 
 export interface NodeAiActionOptions {
+  demo?: boolean;
   transport?: AiTransport;
   tier?: AiTier;
   prompt?: string;
@@ -81,9 +85,14 @@ export interface AiExecutionResult {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function missingProvider(tier: AiTier | undefined, locale: Locale): AiClientError {
+  return new AiClientError(tier === "pro" ? "PRO_NOT_CONFIGURED" : "FREE_UNAVAILABLE",
+    locale === "en" ? "No AI provider is configured." : "尚未配置 AI 服务。");
+}
+
 function buildLocalDemoPlan(prompt: string, locale: Locale): AiMindmapStream {
+  const topic = prompt.trim();
   if (locale === "en") {
-    const topic = prompt.trim() || "AI Product Innovation Plan";
     return {
       title: topic,
       recommendedStructure: "mindmap",
@@ -129,7 +138,6 @@ function buildLocalDemoPlan(prompt: string, locale: Locale): AiMindmapStream {
     };
   }
 
-  const topic = prompt.trim() || "AI 产品创新方案";
   return {
     title: topic,
     recommendedStructure: "mindmap",
@@ -577,15 +585,13 @@ export async function executeRemoteAiStream(opts: {
       }
       const sanitized = sanitizeAiMindmapPartial(ev.data.partial);
       if (!rootReset) {
+        if (!sanitized.root?.title) continue;
         rootReset = true;
         adapter.applyCommand(
           {
             type: "doc/replaceSheetRoot",
             sheetId,
-            rootTopic: createTopic(
-              rootId,
-              sanitized.root?.title || prompt.trim().slice(0, AI_LIMITS.MAX_TITLE_CHARS) || (isEn ? "Generating..." : "生成中..."),
-            ),
+            rootTopic: createTopic(rootId, sanitized.root.title),
           },
           { coalesceKey },
         );
@@ -693,9 +699,8 @@ export async function executeRemoteAiStream(opts: {
     count: addedNodes + updatedNodes,
   });
 
-  const fallbackSummary = isEn ? "Updated mind map" : "已更新思维导图";
-  const finalSummary = doneSummary || messageText.trim() || fallbackSummary;
-  const finalMessage = messageText.trim() || doneSummary || fallbackSummary;
+  const finalSummary = doneSummary || messageText.trim() || plan?.goal || highlights.map(({ title }) => title).join(" · ");
+  const finalMessage = messageText.trim() || finalSummary;
 
   return {
     message: finalMessage,
@@ -716,14 +721,14 @@ export async function executeRemoteAiStream(opts: {
 /**
  * Generates a full mindmap with live branch-by-branch streaming growth.
  * Uses remote `AiTransport` (`/api/ai/stream`) when provided, Vercel AI SDK
- * `streamObject` when a `model` is provided, or falls back to a deterministic
- * progressive local stream for zero-config demos/tests.
+ * `streamObject` with a supplied `model`, or a fixture only with `demo: true`.
  */
-export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promise<AiExecutionResult | void> {
+export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promise<AiExecutionResult> {
   const { adapter, sheetId, prompt, model, transport, tier = "free", signal, history, onStep, onEvent } = opts;
   const locale = opts.locale ?? getLocale();
   const isEn = locale === "en";
 
+  if (!prompt.trim()) throw new AiClientError("INVALID_REQUEST", isEn ? "Enter a question or topic." : "请输入问题或主题。");
   if (transport) {
     return executeRemoteAiStream({
       adapter,
@@ -739,39 +744,40 @@ export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promis
       onEvent,
     });
   }
+  if (!model && !opts.demo) throw missingProvider(tier, locale);
 
   const startedAt = Date.now();
   const doc = adapter.getDocument();
   const sheet = doc.sheets.find((s) => s.id === sheetId);
-  if (!sheet) return;
+  if (!sheet) throw new AiClientError("INVALID_REQUEST", isEn ? "Sheet not found" : "未找到画布");
 
   const prefix = `ai${Date.now().toString(36).slice(-4)}`;
   const coalesceKey = `ai-stream:${prefix}`;
   const rootId = sheet.rootTopic.id;
 
-  // Reset root children cleanly
-  adapter.applyCommand(
-    {
-      type: "doc/replaceSheetRoot",
-      sheetId,
-      rootTopic: createTopic(rootId, prompt.trim() || (isEn ? "Generating..." : "生成中...")),
-    },
-    { coalesceKey },
+  const replaceRoot = (title: string) => adapter.applyCommand(
+    { type: "doc/replaceSheetRoot", sheetId, rootTopic: createTopic(rootId, title) }, { coalesceKey },
   );
 
   if (model) {
     const { partialObjectStream } = streamObject({
       model,
       schema: AiMindmapStreamSchema,
-      prompt:
-        isEn
-          ? `Generate a clear, well-structured mind map about "${prompt}".`
-          : `请围绕主题「${prompt}」生成结构清晰、层次分明的思维导图。`,
+      system: `Generate a mind map from the user's request.\n${AI_CONTENT_POLICY}`,
+      prompt,
+      abortSignal: signal,
     });
 
+    let title = "";
+    let summary = "";
+    let addedNodes = 0;
     for await (const partial of partialObjectStream) {
       if (signal?.aborted) break;
       const sanitized = sanitizeAiMindmapPartial(partial as DeepPartial<AiMindmapStream>);
+      if (!sanitized.root?.title) continue;
+      if (!title) replaceRoot(sanitized.root.title);
+      title = sanitized.root.title;
+      if (partial.summary?.trim()) summary = partial.summary.trim();
       if (sanitized.recommendedStructure) {
         adapter.applyCommand(
           { type: "sheet/setLayout", sheetId, structure: sanitized.recommendedStructure },
@@ -784,14 +790,17 @@ export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promis
           { coalesceKey },
         );
       }
-      reconcileStreamingTree(adapter, sheetId, rootId, sanitized.root, prefix, { coalesceKey });
+      addedNodes += reconcileStreamingTree(adapter, sheetId, rootId, sanitized.root, prefix, { coalesceKey }).addedNodes;
       onStep?.(sanitized);
     }
-    return;
+    if (signal?.aborted) throw new AiClientError("ABORTED", isEn ? "Request aborted" : "已停止生成");
+    if (!title) throw new AiClientError("INVALID_OUTPUT", isEn ? "Missing root topic." : "生成结果缺少中心主题。");
+    return { message: summary || title, summary: summary || title, appliedCount: addedNodes + 1 };
   }
 
   // Deterministic progressive local streaming (grows branch by branch)
   const planObj = buildLocalDemoPlan(prompt, locale);
+  replaceRoot(planObj.root.title);
   const execPlan: AiExecutionPlan = {
     goal: isEn ? `Structure "${planObj.title}" into clear pillars` : `围绕「${planObj.title}」梳理核心脉络`,
     approach: isEn
@@ -820,8 +829,8 @@ export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promis
   ];
   for (const s of steps) onEvent?.({ event: "step", data: s });
 
-  adapter.applyCommand({ type: "sheet/setLayout", sheetId, structure: planObj.recommendedStructure }, { coalesceKey });
-  adapter.applyCommand({ type: "theme/set", patch: { paletteId: planObj.recommendedPalette } }, { coalesceKey });
+  if (planObj.recommendedStructure) adapter.applyCommand({ type: "sheet/setLayout", sheetId, structure: planObj.recommendedStructure }, { coalesceKey });
+  if (planObj.recommendedPalette) adapter.applyCommand({ type: "theme/set", patch: { paletteId: planObj.recommendedPalette } }, { coalesceKey });
 
   const progressive: DeepPartial<AiTopicNode> = {
     title: planObj.root.title,
@@ -880,7 +889,7 @@ export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promis
   steps.push(verifyStep);
   onEvent?.({ event: "step", data: verifyStep });
 
-  const summary = isEn ? `Generated mind map for "${planObj.title}"` : `已生成「${planObj.title}」思维导图`;
+  const summary = isEn ? `Demo: mind map for "${planObj.title}"` : `演示：已生成「${planObj.title}」思维导图`;
   return {
     message: summary,
     summary,
@@ -918,7 +927,7 @@ export async function runNodeAiActionDetailed(
       transport: opts.transport,
       tier: opts.tier ?? "free",
       intent: action,
-      prompt: opts.prompt || action,
+      prompt: opts.prompt ?? "",
       locale,
       targetTopicId: topicId,
       selectedTopicIds: opts.selectedTopicIds,
@@ -927,6 +936,7 @@ export async function runNodeAiActionDetailed(
       onEvent: opts.onEvent,
     });
   }
+  if (!opts?.demo) throw missingProvider(opts?.tier, locale);
 
   const startedAt = Date.now();
   const doc = adapter.getDocument();
@@ -1174,6 +1184,7 @@ export async function runNodeAiActionDetailed(
     }
   }
 
+  message = isEn ? `Demo: ${message}` : `演示：${message}`;
   const execStep: AiExecutionStep = {
     id: "exec-local",
     phase: "execute",

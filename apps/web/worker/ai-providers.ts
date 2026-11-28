@@ -1,3 +1,5 @@
+import { AI_CONTENT_POLICY } from "@mindmap/core/ai-content-policy";
+
 export type WorkerAiTier = "free" | "pro";
 export type WorkerAiIntent =
   | "generate_map"
@@ -20,7 +22,7 @@ export interface WorkerAiRequest {
   tier: WorkerAiTier;
   intent: WorkerAiIntent;
   prompt: string;
-  locale: "zh" | "en";
+  locale?: "zh" | "en";
   targetTopicId: string;
   context?: {
     sheetId?: string;
@@ -59,7 +61,7 @@ export function resolveProModel(env: Env): string {
 }
 
 export function allowMock(env: Env): boolean {
-  return env.AI_ALLOW_MOCK !== "false";
+  return env.AI_ALLOW_MOCK === "true";
 }
 
 export function hasRealProConfig(env: Env): boolean {
@@ -71,40 +73,36 @@ export function hasRealFreeConfig(env: Env): boolean {
 }
 
 function buildSystemPrompt(req: WorkerAiRequest): string {
-  const isEn = req.locale === "en";
-  const langRule = isEn ? "Respond strictly in English." : "严格使用简体中文输出。";
-
   if (req.intent === "generate_map") {
     return [
       "You are Loomind AI, an expert mind-mapping architect.",
-      langRule,
+      AI_CONTENT_POLICY,
       "Output ONLY a single valid JSON object (no markdown fences, no commentary) with keys in this exact order so the plan streams first:",
-      '{"plan":{"goal":"concise goal","approach":"brief structuring rationale","steps":["step 1","step 2","step 3"]},"title":"string","recommendedStructure":"mindmap|logic|org|brace|timeline|fishbone|treeTable","recommendedPalette":"xmind-rainbow|aurora|warm-paper|midnight-neon|forest-calm","root":{"title":"string","subtitle":"optional string","children":[{"title":"string","labels":["optional short tag"],"children":[{"title":"string","task":"optional todo"}]}]}}',
-      "Keep plan.steps to 3-5 concrete steps. Create 4 to 5 well-organized top-level branches, each with 2 to 4 concrete child nodes. Keep every title concise (<= 40 chars). Never exceed 40 total nodes or depth 4.",
+      "plan (goal, optional approach, steps as an array of strings), title, optional recommendedStructure and recommendedPalette, root, summary (a brief description of the actual result).",
+      "Each topic has a concise title; add subtitle, labels, task (todo or done) or recursive children only where useful. Leaves need no children.",
+      "Recommend a structure or palette only when justified by the request or material; otherwise omit them to keep the canvas settings. Allowed structures: mindmap, logic, org, brace, timeline, fishbone, treeTable. Allowed palettes: xmind-rainbow, aurora, warm-paper, midnight-neon, forest-calm. Keep JSON keys and enum values unchanged.",
     ].join("\n");
   }
 
   return [
     "You are Loomind AI, an expert mind-mapping co-creator.",
-    langRule,
-    `Target topic ID is "${req.targetTopicId}".`,
+    AI_CONTENT_POLICY,
+    "Use the supplied target topic ID when emitting operations. Keep JSON keys, identifiers and enum values unchanged.",
     "Output ONLY a single valid JSON object (no markdown fences, no commentary) with keys in this exact order so the plan streams first:",
-    '{"plan":{"goal":"concise goal","approach":"brief execution strategy","steps":["step 1","step 2"]},"message":"short user-facing explanation of the result","summary":"short mutation summary","ops":[...]}',
+    "plan (goal, optional approach, steps as an array of strings), message (a short user-facing explanation), summary (a short mutation summary), ops (an array of operations).",
     "Allowed op shapes in ops array:",
     '- {"kind":"addChildren","targetTopicId":"<id>","items":[{"title":"...","subtitle":"optional","labels":["optional"],"task":"optional todo"}]}',
     '- {"kind":"setSummary","targetTopicId":"<id>","title":"...","note":"optional markdown"}',
     '- {"kind":"setBoundary","targetTopicId":"<id>","title":"..."}',
-    '- {"kind":"setNote","targetTopicId":"<id>","markdown":"### Heading\\n- point 1\\n- point 2"}',
+    '- {"kind":"setNote","targetTopicId":"<id>","markdown":"<note text>"}',
     '- {"kind":"setStyle","structure":"mindmap|logic|org|brace|timeline|fishbone|treeTable|matrix","paletteId":"xmind-rainbow|aurora|warm-paper|midnight-neon|forest-calm|sunset-coral|blueprint"}',
     "Only use the op(s) directly relevant to the requested intent. Keep titles concise and actionable.",
   ].join("\n");
 }
 
 function buildUserPrompt(req: WorkerAiRequest): string {
-  const parts = [
-    `Intent: ${req.intent}`,
-    `User request: ${req.prompt}`,
-  ];
+  const parts = [`Intent: ${req.intent}`];
+  if (req.intent !== "generate_map") parts.push(`Target topic ID: ${JSON.stringify(req.targetTopicId)}`);
   if (req.history && req.history.length > 0) {
     const historyLines = req.history.slice(-6).map((turn) => {
       const prefix = turn.role === "user" ? "User" : "Assistant";
@@ -120,6 +118,7 @@ function buildUserPrompt(req: WorkerAiRequest): string {
     const serialized = JSON.stringify(req.context.outline).slice(0, 10_000);
     parts.push(`Current mind map outline JSON: ${serialized}`);
   }
+  parts.push(req.prompt ? `Current user request: ${req.prompt}` : "Editor shortcut; no written question.");
   return parts.join("\n\n");
 }
 
@@ -138,32 +137,6 @@ function sanitizeWorkerPlan(raw: unknown): { goal: string; approach?: string; st
     : [];
   if (!goal && steps.length === 0) return null;
   return { goal: goal || steps[0] || "", ...(approach ? { approach } : {}), steps };
-}
-
-function synthesizeFallbackPlan(req: WorkerAiRequest, finalObj: Record<string, unknown>): { goal: string; approach?: string; steps: string[] } {
-  const isEn = req.locale === "en";
-  if (req.intent === "generate_map") {
-    const title = typeof finalObj.title === "string" && finalObj.title.trim() ? finalObj.title.trim() : req.prompt.slice(0, 60);
-    const root = finalObj.root as { children?: Array<{ title?: string }> } | undefined;
-    const branchSteps = (root?.children ?? [])
-      .map((c) => (typeof c?.title === "string" ? c.title.trim() : ""))
-      .filter(Boolean)
-      .slice(0, 5)
-      .map((t) => (isEn ? `Build branch "${t}"` : `构建分支「${t}」`));
-    return {
-      goal: isEn ? `Create structured mind map for "${title}"` : `围绕「${title}」构建结构化思维导图`,
-      approach: isEn
-        ? `Organize core themes into ${Math.max(1, branchSteps.length)} primary branches with actionable subtopics.`
-        : `按核心维度拆解为 ${Math.max(1, branchSteps.length)} 个一级分支并细化子节点。`,
-      steps: branchSteps.length > 0 ? branchSteps : [isEn ? "Build central topic and core branches" : "构建中心主题与核心分支"],
-    };
-  }
-  return {
-    goal: isEn ? `Execute "${req.intent}" for: ${req.prompt.slice(0, 80)}` : `执行「${req.prompt.slice(0, 60)}」`,
-    steps: isEn
-      ? ["Analyze selected topic context", "Generate structured canvas updates", "Apply and verify changes"]
-      : ["分析选中节点上下文", "生成结构化画布改动", "写入画布并校验结果"],
-  };
 }
 
 function extractBalancedJsonObjects(text: string): string[] {
@@ -332,14 +305,15 @@ async function consumeTextTokenStream(
     throw new Error(req.locale === "en" ? "Model returned invalid structured JSON." : "模型未返回有效的导图 JSON 结构。");
   }
 
-  const finalPlan = sanitizeWorkerPlan(finalObj.plan) ?? synthesizeFallbackPlan(req, finalObj);
-  const finalPlanStr = JSON.stringify(finalPlan);
-  if (finalPlanStr !== lastPlanJson) {
+  const finalPlan = sanitizeWorkerPlan(finalObj.plan);
+  if (finalPlan && JSON.stringify(finalPlan) !== lastPlanJson) {
     emit("plan", finalPlan);
   }
+  const modelSummary = typeof finalObj.summary === "string" ? finalObj.summary.trim() : "";
 
   if (req.intent === "generate_map") {
-    if (!finalObj.root || typeof finalObj.root !== "object") {
+    const rootTitle = (finalObj.root as { title?: unknown } | null)?.title;
+    if (typeof rootTitle !== "string" || !rootTitle.trim()) {
       throw new Error(req.locale === "en" ? "Generated map is missing a root topic." : "生成结果缺少中心主题结构。");
     }
     const serialized = JSON.stringify(finalObj);
@@ -347,11 +321,7 @@ async function consumeTextTokenStream(
       emittedPatches += 1;
       emit("map_patch", { partial: finalObj });
     }
-    const title = typeof finalObj.title === "string" && finalObj.title.trim() ? finalObj.title.trim() : req.prompt;
-    const summary =
-      req.locale === "en"
-        ? `Generated mind map for "${title}"`
-        : `已流式生成「${title}」思维导图`;
+    const summary = modelSummary || rootTitle.trim();
     emit("message_delta", { delta: summary });
     emit("done", { summary, appliedCount: Math.max(1, emittedPatches) });
     return;
@@ -361,18 +331,9 @@ async function consumeTextTokenStream(
   if (ops.length > 0) {
     emit("commands", { ops });
   }
-  const message =
-    typeof finalObj.message === "string" && finalObj.message.trim()
-      ? finalObj.message.trim()
-      : req.locale === "en"
-        ? "Updated the selected topic."
-        : "已更新当前节点内容。";
-  const summary =
-    typeof finalObj.summary === "string" && finalObj.summary.trim()
-      ? finalObj.summary.trim()
-      : message;
-  emit("message_delta", { delta: message });
-  emit("done", { summary, appliedCount: ops.length });
+  const message = (typeof finalObj.message === "string" ? finalObj.message.trim() : "") || modelSummary;
+  if (message) emit("message_delta", { delta: message });
+  emit("done", { summary: modelSummary || message, appliedCount: ops.length });
 }
 
 async function* iterateSseTextDeltas(

@@ -212,7 +212,7 @@ function buildConfigStatus(env: Env, tier: WorkerAiTier, subject: string | undef
     return {
       available: Boolean(subject) && (real || mockAllowed),
       isMock: !real && mockAllowed,
-      providerLabel: real ? "Loomind AI" : "Loomind AI (Mock)",
+      providerLabel: !real && mockAllowed ? "Loomind AI (Mock)" : "Loomind AI",
       modelLabel: model,
       requiresLogin: !subject,
     };
@@ -222,7 +222,7 @@ function buildConfigStatus(env: Env, tier: WorkerAiTier, subject: string | undef
   return {
     available: real || mockAllowed,
     isMock: !real && mockAllowed,
-    providerLabel: real ? "Loomind AI" : "Loomind AI (Mock)",
+    providerLabel: !real && mockAllowed ? "Loomind AI (Mock)" : "Loomind AI",
     modelLabel: model.replace(/^@cf\/[^/]+\//, ""),
     requiresLogin: false,
   };
@@ -240,10 +240,7 @@ function parseStreamBody(raw: unknown): WorkerAiRequest {
     : null;
   if (!intent) throw new HttpError(400, "不支持的 AI 意图类型。");
   const prompt = typeof obj.prompt === "string" ? obj.prompt.trim() : "";
-  if (!prompt || prompt.length > 2_000) {
-    throw new HttpError(400, "提示词须在 1 到 2000 字之间。");
-  }
-  const locale = obj.locale === "en" ? "en" : "zh";
+  const locale = obj.locale === "en" || obj.locale === "zh" ? obj.locale : undefined;
   const targetTopicId =
     typeof obj.targetTopicId === "string" && obj.targetTopicId.trim()
       ? obj.targetTopicId.trim().slice(0, 120)
@@ -252,6 +249,11 @@ function parseStreamBody(raw: unknown): WorkerAiRequest {
     obj.context && typeof obj.context === "object" && !Array.isArray(obj.context)
       ? (obj.context as WorkerAiRequest["context"])
       : undefined;
+  const nodeShortcut = intent !== "generate_map" && intent !== "chat" && typeof obj.targetTopicId === "string"
+    && obj.targetTopicId.trim() && context?.outline;
+  if (typeof obj.prompt !== "string" || (!prompt && !nodeShortcut) || prompt.length > 2_000) {
+    throw new HttpError(400, "请提供有效的提问或节点快捷操作，提示词不能超过 2000 字。");
+  }
   const history = Array.isArray(obj.history)
     ? obj.history
         .filter((h): h is Record<string, unknown> => Boolean(h && typeof h === "object" && !Array.isArray(h)))
