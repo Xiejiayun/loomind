@@ -8,7 +8,7 @@ async function useLocalFixtures(page: Page, signedIn = false) {
     if (url.pathname === "/api/auth/session") {
       return route.fulfill({ json: { user: signedIn ? { id: "mobile-test", email: "mobile@example.test" } : null, expiresAt: null } });
     }
-    if (url.pathname === "/api/workspaces" || url.pathname === "/api/mindmaps") return route.fulfill({ json: [] });
+    if (["/api/workspaces", "/api/workspaces/order", "/api/mindmaps"].includes(url.pathname)) return route.fulfill({ json: [] });
     if (url.pathname === "/api/ai/config") {
       return route.fulfill({ json: { tier: url.searchParams.get("tier"), available: true, isMock: true, providerLabel: "Test fixture", modelLabel: "Test fixture", dailyLimit: 3, remainingToday: 3 } });
     }
@@ -72,7 +72,7 @@ test("phone panels stay below their toolbar and preserve a covered chat draft", 
   await expect(chat).toBeHidden();
 });
 
-test("open the workspace drawer from an edited map and reopen it from the library", async ({ page }) => {
+test("open the workspace drawer from an edited map and reopen it from Personal", async ({ page }) => {
   await useLocalFixtures(page, true);
   await page.goto("/app");
   const title = "Mobile map with a deliberately long title";
@@ -89,8 +89,8 @@ test("open the workspace drawer from an edited map and reopen it from the librar
   await expect(drawer).toBeHidden();
   await expect(opener).toBeFocused();
   await opener.tap();
-  await drawer.getByRole("link", { name: "Library" }).tap();
-  const map = page.getByRole("link", { name: title });
+  await drawer.getByRole("link", { name: "Personal", exact: true }).tap();
+  const map = page.getByRole("main").getByRole("link", { name: title });
   await expect(map).toBeInViewport({ ratio: 1 });
   expect((await map.boundingBox())!.width).toBeGreaterThan(80);
   await page.getByRole("button", { name: "Open sidebar" }).tap();
@@ -113,8 +113,103 @@ test("shared viewers can navigate without editing controls covering the map", as
   await expect(page.getByRole("button", { name: "Format", exact: true })).toBeHidden();
   await expectTouchTarget(page.getByRole("button", { name: "Export", exact: true }));
   await page.getByRole("button", { name: "Toggle sidebar" }).tap();
-  await page.getByRole("link", { name: "Library" }).tap();
-  await expect(page.getByRole("link", { name: title })).toBeVisible();
+  await page.getByRole("link", { name: "Shared", exact: true }).tap();
+  const main = page.getByRole("main");
+  await expect(main.getByRole("link", { name: title })).toBeVisible();
+  await expect(main.getByText("Read-only", { exact: true })).toBeVisible();
+  await expect(main.getByRole("button", { name: `Delete ${title}` })).toHaveCount(0);
+});
+
+test("old Library links open Personal; Shared contains direct shares and joined workspaces", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await useLocalFixtures(page, true);
+  const team = crypto.randomUUID();
+  const work = crypto.randomUUID();
+  const elsewhere = crypto.randomUUID();
+  await page.route("**/api/workspaces", (route) => route.fulfill({ json: [
+    { id: team, name: "Invited team", role: "viewer", createdAt: "" }, { id: work, name: "Work", role: "owner", createdAt: "" },
+  ] }));
+  const personal = { id: crypto.randomUUID(), title: "My plan", workspaceId: null, access: "owner", updatedAt: "" };
+  const incoming = Array.from({ length: 11 }, (_, index) => ({ ...personal, id: crypto.randomUUID(), title: `Incoming ${index + 1}`, workspaceId: elsewhere, access: "viewer" }));
+  await page.route("**/api/mindmaps", (route) => route.fulfill({ json: [personal, ...incoming,
+    { ...personal, id: crypto.randomUUID(), title: "Team plan", workspaceId: team, access: "viewer" },
+  ] }));
+  await page.goto("/app/library");
+  await expect(page).toHaveURL(/\/app\/personal$/);
+  const sidebar = page.locator("#lm-workspace-sidebar");
+  const main = page.getByRole("main");
+  await expect(sidebar.getByRole("link", { name: "Library" })).toHaveCount(0);
+  await expect(main.getByRole("link", { name: "My plan" })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Delete My plan" })).toBeAttached();
+  await expect(main.getByText("Incoming 1", { exact: true })).toHaveCount(0);
+  await sidebar.getByRole("button", { name: "Toggle mind maps in Shared" }).click();
+  await expect(sidebar.getByRole("link", { name: "Invited team" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /^Incoming / })).toHaveCount(10);
+  await sidebar.getByRole("link", { name: "View all 11" }).click();
+  await expect(page).toHaveURL(/\/app\/shared$/);
+  await expect(main.getByRole("link", { name: /^Incoming / })).toHaveCount(11);
+  await expect(main.getByRole("link", { name: "My plan" })).toHaveCount(0);
+  await main.getByRole("link", { name: "Invited team" }).click();
+  await expect(main.getByRole("link", { name: "Team plan" })).toBeVisible();
+  await expect(main.getByRole("link", { name: "New Mind Map" })).toHaveCount(0);
+  await page.goBack();
+  await expect(main.getByRole("heading", { name: /Shared/ })).toBeVisible();
+  await sidebar.getByRole("link", { name: "Work", exact: true }).click();
+  await main.getByRole("link", { name: "New Mind Map" }).click();
+  await expect(main.getByRole("combobox", { name: "Save to space" })).toHaveValue(work);
+  await page.goto(`/app?workspace=${team}`);
+  await expect(page).toHaveURL(`/app/workspaces/${team}`);
+  await expect(main.getByRole("link", { name: "Team plan" })).toBeVisible();
+});
+
+test("sidebar order can be canceled, retried and saved from a phone without changing other accounts", async ({ page }) => {
+  await useLocalFixtures(page, true);
+  const work = crypto.randomUUID();
+  let account = "first";
+  const joined = ["Design", "Research"].map((name) => ({ id: crypto.randomUUID(), name, role: "viewer", createdAt: "" }));
+  const orders = new Map<string, string[]>();
+  let failNextSave = true;
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { user: { id: account, email: `${account}@example.test` }, expiresAt: null } }));
+  await page.route("**/api/workspaces", (route) => route.fulfill({ json: [{ id: work, name: "Work", role: "owner", createdAt: "" }, ...joined] }));
+  await page.route("**/api/workspaces/order", (route) => {
+    expect(route.request().headers()["x-loomind-owner"]).toBe(account);
+    if (route.request().method() === "PUT") {
+      if (failNextSave) { failNextSave = false; return route.fulfill({ status: 503, json: { error: "Could not save order" } }); }
+      orders.set(account, route.request().postDataJSON());
+    }
+    return route.fulfill({ json: orders.get(account) ?? [] });
+  });
+  const sidebar = page.locator("#lm-workspace-sidebar");
+  const names = sidebar.locator(".lm-space-list > .lm-space-group > .lm-space-row .lm-space-name");
+  const open = () => page.getByRole("button", { name: "Open sidebar" }).tap();
+  const reorder = sidebar.getByRole("button", { name: "Reorder workspaces" });
+  const dialog = page.getByRole("dialog", { name: "Reorder workspaces" });
+  await page.goto("/app");
+  await open();
+  await expect(names).toHaveText(["Personal", "Shared", "Work"]);
+  await expectTouchTarget(reorder);
+  await reorder.tap();
+  await dialog.getByRole("button", { name: "Move Work up" }).tap();
+  await dialog.getByRole("button", { name: "Cancel" }).tap();
+  await expect(names).toHaveText(["Personal", "Shared", "Work"]);
+  await reorder.tap();
+  await expectTouchTarget(dialog.getByRole("button", { name: "Move Shared up" }));
+  await dialog.getByRole("button", { name: "Move Shared up" }).press("Enter");
+  await dialog.getByRole("button", { name: "Move Research up" }).tap();
+  await dialog.getByRole("button", { name: "Save order" }).tap();
+  await expect(dialog.getByRole("alert")).toHaveText("Could not save order");
+  await dialog.getByRole("button", { name: "Save order" }).tap();
+  await expect(dialog).toBeHidden();
+  await expect(names).toHaveText(["Shared", "Personal", "Work"]);
+  await page.reload();
+  await open();
+  await expect(names).toHaveText(["Shared", "Personal", "Work"]);
+  await sidebar.getByRole("button", { name: "Toggle mind maps in Shared" }).tap();
+  await expect(sidebar.locator(".lm-space-maps .lm-space-name")).toHaveText(["Research", "Design"]);
+  account = "second";
+  await page.reload();
+  await open();
+  await expect(names).toHaveText(["Personal", "Shared", "Work"]);
 });
 
 test("wide layouts still show chat beside the canvas", async ({ page }) => {
