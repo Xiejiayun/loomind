@@ -1,6 +1,6 @@
 import { MAP_ID, OWNER_HEADER } from "../src/drafts/shared.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
-import { database, mindmapPermission, visibleMindmap } from "./permissions.js";
+import { canViewMindmap, database, mindmapPermission } from "./permissions.js";
 
 const MAX_COLLAB_BODY = 256 * 1024;
 const MAX_UPDATE_B64_LEN = 192 * 1024;
@@ -87,7 +87,7 @@ export async function handleCollab(
   const nowMs = Date.now();
 
   if (request.method === "GET") {
-    const visible = await visibleMindmap(db, subject, id);
+    const visible = await canViewMindmap(db, subject, id);
     if (!visible) throw new HttpError(404, "导图不存在或无权访问。");
 
     const url = new URL(request.url);

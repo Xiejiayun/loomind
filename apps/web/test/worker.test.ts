@@ -225,6 +225,39 @@ describe("collaboration API (signed sessions and local D1)", () => {
       .toEqual({ revision: 0, document: null });
   });
 
+  it("rechecks workspace access to collaboration and chat reads without changing their distinct denial responses", async () => {
+    const workspaceId = crypto.randomUUID();
+    const mapId = crypto.randomUUID();
+    const workspaceOwner = "poll-workspace-owner";
+    const viewer = "poll-workspace-viewer";
+    const ownerCookie = await login(workspaceOwner);
+    const viewerCookie = await login(viewer);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO workspaces (id, owner, name) VALUES (?, ?, 'Team')").bind(workspaceId, workspaceOwner),
+      env.DB.prepare("INSERT INTO mindmaps (id, owner, title, revision, document, workspace_id) VALUES (?, 'map-creator', 'Map', 1, ?, ?)")
+        .bind(mapId, JSON.stringify(getTemplate("blank-organic").create()), workspaceId),
+      env.DB.prepare("INSERT INTO workspace_members (workspace_id, subject, role) VALUES (?, ?, 'viewer')").bind(workspaceId, viewer),
+    ]);
+    expect((await request(`mindmaps/${mapId}/ai-chat`, "POST", ownerCookie, {
+      messages: [{ id: "shared-note", role: "user", content: "Team note" }],
+    }, { [OWNER_HEADER]: workspaceOwner })).status).toBe(200);
+
+    async function readMetadata(id: string, subject: string, cookie: string) {
+      const read = (path: string) => request(`mindmaps/${id}/${path}`, "GET", cookie, undefined, { [OWNER_HEADER]: subject });
+      const [poll, chat] = await Promise.all([read("collab"), read("ai-chat")]);
+      const { messages } = await chat.json() as { messages: { id: string }[] };
+      return { poll: poll.status, chat: chat.status, messageIds: messages.map(({ id }) => id) };
+    }
+
+    const allowed = { poll: 200, chat: 200, messageIds: ["shared-note"] };
+    expect(await readMetadata(mapId, workspaceOwner, ownerCookie)).toEqual(allowed);
+    expect(await readMetadata(mapId, viewer, viewerCookie)).toEqual(allowed);
+    await env.DB.prepare("DELETE FROM workspace_members WHERE workspace_id = ? AND subject = ?").bind(workspaceId, viewer).run();
+    const denied = { poll: 404, chat: 200, messageIds: [] };
+    expect(await readMetadata(mapId, viewer, viewerCookie)).toEqual(denied);
+    expect(await readMetadata(crypto.randomUUID(), viewer, viewerCookie)).toEqual(denied);
+  });
+
   it("stores only invitation hashes, enforces revocation and expiry, and never downgrades a member", async () => {
     const alice = await login("share-owner");
     const bob = await login("share-member");

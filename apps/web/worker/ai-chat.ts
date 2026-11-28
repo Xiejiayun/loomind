@@ -1,6 +1,6 @@
 import { MAP_ID, OWNER_HEADER } from "../src/drafts/shared.js";
 import { HttpError, json, readJson, requireOrigin } from "./http.js";
-import { database, mindmapPermission, visibleMindmap } from "./permissions.js";
+import { canViewMindmap, database, mindmapPermission } from "./permissions.js";
 
 const MAX_CHAT_BODY = 192 * 1024;
 const MAX_MESSAGES_PER_MAP = 100;
@@ -150,7 +150,7 @@ export async function handleAiChat(
   const db = database(env);
 
   if (request.method === "GET") {
-    const visible = await visibleMindmap(db, subject, id);
+    const visible = await canViewMindmap(db, subject, id);
     if (!visible) return json({ messages: [] });
     const rows = await db.prepare(`
       SELECT id, actor, role, payload, created_at AS createdAt

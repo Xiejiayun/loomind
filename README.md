@@ -115,6 +115,9 @@ pnpm test
 # Benchmark collaborative leaf renames on 1,001- and 3,001-topic maps (command time only)
 pnpm exec vitest bench --run packages/core/test/loro-rename.bench.ts
 
+# Benchmark idle collaboration polling against local D1 (1 or 8 concurrent readers)
+pnpm exec vitest bench --run apps/web/test/collab-poll.bench.ts
+
 # Build all packages and the web app
 pnpm build
 
@@ -124,6 +127,8 @@ pnpm test:mobile
 ```
 
 The mobile checks serve the built app on loopback and use explicit API fixtures. They exercise real browser layout, touch input and local map storage, not live Google login, AI generation or cloud sync.
+
+See the [collaboration polling benchmark report](docs/COLLAB_POLL_PERFORMANCE.md) for before/after timings and measurement limits.
 
 ### Login and storage
 
