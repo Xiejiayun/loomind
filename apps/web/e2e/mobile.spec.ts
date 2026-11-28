@@ -229,3 +229,34 @@ test("wide layouts still show chat beside the canvas", async ({ page }) => {
   const canvas = await page.getByRole("application").boundingBox();
   expect(canvas!.x).toBeGreaterThanOrEqual(panel!.x + panel!.width);
 });
+
+test("desktop editor shows only one sidebar toggle icon whether expanded or collapsed", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await useLocalFixtures(page, true);
+  const id = "b20d682c-988a-48e2-8278-01796ed4faab";
+  const title = "Desktop sidebar toggle check";
+  await page.route("**/api/mindmaps", (route) => route.fulfill({ json: [{ id, title, access: "owner", workspaceId: null, updatedAt: "2026-01-01T00:00:00Z" }] }));
+  await page.route(`**/api/mindmaps/${id}`, (route) => route.fulfill({ json: { revision: 1, document: documentFromTopic(title) } }));
+  await page.goto(`/app/mindmaps/${id}`);
+  await expect(page.getByRole("application")).toBeVisible();
+
+  const sidebarToggle = page.locator(".lm-sidebar-collapse-btn");
+  const editorToggle = page.locator(".lm-editor-sidebar-toggle");
+
+  // Collapsed by default in editor: only editor header toggle is visible
+  await expect(editorToggle).toBeVisible();
+  await expect(sidebarToggle).toBeHidden();
+  await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(1);
+
+  // Expand sidebar: only sidebar header toggle is visible
+  await editorToggle.click();
+  await expect(sidebarToggle).toBeVisible();
+  await expect(editorToggle).toBeHidden();
+  await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(1);
+
+  // Collapse sidebar again: editor header toggle returns
+  await sidebarToggle.click();
+  await expect(editorToggle).toBeVisible();
+  await expect(sidebarToggle).toBeHidden();
+  await expect(page.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(1);
+});
