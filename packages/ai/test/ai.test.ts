@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LanguageModelV1 } from "ai";
 import { createDocument, LocalImmerSyncAdapter, richTextToPlainText } from "@mindmap/core";
 import {
@@ -32,6 +32,24 @@ function sseResponse(blocks: string[]): Response {
 }
 
 describe("@mindmap/ai streaming & actions", () => {
+  it("keeps path IDs stable within a stream but never reuses a previous run at the same time", async () => {
+    const adapter = new LocalImmerSyncAdapter(createDocument());
+    const transport = createHttpAiTransport("/api/ai/stream", async () => sseResponse([
+      'event: map_patch\ndata: {"partial":{"root":{"title":"Map","children":[{"title":"Same name"},{"title":"Same name"}]}}}\n\n',
+      'event: done\ndata: {"summary":"Done","appliedCount":1}\n\n',
+    ]));
+    const clock = vi.spyOn(Date, "now").mockReturnValue(12345678);
+    try {
+      const run = async () => {
+        await streamGenerateMindmap({ adapter, sheetId: adapter.getDocument().activeSheetId, prompt: "Draw", transport });
+        return adapter.getDocument().sheets[0].rootTopic.children.map((topic) => topic.id);
+      };
+      const first = await run(), second = await run();
+      expect(new Set([...first, ...second]).size).toBe(4);
+      expect(adapter.getDocument().deletedIds).toEqual(expect.arrayContaining(first));
+    } finally { clock.mockRestore(); }
+  });
+
   it("reconciles streaming partial trees incrementally without duplicating nodes", () => {
     const doc = createDocument();
     const adapter = new LocalImmerSyncAdapter(doc);

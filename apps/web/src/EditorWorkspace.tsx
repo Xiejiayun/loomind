@@ -142,7 +142,7 @@ function EditableEditor({ map, owner, session, changeSession, theme, initialAiPr
     }) : null;
     const current: DraftWorkspace = new DraftWorkspace(owner, map.id,
       live?.show ?? ((doc) => open(new LocalImmerSyncAdapter(doc))), setSync, setLocalError,
-      live ? { ...DEFAULT_STORAGE, readCloud: live.read, writeCloud: live.write, mergeLive: live.merge, keepLiveLocal: live.keepLocal }
+      live ? { ...DEFAULT_STORAGE, readCloud: live.read, writeCloud: live.write, mergeLive: live.merge, keepLiveLocal: live.keepLocal, captureHistory: live.captureHistory }
         : { ...DEFAULT_STORAGE, writeCloud: async () => { throw new Error(getWebMessages().editorWorkspace.liveUnavailable); } },
       map.workspaceId, map.access);
     liveRef.current = live;

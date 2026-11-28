@@ -111,6 +111,7 @@ test("transfers both sheets, editable rich titles, equation source and identical
   try {
     const reader = await cloud.openPage(await other.newContext(desktop), "reviewer");
     const { api, headers } = await openSavedMap(reader, cloud.origin, "reviewer", createDocument());
+    await expect(reader.getByRole("button", { name: "Synced", exact: true })).toBeVisible();
     const importing = await fileDialog(reader);
     const persisted = reader.waitForResponse((response) => response.url() === api && response.request().method() === "PUT" && response.request().postDataJSON().assets?.photo);
     reader.once("dialog", (confirmation) => confirmation.accept());

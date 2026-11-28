@@ -1,5 +1,5 @@
 import { canonicalJson, MindmapDocumentSchema, type MindmapDocument } from "@mindmap/core";
-import type { LocalDraft, MapAccess, MindmapSummary } from "./drafts/shared.js";
+import type { DraftHistory, LocalDraft, MapAccess, MindmapSummary } from "./drafts/shared.js";
 import { MAP_ID, mapTitle } from "./drafts/shared.js";
 
 export const DB_NAME = "loomind-db";
@@ -28,6 +28,7 @@ export interface V2DraftRecord {
   baseRevision: number;
   document: MindmapDocument;
   fingerprint: string;
+  history?: DraftHistory;
   workspaceId?: string | null;
   access?: MapAccess;
   updatedAt: number;
@@ -68,6 +69,7 @@ export interface PutDraftCasInput {
   ackedGen: number;
   baseRevision: number;
   document: MindmapDocument;
+  history?: DraftHistory;
   workspaceId?: string | null;
   access?: MapAccess;
 }
@@ -182,6 +184,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isDraftHistory(value: unknown): value is DraftHistory {
+  return isObject(value) && typeof value.room === "string" && MAP_ID.test(value.room) && value.snapshot instanceof Uint8Array;
+}
+
 function parseV2Synced(value: unknown, expectedOwner: string, expectedMapId: string): V2SyncedRecord | null {
   if (!isObject(value)) return null;
   if (value.schema !== 2 || value.kind !== "synced") return null;
@@ -210,6 +216,8 @@ function parseV2Draft(value: unknown, expectedOwner: string, expectedMapId: stri
   if (typeof value.localGen !== "number" || !Number.isSafeInteger(value.localGen) || value.localGen < 0) return null;
   if (typeof value.ackedGen !== "number" || !Number.isSafeInteger(value.ackedGen) || value.ackedGen < 0) return null;
   if (typeof value.baseRevision !== "number" || !Number.isSafeInteger(value.baseRevision) || value.baseRevision < 0) return null;
+  const history = value.history;
+  if (history !== undefined && !isDraftHistory(history)) return null;
   const parsed = MindmapDocumentSchema.safeParse(value.document);
   if (!parsed.success) return null;
   const fingerprint = typeof value.fingerprint === "string" && value.fingerprint
@@ -225,6 +233,7 @@ function parseV2Draft(value: unknown, expectedOwner: string, expectedMapId: stri
     ackedGen: value.ackedGen,
     baseRevision: value.baseRevision,
     document: parsed.data,
+    ...(history && { history }),
     fingerprint,
     workspaceId: typeof value.workspaceId === "string" || value.workspaceId === null ? value.workspaceId : undefined,
     access: value.access === "owner" || value.access === "editor" || value.access === "viewer" ? value.access : undefined,
@@ -495,6 +504,7 @@ export async function putDraftCas(
         ackedGen: effectiveAckedGen,
         baseRevision: Math.max(input.baseRevision, existing?.baseRevision ?? 0),
         document: input.document,
+        ...(input.history && { history: input.history }),
         fingerprint,
         ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : existing?.workspaceId !== undefined ? { workspaceId: existing.workspaceId } : {}),
         ...(input.access !== undefined ? { access: input.access } : existing?.access !== undefined ? { access: existing.access } : {}),

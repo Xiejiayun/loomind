@@ -110,7 +110,16 @@ export class LoroSyncAdapter implements SyncAdapter {
   }
 
   reconcileDraft(doc: MindmapDocument): void {
-    const retained = new Set<string>();
+    this.reconcileTree(doc);
+    this.writeMetaToLoro(doc);
+    this.loro.commit();
+    this.rebuildIndexFromTree();
+    this.cachedDoc = this.readDocumentFromLoro();
+    this.notify(new Set());
+  }
+
+  private reconcileTree(doc: MindmapDocument): void {
+    const retained = new Set<TreeID>();
     const visit = (sheetId: string, topic: MindmapTopic, index: number, parent?: TreeID) => {
       const previous = this.topicIdToTreeId.get(topic.id);
       const node = (previous && this.tree.getNodeByID(previous)) || this.tree.createNode(parent, index);
@@ -120,18 +129,13 @@ export class LoroSyncAdapter implements SyncAdapter {
       if (node.data.get("topicId") !== topic.id) node.data.set("topicId", topic.id);
       if (node.data.get("sheetId") !== sheetId) node.data.set("sheetId", sheetId);
       if (node.data.get("payload") !== payload) node.data.set("payload", payload);
-      retained.add(topic.id);
+      retained.add(node.id);
       children.forEach((child, position) => visit(sheetId, child, position, node.id));
     };
     doc.sheets.forEach((sheet, index) => visit(sheet.id, sheet.rootTopic, index));
-    for (const [id, treeId] of this.topicIdToTreeId) {
-      if (!retained.has(id) && this.tree.getNodeByID(treeId) && !this.tree.isNodeDeleted(treeId)) this.tree.delete(treeId);
+    for (const node of this.tree.getNodes()) {
+      if (!retained.has(node.id) && !this.tree.isNodeDeleted(node.id)) this.tree.delete(node.id);
     }
-    this.writeMetaToLoro(doc);
-    this.loro.commit();
-    this.rebuildIndexFromTree();
-    this.cachedDoc = this.readDocumentFromLoro();
-    this.notify(new Set());
   }
 
   applyCommand(cmd: MindmapCommand, _options?: { coalesceKey?: string }): CommandRejection | undefined {
@@ -293,6 +297,11 @@ export class LoroSyncAdapter implements SyncAdapter {
    */
   private syncCommandToLoro(cmd: MindmapCommand, nextDoc: MindmapDocument): void {
     this.writeMetaToLoro(nextDoc);
+
+    if (cmd.type === "doc/replaceSheetRoot") {
+      this.reconcileTree(nextDoc);
+      return;
+    }
 
     if (cmd.type === "topic/reparent") {
       const srcTreeId = this.topicIdToTreeId.get(cmd.topicId);

@@ -7,6 +7,7 @@ export const LIVE_HEADER = "X-Loomind-Checkpoint";
 export const ROOM_HEADER = "X-Loomind-Room";
 export const MAX_CHECKPOINT_B64 = 8 * 1024 * 1024;
 export interface LiveCheckpoint { room: string; cursor: number; snapshot: string }
+export interface DraftHistory { room: string; snapshot: Uint8Array }
 export interface CloudDraft { revision: number; document: MindmapDocument | null; checkpoint?: LiveCheckpoint | null }
 export type MapAccess = "owner" | "editor" | "viewer";
 export interface LocalDraft { revision: number; document: MindmapDocument; dirty: boolean; workspaceId?: string | null; access?: MapAccess }
