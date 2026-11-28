@@ -23,7 +23,8 @@ test("landing to playground: edit a topic without losing the dock or save action
   await expect(page.getByRole("application")).toBeVisible();
   await expect(page.getByRole("complementary", { name: "AI Chat Assistant" })).toBeHidden();
   const dock = page.getByRole("toolbar", { name: "Canvas quick actions" });
-  await expect(dock.getByRole("button")).toHaveCount(4);
+  await expect(dock.getByRole("button")).toHaveCount(3);
+  await expect(dock.getByRole("button", { name: "AI Expand" })).toHaveCount(0);
   for (const button of await dock.getByRole("button").all()) await expectTouchTarget(button);
   await dock.getByTitle("Insert Subtopic (Tab)").tap();
   const editor = page.locator(".ProseMirror[contenteditable=true]");

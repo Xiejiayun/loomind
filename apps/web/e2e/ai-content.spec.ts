@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("keeps written questions and node shortcuts distinct in an English interface", async ({ page }) => {
+test("edits the selected topic in AI Chat with or without a written instruction", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.route("https://fonts.googleapis.com/**", route => route.fulfill({ contentType: "text/css", body: "" }));
   await page.route("**/api/auth/session", route => route.fulfill({ json: { user: null, expiresAt: null } }));
@@ -13,7 +13,9 @@ test("keeps written questions and node shortcuts distinct in an English interfac
   const nodeSummary = "Un exemple a été ajouté.";
   const instruction = "请用日语展开这个节点";
   const japaneseSummary = "例を追加しました。";
+  let streamRequests = 0;
   await page.route("**/api/ai/stream", route => {
+    streamRequests++;
     const { intent, targetTopicId, prompt } = route.request().postDataJSON();
     const item = { title: prompt === instruction ? "氷" : "Glace" };
     const events = intent === "generate_map"
@@ -24,22 +26,49 @@ test("keeps written questions and node shortcuts distinct in an English interfac
 
   await page.goto("/try");
   const chat = page.getByRole("complementary", { name: "AI Chat Assistant" });
-  await chat.getByRole("textbox").fill(question);
+  const composer = chat.getByRole("textbox");
+  await composer.fill(question);
   const writtenRequest = page.waitForRequest("**/api/ai/stream");
   await chat.getByRole("button", { name: "Send" }).click();
   expect((await writtenRequest).postDataJSON()).toMatchObject({ intent: "generate_map", prompt: question, locale: "en" });
   await expect(chat.getByText(mapSummary, { exact: true }).first()).toBeVisible();
 
-  await page.getByTitle("Inline AI Actions (⇧⌘J)").click();
+  await page.keyboard.press("Control+j");
+  await expect(chat).toBeHidden();
+  await page.keyboard.press("Control+Shift+J");
+  await expect(chat).toBeHidden();
+  await expect(page.getByPlaceholder("Enter AI command for this node and press Enter…")).toHaveCount(0);
+
+  const topic = page.getByRole("treeitem", { name: /^Solide,/ });
+  const targetTopicId = await topic.getAttribute("data-topic-id");
+  const askInChat = page.getByRole("button", { name: "Ask about this topic in AI Chat" });
+  await page.getByTitle("Zen Mode").click();
+  await topic.click({ button: "right" });
+  await askInChat.click();
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveAttribute("placeholder", 'Ask AI about "Solide"…');
+  expect(streamRequests).toBe(1);
+
+  const topicActions = chat.getByRole("button", { name: "Topic actions" });
+  const expand = page.getByRole("dialog", { name: "Topic actions" }).getByRole("button", { name: "Expand", exact: true });
+  await topicActions.click();
   const shortcutRequest = page.waitForRequest("**/api/ai/stream");
-  await page.getByRole("button", { name: "Expand", exact: true }).click();
-  expect((await shortcutRequest).postDataJSON()).toMatchObject({ intent: "expand", prompt: "", context: { outline: { title } } });
+  await expand.click();
+  expect((await shortcutRequest).postDataJSON()).toMatchObject({ intent: "expand", targetTopicId, prompt: "", context: { outline: { title } } });
   await expect(chat.getByText(nodeSummary, { exact: true }).first()).toBeVisible();
 
-  await page.getByTitle("Inline AI Actions (⇧⌘J)").click();
-  await page.getByPlaceholder("Enter AI command for this node and press Enter…").fill(instruction);
+  await composer.fill(instruction);
+  await chat.getByRole("button", { name: "Switch to full map context" }).click();
+  await expect(topicActions).toHaveCount(0);
+  await topic.click({ button: "right" });
+  await askInChat.click();
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveValue(instruction);
+  await topicActions.click();
   const instructedShortcut = page.waitForRequest("**/api/ai/stream");
-  await page.getByRole("button", { name: "Expand", exact: true }).click();
-  expect((await instructedShortcut).postDataJSON()).toMatchObject({ intent: "expand", prompt: instruction });
+  await expand.click();
+  expect((await instructedShortcut).postDataJSON()).toMatchObject({ intent: "expand", targetTopicId, prompt: instruction });
   await expect(chat.getByText(japaneseSummary, { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("treeitem", { name: /^氷,/ })).toBeVisible();
+  expect(streamRequests).toBe(3);
 });

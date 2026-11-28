@@ -273,7 +273,6 @@
   color: var(--lm-text-secondary); font-size: 11px; white-space: nowrap;
 }
 .lm-preview-dock span { padding: 3px 7px; border-radius: 5px; }
-.lm-preview-dock span.is-pill { background: var(--lm-bg-elevated); color: var(--lm-text-primary); font-weight: 500; }
 
 .lm-features { padding-block: 88px 80px; }
 .lm-section-heading h2 {
