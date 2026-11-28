@@ -105,7 +105,7 @@ export const SvgLayer: React.FC<SvgLayerProps> = React.memo(
         </g>
 
         {/* Tree Edges */}
-        <g>
+        <g data-layer="tree-edges">
           {layout.edges.map((edge) =>
             edge.fillPath ? (
               <path key={edge.id} d={edge.fillPath} fill={hex8ToCss(edge.color)} />

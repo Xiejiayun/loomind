@@ -12,6 +12,27 @@ import {
 import { LoroSyncAdapter } from "../src/store/loro-adapter.js";
 
 describe("LoroSyncAdapter (M4 CRDT collaborative sync)", () => {
+  it("replaces a generated tree without resurrecting removed topics in the canvas, peer or history", () => {
+    const source = new LoroSyncAdapter(getTemplate("blank-organic").create());
+    const before = source.getDocument();
+    const peer = LoroSyncAdapter.fromSnapshot(source.exportSnapshot());
+    const expected = new LocalImmerSyncAdapter(before);
+    const [first, second] = before.sheets[0].rootTopic.children;
+    const command = { type: "doc/replaceSheetRoot", sheetId: before.activeSheetId,
+      rootTopic: createTopic(before.sheets[0].rootTopic.id, "New map", { children: [second, createTopic("new-parent", "New parent", { children: [first.children[0]] })] }),
+    } as const;
+    expected.applyCommand(command);
+    source.applyCommand(command);
+    expect(source.getDocument()).toEqual(expected.getDocument());
+    expect(validateDocumentInvariants(source.getDocument())).toEqual([]);
+    peer.importUpdates(source.exportUpdates(peer.getVersion()));
+    expect(peer.getDocument()).toEqual(source.getDocument());
+    source.undo();
+    expect(source.getDocument()).toEqual(before);
+    source.redo();
+    expect(source.getDocument()).toEqual(expected.getDocument());
+  });
+
   it("commits a tree title to peers and history without replacing untouched branches", () => {
     const adapter = new LoroSyncAdapter(getTemplate("blank-organic").create(), 1n);
     const peer = LoroSyncAdapter.fromSnapshot(adapter.exportSnapshot(), 2n);

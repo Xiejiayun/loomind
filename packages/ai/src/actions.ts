@@ -494,7 +494,7 @@ export async function executeRemoteAiStream(opts: {
   }
 
   const rootId = sheet.rootTopic.id;
-  const prefix = `ai${Date.now().toString(36).slice(-4)}`;
+  const prefix = `ai-${crypto.randomUUID()}`;
   const coalesceKey = `copilot:${prefix}`;
   const context = serializeAiContext(doc, sheetId, targetTopicId ?? null, selectedTopicIds ?? []);
   const targetLoc = targetTopicId ? findTopicLocation(sheet, targetTopicId) : null;
@@ -751,7 +751,7 @@ export async function streamGenerateMindmap(opts: StreamGenerateOptions): Promis
   const sheet = doc.sheets.find((s) => s.id === sheetId);
   if (!sheet) throw new AiClientError("INVALID_REQUEST", isEn ? "Sheet not found" : "未找到画布");
 
-  const prefix = `ai${Date.now().toString(36).slice(-4)}`;
+  const prefix = `ai-${crypto.randomUUID()}`;
   const coalesceKey = `ai-stream:${prefix}`;
   const rootId = sheet.rootTopic.id;
 

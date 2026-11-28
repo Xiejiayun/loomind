@@ -23,7 +23,8 @@ import {
 } from "../persistence.js";
 import { documentFromTopic } from "../outline.js";
 import { CloudError, readCloud, writeCloud } from "./cloud.js";
-import type { CloudDraft, LocalDraft, MapAccess } from "./shared.js";
+import { recoverLegacyBranches } from "./legacy-branches.js";
+import type { CloudDraft, DraftHistory, LocalDraft, MapAccess } from "./shared.js";
 
 export type SyncStatus =
   | "connecting"
@@ -46,8 +47,9 @@ export interface SyncState {
 }
 
 export interface WorkspaceStorage {
+  captureHistory?: (document: MindmapDocument) => DraftHistory | undefined;
   mergeLive?: (remote: CloudDraft) => boolean;
-  keepLiveLocal?: (remote: CloudDraft, doc: MindmapDocument) => void;
+  keepLiveLocal?: (remote: CloudDraft, doc: MindmapDocument) => Promise<void> | void;
   loadLocal: (owner: string | null, id?: string) => Promise<LocalDraft | null>;
   saveLocal: (owner: string | null, draft: LocalDraft, id?: string) => Promise<void>;
   readCloud: (owner: string, id: string) => Promise<CloudDraft>;
@@ -137,7 +139,7 @@ export class DraftWorkspace {
   constructor(
     private owner: string | null,
     private id: string | null,
-    private show: (document: MindmapDocument) => void,
+    private show: (document: MindmapDocument, history?: DraftHistory) => void,
     private status: (state: SyncState) => void,
     private localError: (message: string) => void,
     private storage: WorkspaceStorage = DEFAULT_STORAGE,
@@ -294,6 +296,7 @@ export class DraftWorkspace {
 
   async start() {
     let local: LocalDraft | null = null;
+    let history: DraftHistory | undefined;
     const reqOwner = this.owner;
     try {
       if (this.usesV2() && this.owner && this.id) {
@@ -309,6 +312,7 @@ export class DraftWorkspace {
         if (state.drafts.length > 0) {
           // Claim by copying into this instance's own writerId without deleting the other writer's key
           const latest = state.drafts[0];
+          history = latest.history;
           local = {
             document: latest.document,
             revision: latest.baseRevision,
@@ -366,8 +370,16 @@ export class DraftWorkspace {
       if (!this.closed) this.localError(syncMessages().localReadError);
     }
     if (this.closed || this.owner !== reqOwner) return;
+    if (local?.dirty && !history) local = { ...local, document: recoverLegacyBranches(local.document) };
     this.draft = this.withScope(local ?? { document: this.initialDocument(), revision: 0, dirty: false });
-    this.show(this.draft.document);
+    if (history) {
+      try { this.show(this.draft.document, history); }
+      catch (reason) {
+        this.show(this.draft.document);
+        this.localError(reason instanceof Error ? reason.message : syncMessages().localReadError);
+        return;
+      }
+    } else this.show(this.draft.document);
     if (this.owner) await this.sync();
   }
 
@@ -462,17 +474,26 @@ export class DraftWorkspace {
     const flushBaseRevision = Math.max(this.draft.revision, this.confirmedBaseRevision);
     const snapshot = this.draft;
     this.needsLocalSave = false;
+    let warning = "";
     try {
       if (this.usesV2() && reqOwner && reqId) {
         if (snapshot.dirty) {
-          await this.storage.putDraftCas!(reqOwner, reqId, this.writerId, {
+          const input = {
             localGen: flushGen,
             ackedGen: flushAckedGen,
             baseRevision: flushBaseRevision,
             document: snapshot.document,
             workspaceId: snapshot.workspaceId,
             access: snapshot.access,
-          });
+          };
+          const history = this.storage.captureHistory?.(snapshot.document);
+          try {
+            await this.storage.putDraftCas!(reqOwner, reqId, this.writerId, { ...input, history });
+          } catch (error) {
+            if (!history || !(error instanceof DOMException) || error.name !== "QuotaExceededError") throw error;
+            const result = await this.storage.putDraftCas!(reqOwner, reqId, this.writerId, input);
+            if (result.written) warning = syncMessages().localHistorySaveError;
+          }
         } else if (flushBaseRevision > 0) {
           await this.storage.putSyncedCas!(reqOwner, reqId, {
             revision: flushBaseRevision,
@@ -485,7 +506,7 @@ export class DraftWorkspace {
         await this.storage.saveLocal(reqOwner, snapshot, reqId ?? undefined);
       }
       if (!this.closed && this.owner === reqOwner && this.corruptRecords.length === 0) {
-        this.localError("");
+        this.localError(warning);
       }
     } catch {
       this.needsLocalSave = true;
@@ -818,7 +839,8 @@ export class DraftWorkspace {
       const sentGen = this.localGen;
       const docSnapshot = this.draft.document;
       const targetBaseRevision = remote.revision;
-      this.storage.keepLiveLocal?.(remote, docSnapshot);
+      await this.storage.keepLiveLocal?.(remote, docSnapshot);
+      if (this.closed || this.owner !== reqOwner) return;
 
       let newRevision: number;
       if (remote.document && canonicalJson(remote.document) === canonicalJson(docSnapshot)) {

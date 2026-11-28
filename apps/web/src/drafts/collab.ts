@@ -47,11 +47,18 @@ interface BroadcastPacket {
   updateB64?: string;
 }
 
-interface CollabGetResponse {
+export interface CollabGetResponse {
   revision?: number;
   latestSeq: number;
   updates: Array<{ seq: number; peerId: string; actor: string; updateB64: string }>;
   peers: PeerPresence[];
+}
+
+export function fetchRoomUpdates(owner: string, mapId: string, room: string, cursor: number) {
+  return fetch(`/api/mindmaps/${mapId}/collab?since=${cursor}`, {
+    credentials: "same-origin", cache: "no-store", headers: { [OWNER_HEADER]: owner, [ROOM_HEADER]: room },
+    signal: AbortSignal.timeout(8_000),
+  });
 }
 
 export class CollabSession {
@@ -296,12 +303,7 @@ export class CollabSession {
 
     this.polling = true;
     try {
-      const res = await fetch(`/api/mindmaps/${this.mapId}/collab?since=${this.cursor}`, {
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { [OWNER_HEADER]: this.owner, [ROOM_HEADER]: this.room },
-        signal: AbortSignal.timeout(8_000),
-      });
+      const res = await fetchRoomUpdates(this.owner, this.mapId, this.room, this.cursor);
       if (res.ok) {
         const data = (await res.json()) as CollabGetResponse;
         if (this.closed) return;

@@ -3,7 +3,8 @@ import type { LoroSyncAdapter } from "@mindmap/core/loro";
 import { getWebMessages } from "../i18n.js";
 import { CloudError, readCloud, seedCloud, writeCloud } from "./cloud.js";
 import { base64ToBytes, bytesToBase64, CollabSession } from "./collab.js";
-import { MAP_ID, MAX_CHECKPOINT_B64, type CloudDraft, type LiveCheckpoint } from "./shared.js";
+import { restoreJsonDraft } from "./legacy-branches.js";
+import { MAP_ID, MAX_CHECKPOINT_B64, type CloudDraft, type DraftHistory, type LiveCheckpoint } from "./shared.js";
 
 interface Handlers {
   open(adapter: LoroSyncAdapter): void;
@@ -26,24 +27,37 @@ export class LiveDraft {
   private loaded?: { draft: CloudDraft; adapter: LoroSyncAdapter };
   private unsubscribe?: () => void;
   private closed = false;
+  private mergingCheckpoint = false;
   session?: CollabSession;
 
   constructor(private readonly ctor: typeof LoroSyncAdapter, private readonly owner: string, private readonly id: string,
     private readonly name: string, private readonly handlers: Handlers) {}
 
-  show = (doc: MindmapDocument) => {
+  captureHistory = (doc: MindmapDocument): DraftHistory | undefined => {
+    if (!this.active || !same(this.active.adapter.getDocument(), doc)) return undefined;
+    return { room: this.active.room, snapshot: this.active.adapter.exportSnapshot() };
+  };
+
+  show = (doc: MindmapDocument, history?: DraftHistory) => {
+    if (history) {
+      let adapter: LoroSyncAdapter;
+      try { adapter = this.ctor.fromSnapshot(history.snapshot); } catch { throw invalidCheckpoint(); }
+      if (!same(adapter.getDocument(), doc)) throw invalidCheckpoint();
+      this.bind(adapter, undefined, 0, history.room);
+      return;
+    }
     const saved = this.loaded;
     if (saved?.draft.document && same(saved.draft.document, doc)) this.bind(saved.adapter, saved.draft.checkpoint!, saved.draft.revision);
     else this.bind(new this.ctor(doc));
   };
 
-  private bind(adapter: LoroSyncAdapter, checkpoint?: LiveCheckpoint, revision = 0) {
+  private bind(adapter: LoroSyncAdapter, checkpoint?: LiveCheckpoint, revision = 0, room = checkpoint?.room ?? crypto.randomUUID()) {
     if (this.closed) return;
     this.session?.close();
     this.session = undefined;
     this.unsubscribe?.();
-    this.active = { adapter, room: checkpoint?.room ?? crypto.randomUUID() };
-    this.unsubscribe = adapter.subscribe((doc) => this.handlers.change(doc, this.session?.isApplyingRemote() ?? false));
+    this.active = { adapter, room };
+    this.unsubscribe = adapter.subscribe((doc) => this.handlers.change(doc, this.mergingCheckpoint || (this.session?.isApplyingRemote() ?? false)));
     this.handlers.open(adapter);
     if (checkpoint) this.connect(revision, checkpoint.cursor);
   }
@@ -91,21 +105,34 @@ export class LiveDraft {
       this.session.cursor = Math.max(this.session.cursor, remote.checkpoint.cursor);
       return true;
     }
+    if (this.active.room === remote.checkpoint.room) {
+      this.mergingCheckpoint = true;
+      try {
+        if (!this.active.adapter.importUpdates(base64ToBytes(remote.checkpoint.snapshot))) throw invalidCheckpoint();
+      } finally { this.mergingCheckpoint = false; }
+      this.connect(remote.revision, remote.checkpoint.cursor, this.loaded.adapter.getVersion());
+      return true;
+    }
     if (!same(this.active.adapter.getDocument(), remote.document)) return false;
     this.bind(this.loaded.adapter, remote.checkpoint, remote.revision);
     return true;
   };
 
-  keepLocal = (remote: CloudDraft, local: MindmapDocument) => {
+  keepLocal = async (remote: CloudDraft, local: MindmapDocument, overwrite = true) => {
     if (this.closed || !remote.checkpoint || this.loaded?.draft !== remote) return;
-    const adapter = this.ctor.fromSnapshot(base64ToBytes(remote.checkpoint.snapshot));
-    adapter.reconcileDraft(local);
-    this.bind(adapter, remote.checkpoint, remote.revision);
+    if (this.session?.room === remote.checkpoint.room && this.active && same(this.active.adapter.getDocument(), local)) {
+      const compared = this.active.adapter.getVersion().compare(this.loaded.adapter.getVersion());
+      if (compared === 0 || compared === 1) return;
+    }
+    const previous = this.active?.adapter.getDocument();
+    const { adapter, cursor } = await restoreJsonDraft(this.ctor, remote.checkpoint, remote.revision, local, this.owner, this.id, overwrite);
+    if (this.closed || this.loaded?.draft !== remote || previous !== this.active?.adapter.getDocument()) throw new CloudError(409, getWebMessages().sync.conflictDetail);
+    this.bind(adapter, { ...remote.checkpoint, cursor }, remote.revision);
   };
 
   write = async (owner: string, id: string, revision: number, doc: MindmapDocument, workspaceId?: string | null) => {
     if (!this.active || this.closed || id !== this.id) throw invalidCheckpoint();
-    if (!this.session && revision && this.loaded?.draft.revision === revision) this.keepLocal(this.loaded.draft, doc);
+    if (!this.session && revision && this.loaded?.draft.revision === revision) await this.keepLocal(this.loaded.draft, doc, false);
     const active = this.active;
     if (!same(active.adapter.getDocument(), doc)) throw new CloudError(409, getWebMessages().editorWorkspace.invalidCheckpoint);
     const checkpoint = makeCheckpoint(active.adapter, active.room, this.session?.cursor ?? 0);

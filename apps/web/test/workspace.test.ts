@@ -23,6 +23,7 @@ import {
   v2SyncedKey,
 } from "../src/persistence.js";
 import { CloudError } from "../src/drafts/cloud.js";
+import { getWebMessages } from "../src/i18n.js";
 import { MAP_ID, mapTitle, type CloudDraft, type LocalDraft } from "../src/drafts/shared.js";
 import { DraftWorkspace, type SyncState } from "../src/drafts/workspace.js";
 
@@ -251,6 +252,32 @@ function createV2CloudHarness(initialRev = 1, initialDoc: MindmapDocument | null
 describe("T1 v2 draft isolation, CAS, causal watermark, remote-unavailable, and rollback recovery", () => {
   beforeEach(async () => {
     await clearDb();
+  });
+
+  it("keeps the JSON draft and warns when only its collaboration history exceeds the local quota", async () => {
+    const owner = "alice";
+    const mapId = crypto.randomUUID();
+    const cloud = createV2CloudHarness();
+    const warning = vi.fn();
+    const workspace = new DraftWorkspace(owner, mapId, vi.fn(), vi.fn(), warning, {
+      ...cloud.storage,
+      captureHistory: () => ({ room: crypto.randomUUID(), snapshot: new Uint8Array([1]) }),
+      async putDraftCas(owner, mapId, writer, input) {
+        if (input.history) throw new DOMException("Quota exceeded", "QuotaExceededError");
+        return putDraftCas(owner, mapId, writer, input);
+      },
+    });
+    try {
+      await workspace.start();
+      const edited = documentWith("pending local changes");
+      workspace.edit(edited);
+      await workspace.flush();
+      const { drafts } = await loadMapState(owner, mapId);
+      expect(drafts).toHaveLength(1);
+      expect(drafts[0].document).toEqual(edited);
+      expect(drafts[0].history).toBeUndefined();
+      expect(warning).toHaveBeenLastCalledWith(getWebMessages().sync.localHistorySaveError);
+    } finally { workspace.close(); }
   });
 
   it("isolates two tabs sharing real fake-indexeddb so winner writeback never overwrites loser draft (before or after 409) and reload recovers it", async () => {
